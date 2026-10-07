@@ -1,0 +1,463 @@
+<title>Journée agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout : une colonne étroite pensée pour le téléphone, barre d'enregistrement collée en bas. */
+:root {
+  --bg: #eef2f1; --surface: #ffffff; --ink: #14242a; --muted: #5d6f73; --line: #d3dcdb;
+  --accent: #0b6e79; --accent-ink: #ffffff; --accent-soft: #dcefee;
+  --warn: #9a5b00; --warn-soft: #fdf0d8; --bad: #b3261e; --bad-soft: #fbe4e1; --ok: #1d7a43;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  --f-body: "Barlow", system-ui, sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1a1d; --surface: #172529; --ink: #e5eeee; --muted: #93a6a8; --line: #2a3b3f;
+  --accent: #3fb6c2; --accent-ink: #062226; --accent-soft: #163a3e;
+  --warn: #f0b45a; --warn-soft: #3a2c12; --bad: #f08a80; --bad-soft: #3d1c19; --ok: #6fd39a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1a1d; --surface: #172529; --ink: #e5eeee; --muted: #93a6a8; --line: #2a3b3f;
+  --accent: #3fb6c2; --accent-ink: #062226; --accent-soft: #163a3e;
+  --warn: #f0b45a; --warn-soft: #3a2c12; --bad: #f08a80; --bad-soft: #3d1c19; --ok: #6fd39a; color-scheme: dark }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.45 var(--f-body); }
+.wrap { max-width: 600px; margin: 0 auto; padding-inline: 16px; padding-block: 12px 140px; display: grid; gap: 16px; }
+h1, h2 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
+h1 { font-size: 26px; letter-spacing: .01em; }
+h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+
+header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+header.top h1 { margin-right: auto; }
+.who { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 14px; font-weight: 600; }
+.tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+.tabs button { flex: 1; border: 0; background: none; padding: 10px; border-radius: 9px; font-weight: 600; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.field { display: grid; gap: 8px; }
+.field > label, .field > .lab { font-weight: 600; font-size: 14px; }
+.lab small { font-weight: 400; color: var(--muted); }
+input[type=date], input[type=text], input[type=search], input[type=number] {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; width: 100%; min-width: 0; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 10px 14px; font-weight: 600; }
+#techFilter .chip { padding: 6px 10px; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip.abs { font-weight: 500; color: var(--muted); }
+.chip.abs[aria-pressed="true"] { color: var(--accent-ink); }
+.grid-proj { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.techs { display: grid; gap: 8px; }
+.techs button { text-align: left; padding: 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; font-size: 18px; }
+
+.presta-list { display: grid; gap: 6px; max-height: 300px; overflow-y: auto; }
+.presta { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; }
+.presta[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.presta .l { font-weight: 600; }
+.presta .p { font-family: var(--f-data); white-space: nowrap; }
+.presta .u { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.more { color: var(--muted); font-size: 13px; }
+
+.qty { display: flex; align-items: center; gap: 8px; }
+.qty button { width: 48px; height: 48px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 22px; }
+.qty input { width: 90px; text-align: center; font-family: var(--f-data); font-size: 18px; }
+.unit { color: var(--muted); font-size: 14px; }
+
+.note { border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.note.warn { background: var(--warn-soft); color: var(--warn); }
+.note.bad { background: var(--bad-soft); color: var(--bad); }
+.note.info { background: var(--accent-soft); color: var(--ink); }
+
+.savebar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.savebar .in { max-width: 600px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+.savebar .tot { margin-right: auto; min-width: 0; }
+.savebar .tot b { display: block; font-family: var(--f-data); font-size: 22px; }
+.savebar .tot span { font-size: 13px; color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 12px; padding: 14px 22px; font-weight: 700; font-size: 17px; }
+.primary:disabled { opacity: .45; cursor: not-allowed; }
+.ghost { background: none; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-weight: 600; }
+
+.lines { display: grid; gap: 8px; }
+.line { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.line .t { font-weight: 600; min-width: 0; }
+.line .m { font-family: var(--f-data); text-align: right; }
+.line .d { font-size: 13px; color: var(--muted); min-width: 0; }
+.line .x { border: 0; background: none; color: var(--muted); font-size: 13px; text-decoration: underline; padding: 0; justify-self: end; }
+.daytot { display: flex; justify-content: space-between; font-weight: 600; }
+.empty { color: var(--muted); text-align: center; padding: 16px 8px; }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+td.r, th.r { text-align: right; }
+.bar { height: 6px; border-radius: 3px; background: var(--accent); min-width: 2px; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kpi { background: var(--bg); border-radius: 10px; padding: 10px; }
+.kpi b { display: block; font-family: var(--f-data); font-size: 16px; overflow-wrap: anywhere; }
+.kpi span { font-size: 12px; color: var(--muted); }
+.status { font-size: 13px; color: var(--muted); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg);
+  padding: 10px 16px; border-radius: 10px; display: flex; gap: 14px; align-items: center; max-width: calc(100% - 32px); z-index: 5; }
+.toast button { background: none; border: 0; color: inherit; font-weight: 700; text-decoration: underline; }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+@media (prefers-reduced-motion: no-preference) { .chip, .presta, .tabs button { transition: background-color .12s, border-color .12s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Journée agent</h1>
+    <button class="who" id="who" hidden></button>
+  </header>
+  <p class="status" id="status">Connexion…</p>
+
+  <section id="pickTech" class="panel" hidden>
+    <h2>Qui saisit ?</h2>
+    <div class="techs" id="techList"></div>
+  </section>
+
+  <nav class="tabs" id="tabs" hidden>
+    <button id="tab-saisie" aria-selected="true">Saisir</button>
+    <button id="tab-equipe" aria-selected="false">Équipe</button>
+  </nav>
+
+  <div id="viewSaisie" hidden>
+    <div class="wrap" style="padding:0">
+      <section class="panel">
+        <div class="field">
+          <label for="date">Date</label>
+          <div class="row">
+            <input type="date" id="date" style="flex:1 1 160px">
+            <button class="chip" id="today">Aujourd'hui</button>
+            <button class="chip" id="yesterday">Hier</button>
+          </div>
+          <div id="dateNote"></div>
+        </div>
+        <div class="field">
+          <span class="lab">Projet</span>
+          <div class="grid-proj" id="projList"></div>
+        </div>
+        <div class="field" id="prestaField" hidden>
+          <span class="lab" id="prestaLab">Prestation</span>
+          <input type="search" id="prestaSearch" placeholder="Chercher un code ou un mot (ex. 3.2, nacelle, Z100)" hidden>
+          <div class="presta-list" id="prestaList"></div>
+        </div>
+        <div class="field" id="priceField" hidden>
+          <label for="price">Prix unitaire (€) <small class="lab">prix sur devis, à saisir</small></label>
+          <input type="number" id="price" inputmode="decimal" min="0" step="0.01">
+        </div>
+        <div class="field" id="qtyField">
+          <label for="qty">Quantité <span class="unit" id="unit"></span></label>
+          <div class="qty">
+            <button id="minus" aria-label="Diminuer">−</button>
+            <input type="number" id="qty" inputmode="decimal" min="0" step="0.5" value="1">
+            <button id="plus" aria-label="Augmenter">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ticket">N° ticket / référence <small class="lab">facultatif</small></label>
+          <input type="text" id="ticket" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="comment">Commentaire <small class="lab">facultatif</small></label>
+          <input type="text" id="comment" autocomplete="off">
+        </div>
+        <div id="check"></div>
+      </section>
+
+      <section class="panel">
+        <div class="daytot"><h2 id="dayTitle">Ma journée</h2><span class="num" id="dayTotal"></span></div>
+        <div class="lines" id="dayLines"></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="viewEquipe" hidden>
+    <div class="wrap" style="padding:0">
+      <section class="panel">
+        <div class="row" id="periods"></div>
+        <div class="kpis" id="kpis"></div>
+        <div class="tablewrap" id="ranking"></div>
+      </section>
+      <section class="panel">
+        <div class="row" style="align-items:center"><h2 style="margin-right:auto">Toutes les saisies</h2><button class="ghost" id="export">Télécharger l'Excel</button></div>
+        <p class="status">Le fichier reprend les colonnes A à L de l'onglet « Justificatifs » : copiez ses lignes et collez-les à la suite dans votre classeur.</p>
+        <div id="exportMsg"></div>
+        <div class="row" id="techFilter" style="font-size:14px"></div>
+        <div class="lines" id="allLines"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="savebar" id="savebar" hidden>
+  <div class="in">
+    <div class="tot"><b id="amount">0,00 €</b><span id="summary">Choisissez un projet</span></div>
+    <button class="primary" id="save" disabled>Enregistrer</button>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const DATA = /*DATA*/null;
+const $ = id => document.getElementById(id);
+const eur = n => (n || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+const iso = d => { const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 10); };
+const frDate = s => new Date(s + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+const ls = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const isAbs = p => DATA.projets.find(x => x.nom === p)?.absence;
+
+// ---- Stockage : base partagée quand la page tourne dans claude.ai, sinon ce navigateur ----
+const store = {
+  mode: 'local', lines: [], listeners: [],
+  emit() { this.listeners.forEach(f => f()); },
+  async init() {
+    let db = null;
+    try { db = window.claude?.use ? await window.claude.use('db') : null; } catch {}
+    if (db) {
+      this.mode = 'db'; this.col = db.collection('lignes');
+      await new Promise(res => this.col.onSnapshot(snap => {
+        this.lines = snap.docs.map(d => ({ id: d.id, ...d.data() })); this.emit(); res();
+      }, err => { $('status').textContent = 'Lecture impossible (' + err.code + ').'; res(); }));
+    } else {
+      try { this.lines = JSON.parse(ls.get('ja-lignes') || '[]'); } catch { this.lines = []; }
+    }
+  },
+  persist() { ls.set('ja-lignes', JSON.stringify(this.lines)); this.emit(); },
+  async add(l) {
+    if (this.mode === 'db') { const ref = await this.col.add(l); return ref.id; }
+    l = { ...l, id: 'l' + Date.now() + Math.random().toString(36).slice(2, 6) }; this.lines.push(l); this.persist(); return l.id;
+  },
+  async del(id) {
+    if (this.mode === 'db') return this.col.doc(id).delete();
+    this.lines = this.lines.filter(l => l.id !== id); this.persist();
+  }
+};
+
+// ---- État du formulaire ----
+const S = { tech: ls.get('ja-tech'), date: iso(new Date()), projet: null, presta: null, q: '', tab: 'saisie', period: 'semaine', filter: '' };
+
+function prestasOf(p) { return DATA.bpu[p] || []; }
+function current() {
+  const list = prestasOf(S.projet);
+  let pr = null;
+  if (list.length === 1) pr = list[0];
+  else if (S.presta != null) pr = list.find(x => x[0] === S.presta) || null;
+  return pr;
+}
+function qtyVal() { const v = $('qty').value.trim().replace(',', '.'); return v === '' ? 1 : Number(v); }
+function priceOf(pr) { if (!pr) return null; if (pr[4] != null) return pr[4]; const v = $('price').value.replace(',', '.'); return v === '' ? null : Number(v); }
+
+// Mêmes contrôles que la colonne « Contrôle » de l'onglet Justificatifs
+function check() {
+  if (!S.date) return { bad: 'Choisissez la date.' };
+  if (!S.projet) return { bad: 'Choisissez le projet.' };
+  const pr = current();
+  if (!pr) return { bad: 'Choisissez la prestation.' };
+  const q = qtyVal();
+  if (!isFinite(q) || q < 0) return { bad: 'La quantité doit être un nombre positif.' };
+  const pu = priceOf(pr);
+  if (pu == null || !isFinite(pu)) return { bad: 'Ce prix est sur devis : saisissez le prix unitaire.' };
+  const other = new Set(store.lines.filter(l => l.date === S.date && l.tech === S.tech).map(l => l.projet));
+  other.add(S.projet);
+  if (other.size > 2) return { bad: 'Vous avez déjà 2 projets ce jour-là. Une journée compte au plus 2 projets (0,5 jour chacun).' };
+  return { ok: true, pr, q, pu, montant: Math.round(q * pu * 100) / 100 };
+}
+
+function render() {
+  const ready = !!S.tech && DATA.techs.includes(S.tech);
+  $('pickTech').hidden = ready;
+  $('tabs').hidden = $('savebar').hidden = !ready;
+  $('who').hidden = !ready; $('who').textContent = ready ? S.tech + ' · changer' : '';
+  $('viewSaisie').hidden = !ready || S.tab !== 'saisie';
+  $('viewEquipe').hidden = !ready || S.tab !== 'equipe';
+  $('savebar').hidden = !ready || S.tab !== 'saisie';
+  $('tab-saisie').setAttribute('aria-selected', S.tab === 'saisie');
+  $('tab-equipe').setAttribute('aria-selected', S.tab === 'equipe');
+  $('status').textContent = !store.ready ? 'Connexion…' : store.mode === 'db'
+    ? 'Saisies partagées avec toute l\'équipe.'
+    : 'Saisies gardées sur cet appareil. Téléchargez l\'Excel pour les transmettre.';
+  if (!ready) { $('techList').innerHTML = DATA.techs.map(t => `<button data-tech="${esc(t)}">${esc(t)}</button>`).join(''); return; }
+  if (S.tab === 'saisie') renderSaisie(); else renderEquipe();
+}
+
+function renderSaisie() {
+  $('date').value = S.date;
+  $('today').setAttribute('aria-pressed', S.date === iso(new Date()));
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  $('yesterday').setAttribute('aria-pressed', S.date === iso(y));
+  const d = new Date(S.date + 'T12:00'), fer = DATA.feries[S.date];
+  $('dateNote').innerHTML = fer ? `<div class="note warn">${esc(fer)} : jour férié.</div>`
+    : (d.getDay() === 0 || d.getDay() === 6) ? '<div class="note warn">C\'est un week-end.</div>' : '';
+
+  $('projList').innerHTML = DATA.projets.map(p =>
+    `<button class="chip${p.absence ? ' abs' : ''}" data-proj="${esc(p.nom)}" aria-pressed="${S.projet === p.nom}">${esc(p.nom)}</button>`).join('');
+
+  const list = prestasOf(S.projet);
+  $('prestaField').hidden = list.length <= 1;
+  if (list.length > 1) {
+    $('prestaLab').textContent = `Prestation ${S.projet} (${list.length} choix)`;
+    $('prestaSearch').hidden = list.length < 12;
+    const q = S.q.trim().toLowerCase();
+    let shown = list.filter(x => !q || (x[0] + ' ' + x[1] + ' ' + x[2]).toLowerCase().includes(q));
+    const total = shown.length;
+    const sel = list.find(x => x[0] === S.presta);
+    shown = shown.slice(0, 40);
+    if (sel && !shown.includes(sel)) shown.unshift(sel);
+    $('prestaList').innerHTML = shown.map(x => `<button class="presta" data-presta="${esc(x[0])}" aria-pressed="${x[0] === S.presta}">
+      <span class="l">${esc(x[1])}</span><span class="p">${x[4] == null ? 'devis' : eur(x[4])}</span>
+      <span class="u">${esc(x[0])} · ${esc(x[3])}</span></button>`).join('')
+      + (total > 40 ? `<p class="more">${total - 40} autres : précisez la recherche.</p>` : '')
+      + (total === 0 ? '<p class="more">Aucune prestation ne correspond.</p>' : '');
+  }
+  const pr = current();
+  $('priceField').hidden = !(pr && pr[4] == null);
+  $('qtyField').hidden = isAbs(S.projet);
+  $('unit').textContent = pr && pr[3] ? '· ' + pr[3] : '';
+
+  const c = check();
+  $('check').innerHTML = c.bad && S.projet ? `<div class="note ${c.bad.includes('déjà 2') ? 'bad' : 'info'}">${esc(c.bad)}</div>` : '';
+  $('save').disabled = !c.ok;
+  $('amount').textContent = eur(c.ok ? c.montant : 0);
+  $('summary').textContent = c.ok ? `${S.projet} · ${c.pr[1]}${isAbs(S.projet) ? '' : ' · ' + String(c.q).replace('.', ',') + ' × ' + eur(c.pu)}` : (S.projet ? 'Ligne incomplète' : 'Choisissez un projet');
+
+  const mine = store.lines.filter(l => l.tech === S.tech && l.date === S.date);
+  $('dayTitle').textContent = 'Ma journée · ' + frDate(S.date);
+  $('dayTotal').textContent = eur(mine.reduce((a, l) => a + (l.montant || 0), 0));
+  $('dayLines').innerHTML = mine.length ? mine.map(l => lineHTML(l)).join('') : '<p class="empty">Rien de saisi pour ce jour. Choisissez un projet puis touchez Enregistrer.</p>';
+}
+
+function lineHTML(l, showWho) {
+  return `<div class="line"><span class="t">${esc(l.projet)} · ${esc(l.libelle)}</span><span class="m">${eur(l.montant)}</span>
+    <span class="d">${showWho ? esc(l.tech) + ' · ' + new Date(l.date + 'T12:00').toLocaleDateString('fr-FR') + ' · ' : ''}${isAbs(l.projet) ? '' : 'Qté ' + String(l.qte).replace('.', ',') + ' · '}${esc(l.code)}${l.ticket ? ' · n° ' + esc(l.ticket) : ''}${l.comment ? ' · ' + esc(l.comment) : ''}</span>
+    <span class="x-wrap" data-wrap="${esc(l.id)}"><button class="x" data-del="${esc(l.id)}">Supprimer</button></span></div>`;
+}
+
+// ---- Vue équipe ----
+function periodRange() {
+  const t = new Date(); t.setHours(12);
+  if (S.period === 'jour') return [iso(t), iso(t)];
+  if (S.period === 'semaine') { const m = new Date(t); m.setDate(t.getDate() - ((t.getDay() + 6) % 7)); const s = new Date(m); s.setDate(m.getDate() + 6); return [iso(m), iso(s)]; }
+  if (S.period === 'mois') return [iso(new Date(t.getFullYear(), t.getMonth(), 1, 12)), iso(new Date(t.getFullYear(), t.getMonth() + 1, 0, 12))];
+  return ['0000', '9999'];
+}
+function renderEquipe() {
+  const P = [['jour', 'Aujourd\'hui'], ['semaine', 'Cette semaine'], ['mois', 'Ce mois'], ['tout', 'Tout']];
+  $('periods').innerHTML = P.map(([k, n]) => `<button class="chip" data-period="${k}" aria-pressed="${S.period === k}">${n}</button>`).join('');
+  const [a, b] = periodRange();
+  const L = store.lines.filter(l => l.date >= a && l.date <= b);
+  const total = L.reduce((s, l) => s + (l.montant || 0), 0);
+  // Jours : un projet = 1 jour, deux projets le même jour = 0,5 chacun ; valorisé = au moins 1 € produit
+  const per = DATA.techs.map(t => {
+    const mine = L.filter(l => l.tech === t), days = {};
+    mine.forEach(l => { (days[l.date] ||= { p: new Set(), m: 0 }); days[l.date].p.add(l.projet); days[l.date].m += l.montant || 0; });
+    const prod = mine.reduce((s, l) => s + (l.montant || 0), 0);
+    const valo = Object.values(days).filter(d => d.m > 0).length;
+    return { t, prod, valo, n: mine.length, moy: valo ? prod / valo : 0 };
+  }).sort((x, y) => y.prod - x.prod);
+  const max = Math.max(1, ...per.map(p => p.prod));
+  const filled = new Set(store.lines.filter(l => l.date === iso(new Date())).map(l => l.tech)).size;
+  $('kpis').innerHTML = `<div class="kpi"><b>${eur(total)}</b><span>production</span></div>
+    <div class="kpi"><b>${L.length}</b><span>lignes saisies</span></div>
+    <div class="kpi"><b>${filled}/${DATA.techs.length}</b><span>techs renseignés aujourd'hui</span></div>`;
+  $('ranking').innerHTML = `<table><thead><tr><th>#</th><th>Technicien</th><th class="r">Production</th><th></th><th class="r">Jours valorisés</th><th class="r">€ / jour</th></tr></thead><tbody>`
+    + per.map((p, i) => `<tr><td class="num">${p.prod > 0 ? i + 1 : '–'}</td><td>${esc(p.t)}</td><td class="r num">${eur(p.prod)}</td>
+      <td style="width:30%"><div class="bar" style="width:${(p.prod / max * 100).toFixed(1)}%"></div></td><td class="r num">${p.valo}</td><td class="r num">${p.valo ? eur(p.moy) : '–'}</td></tr>`).join('')
+    + '</tbody></table>';
+  $('techFilter').innerHTML = [['', 'Tous'], ...DATA.techs.map(t => [t, t])].map(([k, n]) =>
+    `<button class="chip" data-filter="${esc(k)}" aria-pressed="${S.filter === k}">${esc(n)}</button>`).join('');
+  const shown = L.filter(l => !S.filter || l.tech === S.filter).sort((x, y) => (y.date + y.at).localeCompare(x.date + x.at));
+  $('allLines').innerHTML = shown.length ? shown.map(l => lineHTML(l, true)).join('') : '<p class="empty">Aucune saisie sur cette période.</p>';
+}
+
+// ---- Événements ----
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tech) { S.tech = b.dataset.tech; ls.set('ja-tech', S.tech); }
+  else if (b.id === 'who') { S.tech = null; }
+  else if (b.id === 'tab-saisie' || b.id === 'tab-equipe') S.tab = b.id.slice(4);
+  else if (b.id === 'today') S.date = iso(new Date());
+  else if (b.id === 'yesterday') { const y = new Date(); y.setDate(y.getDate() - 1); S.date = iso(y); }
+  else if (b.dataset.proj) {
+    if (S.projet !== b.dataset.proj) {
+      S.projet = b.dataset.proj; S.q = ''; $('prestaSearch').value = ''; $('price').value = '';
+      const list = prestasOf(S.projet), def = list.find(x => x[1] === 'Ticket');
+      S.presta = list.length === 1 ? list[0][0] : def ? def[0] : null;
+    }
+  }
+  else if (b.dataset.presta) { S.presta = b.dataset.presta; $('price').value = ''; }
+  else if (b.id === 'minus' || b.id === 'plus') { const q = qtyVal() + (b.id === 'plus' ? 1 : -1); $('qty').value = Math.max(0, q); }
+  else if (b.dataset.period) S.period = b.dataset.period;
+  else if (b.dataset.filter !== undefined) S.filter = b.dataset.filter;
+  else if (b.dataset.del) { // confirmation dans la page (pas de confirm())
+    b.parentElement.innerHTML = `<span class="confirm">Supprimer ? <button class="ghost" data-delok="${b.dataset.del}">Oui</button><button class="ghost" data-delno>Non</button></span>`; return;
+  }
+  else if (b.dataset.delok) { try { await store.del(b.dataset.delok); } catch (err) { toast('Suppression refusée : ' + (err.code || err.message)); } }
+  else if (b.dataset.delno !== undefined) {}
+  else if (b.id === 'save') return save();
+  else if (b.id === 'export') return exportXlsx();
+  else return;
+  render();
+});
+$('date').addEventListener('change', e => { S.date = e.target.value; render(); });
+$('prestaSearch').addEventListener('input', e => { S.q = e.target.value; render(); });
+['qty', 'price'].forEach(id => $(id).addEventListener('input', render));
+
+let toastTimer;
+function toast(msg, undoId) {
+  const t = $('toast'); t.hidden = false;
+  t.innerHTML = esc(msg) + (undoId ? ` <button data-undo="${undoId}">Annuler</button>` : '');
+  const u = t.querySelector('button'); if (u) u.onclick = async () => { t.hidden = true; await store.del(undoId); render(); };
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 6000);
+}
+
+async function save() {
+  const c = check(); if (!c.ok) return;
+  const multi = prestasOf(S.projet).length > 1;
+  const line = {
+    date: S.date, tech: S.tech, projet: S.projet, prestation: multi ? c.pr[1] : '',
+    qte: isAbs(S.projet) ? 1 : c.q, libelle: c.pr[1], designation: c.pr[2], code: c.pr[0], unite: c.pr[3],
+    pu: c.pu, montant: c.montant, ticket: $('ticket').value.trim(), comment: $('comment').value.trim(), at: new Date().toISOString()
+  };
+  $('save').disabled = true;
+  try {
+    const id = await store.add(line);
+    $('ticket').value = ''; $('comment').value = ''; $('qty').value = 1;
+    toast('Ligne enregistrée · ' + eur(line.montant), id);
+  } catch (err) {
+    toast(err.code === 'not_granted' ? 'Vous n\'avez pas le droit d\'écrire ici. Demandez au responsable de vous donner l\'accès en modification.' : 'Enregistrement impossible : ' + (err.message || err.code));
+  }
+  render();
+}
+
+// Export au format de l'onglet « Justificatifs » (colonnes A à L)
+async function exportXlsx() {
+  if (!window.XLSX) { $('exportMsg').innerHTML = '<div class="note bad">Le module Excel n\'a pas pu se charger. Vérifiez la connexion puis réessayez.</div>'; return; }
+  const [a, b] = periodRange();
+  const L = store.lines.filter(l => l.date >= a && l.date <= b && (!S.filter || l.tech === S.filter))
+    .sort((x, y) => (x.date + x.tech + x.at).localeCompare(y.date + y.tech + y.at));
+  const head = ['Date', 'Technicien', 'Projet', 'Prestation (si le projet en a plusieurs)', 'Quantité (vide = 1)', 'Désignation (auto)', 'Code BPU (auto)', 'Unité (auto)', 'PU (€) (auto)', 'Montant (€) (auto)', 'N° ticket / référence', 'Commentaire'];
+  const rows = L.map(l => [new Date(l.date + 'T00:00:00'), l.tech, l.projet, l.prestation || '', l.qte === 1 ? '' : l.qte, l.designation, l.code, l.unite, l.pu, l.montant, l.ticket, l.comment]);
+  const ws = XLSX.utils.aoa_to_sheet([head, ...rows], { cellDates: true, dateNF: 'dd/mm/yyyy' });
+  ws['!cols'] = [12, 20, 12, 40, 10, 50, 14, 16, 10, 12, 18, 30].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Justificatifs');
+  const name = `justificatifs_${S.period === 'tout' ? 'tout' : a + '_' + b}.xlsx`;
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+  let dl = null; try { dl = window.claude?.use ? await window.claude.use('downloads') : null; } catch {}
+  try {
+    if (dl) await dl.save({ filename: name, data: buf }); else XLSX.writeFile(wb, name);
+    $('exportMsg').innerHTML = `<div class="note info">${L.length} ligne${L.length > 1 ? 's' : ''} dans ${esc(name)}.</div>`;
+  } catch (err) { if (err.code !== 'declined') $('exportMsg').innerHTML = `<div class="note bad">Téléchargement impossible : ${esc(err.message || err.code)}</div>`; }
+}
+
+store.listeners.push(render);
+render();
+store.init().then(() => { store.ready = true; render(); });
+</script>
