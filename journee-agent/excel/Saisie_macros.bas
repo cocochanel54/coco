@@ -12,6 +12,12 @@ Private Const FEUILLE_JUSTIF As String = "Justificatifs"
 Private Const LIGNE_DEBUT As Long = 5
 Private Const LIGNE_FIN As Long = 5004
 
+' Synchro web (voir plus bas)
+Private Const COL_ID As Long = 21                 ' colonne U de Justificatifs
+Private Const NOM_LIEN As String = "LienSaisieWeb"
+Private Const MINUTES_SYNCHRO As Long = 5
+Private prochaineSynchro As Date
+
 '------------------------------------------------------------------------------
 ' Ajoute la ligne saisie dans l'onglet Justificatifs
 '------------------------------------------------------------------------------
@@ -218,11 +224,6 @@ End Sub
 ' - Les lignes saisies directement dans Excel (colonne U vide) ne sont jamais touchées.
 '==============================================================================
 
-Private Const COL_ID As Long = 21                 ' colonne U de Justificatifs
-Private Const NOM_LIEN As String = "LienSaisieWeb"
-Private Const MINUTES_SYNCHRO As Long = 5
-Private prochaineSynchro As Date
-
 ' Bouton « Synchroniser » et raccourci Ctrl+Maj+S
 Public Sub SynchroniserWeb()
     Synchroniser False
@@ -267,9 +268,9 @@ Private Function LienWeb() As String
 End Function
 
 Private Sub Synchroniser(silencieux As Boolean)
-    Dim jf As Worksheet, url As String, texte As String
+    Dim jf As Worksheet, url As String, contenu As String
     Dim lignes() As String, f() As String, i As Long, r As Long
-    Dim distant As Object, local_ As Object, k As Variant
+    Dim distant As Object, dejaLa As Object, k As Variant
     Dim nAjout As Long, nRetrait As Long, ancienCalcul As Long
 
     If Len(LienWeb()) = 0 Then
@@ -285,8 +286,8 @@ Private Sub Synchroniser(silencieux As Boolean)
 
     url = LienWeb()
     url = url & IIf(InStr(url, "?") > 0, "&", "?") & "export=tsv"
-    texte = Telecharger(url)
-    If Left$(texte, 3) <> "ID" & vbTab Then
+    contenu = Telecharger(url)
+    If Left$(contenu, 3) <> "ID" & vbTab Then
         If Not silencieux Then MsgBox "La page web n'a pas renvoyé les saisies." & vbCrLf & _
             "Vérifiez le lien (macro ChangerLienWeb) et la connexion Internet.", vbExclamation, "Synchroniser"
         Exit Sub
@@ -294,7 +295,7 @@ Private Sub Synchroniser(silencieux As Boolean)
 
     ' saisies présentes sur le web : identifiant -> champs
     Set distant = CreateObject("Scripting.Dictionary")
-    lignes = Split(Replace(texte, vbCr, ""), vbLf)
+    lignes = Split(Replace(contenu, vbCr, ""), vbLf)
     For i = 1 To UBound(lignes)
         If Len(lignes(i)) > 0 Then
             f = Split(lignes(i), vbTab)
@@ -303,17 +304,17 @@ Private Sub Synchroniser(silencieux As Boolean)
     Next i
 
     ' lignes déjà venues du web dans Justificatifs : identifiant -> n° de ligne
-    Set local_ = CreateObject("Scripting.Dictionary")
+    Set dejaLa = CreateObject("Scripting.Dictionary")
     For r = LIGNE_DEBUT To LIGNE_FIN
         k = CStr(jf.Cells(r, COL_ID).Value)
-        If Len(k) > 0 Then local_(k) = r
+        If Len(k) > 0 Then dejaLa(k) = r
     Next r
 
     ' si le web ne renvoie plus rien alors qu'Excel a des lignes venues du web, on demande avant de retirer
-    If distant.Count = 0 And local_.Count > 0 Then
+    If distant.Count = 0 And dejaLa.Count > 0 Then
         If silencieux Then Exit Sub
         If MsgBox("La page web ne contient plus aucune saisie." & vbCrLf & _
-                  "Retirer les " & local_.Count & " lignes venues du web de l'onglet Justificatifs ?", _
+                  "Retirer les " & dejaLa.Count & " lignes venues du web de l'onglet Justificatifs ?", _
                   vbYesNo + vbQuestion, "Synchroniser") <> vbYes Then Exit Sub
     End If
 
@@ -321,9 +322,9 @@ Private Sub Synchroniser(silencieux As Boolean)
     Application.Calculation = xlCalculationManual
 
     ' 1. retire les lignes supprimées sur le web
-    For Each k In local_.Keys
+    For Each k In dejaLa.Keys
         If Not distant.Exists(k) Then
-            ViderLigne jf, CLng(local_(k))
+            ViderLigne jf, CLng(dejaLa(k))
             nRetrait = nRetrait + 1
         End If
     Next k
@@ -331,7 +332,7 @@ Private Sub Synchroniser(silencieux As Boolean)
     ' 2. ajoute les nouvelles saisies
     r = LIGNE_DEBUT
     For Each k In distant.Keys
-        If Not local_.Exists(k) Then
+        If Not dejaLa.Exists(k) Then
             Do While r <= LIGNE_FIN
                 If Len(CStr(jf.Cells(r, 1).Value)) = 0 And Len(CStr(jf.Cells(r, 2).Value)) = 0 _
                    And Len(CStr(jf.Cells(r, 3).Value)) = 0 And Len(CStr(jf.Cells(r, COL_ID).Value)) = 0 Then Exit Do
