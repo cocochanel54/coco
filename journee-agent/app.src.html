@@ -1,7 +1,6 @@
 <title>Journée agent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* Layout : une colonne étroite pensée pour le téléphone, barre d'enregistrement collée en bas. */
 :root {
@@ -77,7 +76,7 @@ input[type=date], input[type=text], input[type=search], input[type=number] {
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
 .savebar .in { max-width: 600px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
 .savebar .tot { margin-right: auto; min-width: 0; }
-.savebar .tot b { display: block; font-family: var(--f-data); font-size: 22px; }
+.savebar .tot b { display: block; font-family: var(--f-display); font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .savebar .tot span { font-size: 13px; color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 12px; padding: 14px 22px; font-weight: 700; font-size: 17px; }
 .primary:disabled { opacity: .45; cursor: not-allowed; }
@@ -90,7 +89,8 @@ input[type=date], input[type=text], input[type=search], input[type=number] {
 .line .d { font-size: 13px; color: var(--muted); min-width: 0; }
 .pend { color: var(--warn); font-family: var(--f-body); }
 .line .x { border: 0; background: none; color: var(--muted); font-size: 13px; text-decoration: underline; padding: 0; justify-self: end; }
-.daytot { display: flex; justify-content: space-between; font-weight: 600; }
+.daytot { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-weight: 600; }
+#dayTotal { white-space: nowrap; color: var(--muted); font-size: 14px; }
 .empty { color: var(--muted); text-align: center; padding: 16px 8px; }
 
 .tablewrap { overflow-x: auto; }
@@ -123,11 +123,6 @@ td.r, th.r { text-align: right; }
     <div class="techs" id="techList"></div>
   </section>
 
-  <nav class="tabs" id="tabs" hidden>
-    <button id="tab-saisie" aria-selected="true">Saisir</button>
-    <button id="tab-equipe" aria-selected="false">Équipe</button>
-  </nav>
-
   <div id="viewSaisie" hidden>
     <div class="wrap" style="padding:0">
       <section class="panel">
@@ -149,10 +144,6 @@ td.r, th.r { text-align: right; }
           <input type="search" id="prestaSearch" placeholder="Chercher un code ou un mot (ex. 3.2, nacelle, Z100)" hidden>
           <div class="presta-list" id="prestaList"></div>
         </div>
-        <div class="field" id="priceField" hidden>
-          <label for="price">Prix unitaire (€) <small class="lab">prix sur devis, à saisir</small></label>
-          <input type="number" id="price" inputmode="decimal" min="0" step="0.01">
-        </div>
         <div class="field" id="qtyField">
           <label for="qty">Quantité <span class="unit" id="unit"></span></label>
           <div class="qty">
@@ -173,33 +164,17 @@ td.r, th.r { text-align: right; }
       </section>
 
       <section class="panel">
-        <div class="daytot"><h2 id="dayTitle">Ma journée</h2><span class="num" id="dayTotal"></span></div>
+        <div class="daytot"><h2 id="dayTitle">Ma journée</h2><span id="dayTotal"></span></div>
         <div class="lines" id="dayLines"></div>
       </section>
     </div>
   </div>
 
-  <div id="viewEquipe" hidden>
-    <div class="wrap" style="padding:0">
-      <section class="panel">
-        <div class="row" id="periods"></div>
-        <div class="kpis" id="kpis"></div>
-        <div class="tablewrap" id="ranking"></div>
-      </section>
-      <section class="panel">
-        <div class="row" style="align-items:center"><h2 style="margin-right:auto">Toutes les saisies</h2><span id="exportBox"><button class="ghost" id="export">Télécharger l'Excel</button></span></div>
-        <p class="status" id="exportHint">Le fichier reprend les colonnes A à L de l'onglet « Justificatifs » : copiez ses lignes et collez-les à la suite dans votre classeur.</p>
-        <div id="exportMsg"></div>
-        <div class="row" id="techFilter" style="font-size:14px"></div>
-        <div class="lines" id="allLines"></div>
-      </section>
-    </div>
-  </div>
 </div>
 
 <div class="savebar" id="savebar" hidden>
   <div class="in">
-    <div class="tot"><b id="amount">0,00 €</b><span id="summary">Choisissez un projet</span></div>
+    <div class="tot"><b id="amount">Nouvelle ligne</b><span id="summary">Choisissez un projet</span></div>
     <button class="primary" id="save" disabled>Enregistrer</button>
   </div>
 </div>
@@ -208,14 +183,13 @@ td.r, th.r { text-align: right; }
 <script>
 let DATA = /*DATA*/null;
 const $ = id => document.getElementById(id);
-const eur = n => (n || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 const iso = d => { const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 10); };
 const frDate = s => new Date(s + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 const ls = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const isAbs = p => DATA.projets.find(x => x.nom === p)?.absence;
 
-// ---- Stockage : Google Sheet (page servie par Apps Script), base claude.ai, ou ce navigateur ----
+// ---- Stockage : Google Sheet (page servie par Apps Script), ou ce navigateur pour un essai hors Google ----
 const gas = (fn, ...args) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args));
 const newId = () => 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const store = {
@@ -223,16 +197,7 @@ const store = {
   emit() { this.listeners.forEach(f => f()); },
   async init() {
     if (window.google?.script?.run) return this.initGas();
-    let db = null;
-    try { db = window.claude?.use ? await window.claude.use('db') : null; } catch {}
-    if (db) {
-      this.mode = 'db'; this.col = db.collection('lignes');
-      await new Promise(res => this.col.onSnapshot(snap => {
-        this.lines = snap.docs.map(d => ({ id: d.id, ...d.data() })); this.emit(); res();
-      }, err => { $('status').textContent = 'Lecture impossible (' + err.code + ').'; res(); }));
-    } else {
-      try { this.lines = JSON.parse(ls.get('ja-lignes') || '[]'); } catch { this.lines = []; }
-    }
+    try { this.lines = JSON.parse(ls.get('ja-lignes') || '[]'); } catch { this.lines = []; }
   },
   async initGas() {
     this.mode = 'gas';
@@ -256,7 +221,7 @@ const store = {
         await gas('ajouterLigne', this.queue[0]);
         this.queue.shift(); ls.set('ja-queue', JSON.stringify(this.queue));
       }
-      this.server = await gas('getLignes');
+      this.server = S.tech ? await gas('getLignes', S.tech) : [];
       ls.set('ja-cache', JSON.stringify(this.server));
       this.offline = false;
     } catch { this.offline = true; }
@@ -266,7 +231,6 @@ const store = {
   async add(l) {
     l = { ...l, id: newId() };
     if (this.mode === 'gas') { this.queue.push(l); ls.set('ja-queue', JSON.stringify(this.queue)); this.merge(); this.sync(); return l.id; }
-    if (this.mode === 'db') { const ref = await this.col.add(l); return ref.id; }
     this.lines.push(l); this.persist(); return l.id;
   },
   async del(id) {
@@ -275,13 +239,12 @@ const store = {
       await gas('supprimerLigne', id);
       this.server = this.server.filter(l => l.id !== id); this.merge(); return this.sync();
     }
-    if (this.mode === 'db') return this.col.doc(id).delete();
     this.lines = this.lines.filter(l => l.id !== id); this.persist();
   }
 };
 
 // ---- État du formulaire ----
-const S = { tech: ls.get('ja-tech'), date: iso(new Date()), projet: null, presta: null, q: '', tab: 'saisie', period: 'semaine', filter: '' };
+const S = { tech: ls.get('ja-tech'), date: iso(new Date()), projet: null, presta: null, q: '' };
 
 function prestasOf(p) { return DATA.bpu[p] || []; }
 function current() {
@@ -292,7 +255,6 @@ function current() {
   return pr;
 }
 function qtyVal() { const v = $('qty').value.trim().replace(',', '.'); return v === '' ? 1 : Number(v); }
-function priceOf(pr) { if (!pr) return null; if (pr[4] != null) return pr[4]; const v = $('price').value.replace(',', '.'); return v === '' ? null : Number(v); }
 
 // Mêmes contrôles que la colonne « Contrôle » de l'onglet Justificatifs
 function check() {
@@ -302,31 +264,23 @@ function check() {
   if (!pr) return { bad: 'Choisissez la prestation.' };
   const q = qtyVal();
   if (!isFinite(q) || q < 0) return { bad: 'La quantité doit être un nombre positif.' };
-  const pu = priceOf(pr);
-  if (pu == null || !isFinite(pu)) return { bad: 'Ce prix est sur devis : saisissez le prix unitaire.' };
   const other = new Set(store.lines.filter(l => l.date === S.date && l.tech === S.tech).map(l => l.projet));
   other.add(S.projet);
   if (other.size > 2) return { bad: 'Vous avez déjà 2 projets ce jour-là. Une journée compte au plus 2 projets (0,5 jour chacun).' };
-  return { ok: true, pr, q, pu, montant: Math.round(q * pu * 100) / 100 };
+  return { ok: true, pr, q };
 }
 
 function render() {
   const ready = !!S.tech && DATA.techs.includes(S.tech);
   $('pickTech').hidden = ready;
-  $('tabs').hidden = $('savebar').hidden = !ready;
   $('who').hidden = !ready; $('who').textContent = ready ? S.tech + ' · changer' : '';
-  $('viewSaisie').hidden = !ready || S.tab !== 'saisie';
-  $('viewEquipe').hidden = !ready || S.tab !== 'equipe';
-  $('savebar').hidden = !ready || S.tab !== 'saisie';
-  $('tab-saisie').setAttribute('aria-selected', S.tab === 'saisie');
-  $('tab-equipe').setAttribute('aria-selected', S.tab === 'equipe');
+  $('viewSaisie').hidden = $('savebar').hidden = !ready;
   const wait = store.queue.length;
   $('status').textContent = !store.ready ? 'Connexion…'
-    : store.mode === 'gas' ? (store.offline ? `Pas de réseau. ${wait} saisie${wait > 1 ? 's' : ''} en attente, envoi automatique dès le retour du réseau.` : wait ? 'Envoi en cours…' : 'Saisies envoyées dans le tableau du responsable.')
-    : store.mode === 'db' ? 'Saisies partagées avec toute l\'équipe.'
-    : 'Saisies gardées sur cet appareil. Téléchargez l\'Excel pour les transmettre.';
+    : store.mode === 'gas' ? (store.offline ? `Pas de réseau. ${wait} saisie${wait > 1 ? 's' : ''} en attente, envoi automatique dès le retour du réseau.` : wait ? 'Envoi en cours…' : 'Saisies envoyées au responsable.')
+    : 'Essai : saisies gardées sur cet appareil.';
   if (!ready) { $('techList').innerHTML = DATA.techs.map(t => `<button data-tech="${esc(t)}">${esc(t)}</button>`).join(''); return; }
-  if (S.tab === 'saisie') renderSaisie(); else renderEquipe();
+  renderSaisie();
 }
 
 function renderSaisie() {
@@ -353,104 +307,61 @@ function renderSaisie() {
     shown = shown.slice(0, 40);
     if (sel && !shown.includes(sel)) shown.unshift(sel);
     $('prestaList').innerHTML = shown.map(x => `<button class="presta" data-presta="${esc(x[0])}" aria-pressed="${x[0] === S.presta}">
-      <span class="l">${esc(x[1])}</span><span class="p">${x[4] == null ? 'devis' : eur(x[4])}</span>
+      <span class="l">${esc(x[1])}</span>
       <span class="u">${esc(x[0])} · ${esc(x[3])}</span></button>`).join('')
       + (total > 40 ? `<p class="more">${total - 40} autres : précisez la recherche.</p>` : '')
       + (total === 0 ? '<p class="more">Aucune prestation ne correspond.</p>' : '');
   }
   const pr = current();
-  $('priceField').hidden = !(pr && pr[4] == null);
   $('qtyField').hidden = isAbs(S.projet);
   $('unit').textContent = pr && pr[3] ? '· ' + pr[3] : '';
 
   const c = check();
   $('check').innerHTML = c.bad && S.projet ? `<div class="note ${c.bad.includes('déjà 2') ? 'bad' : 'info'}">${esc(c.bad)}</div>` : '';
   $('save').disabled = !c.ok;
-  $('amount').textContent = eur(c.ok ? c.montant : 0);
-  $('summary').textContent = c.ok ? `${S.projet} · ${c.pr[1]}${isAbs(S.projet) ? '' : ' · ' + String(c.q).replace('.', ',') + ' × ' + eur(c.pu)}` : (S.projet ? 'Ligne incomplète' : 'Choisissez un projet');
+  $('amount').textContent = c.ok ? `${S.projet} · ${c.pr[1]}` : 'Nouvelle ligne';
+  $('summary').textContent = c.ok ? (isAbs(S.projet) ? 'Journée entière' : 'Quantité ' + String(c.q).replace('.', ',') + (c.pr[3] ? ' · ' + c.pr[3] : '')) : (S.projet ? 'Ligne incomplète' : 'Choisissez un projet');
 
   const mine = store.lines.filter(l => l.tech === S.tech && l.date === S.date);
   $('dayTitle').textContent = 'Ma journée · ' + frDate(S.date);
-  $('dayTotal').textContent = eur(mine.reduce((a, l) => a + (l.montant || 0), 0));
+  $('dayTotal').textContent = mine.length ? mine.length + ' ligne' + (mine.length > 1 ? 's' : '') : '';
   $('dayLines').innerHTML = mine.length ? mine.map(l => lineHTML(l)).join('') : '<p class="empty">Rien de saisi pour ce jour. Choisissez un projet puis touchez Enregistrer.</p>';
 }
 
-function lineHTML(l, showWho) {
-  return `<div class="line"><span class="t">${esc(l.projet)} · ${esc(l.libelle)}</span><span class="m">${eur(l.montant)}${l.pending ? '<br><small class="pend">en attente</small>' : ''}</span>
-    <span class="d">${showWho ? esc(l.tech) + ' · ' + new Date(l.date + 'T12:00').toLocaleDateString('fr-FR') + ' · ' : ''}${isAbs(l.projet) ? '' : 'Qté ' + String(l.qte).replace('.', ',') + ' · '}${esc(l.code)}${l.ticket ? ' · n° ' + esc(l.ticket) : ''}${l.comment ? ' · ' + esc(l.comment) : ''}</span>
+function lineHTML(l) {
+  return `<div class="line"><span class="t">${esc(l.projet)} · ${esc(l.libelle)}</span><span class="m">${l.pending ? '<small class="pend">en attente</small>' : ''}</span>
+    <span class="d">${isAbs(l.projet) ? '' : 'Qté ' + String(l.qte).replace('.', ',') + ' · '}${esc(l.code)}${l.ticket ? ' · n° ' + esc(l.ticket) : ''}${l.comment ? ' · ' + esc(l.comment) : ''}</span>
     <span class="x-wrap" data-wrap="${esc(l.id)}"><button class="x" data-del="${esc(l.id)}">Supprimer</button></span></div>`;
-}
-
-// ---- Vue équipe ----
-function periodRange() {
-  const t = new Date(); t.setHours(12);
-  if (S.period === 'jour') return [iso(t), iso(t)];
-  if (S.period === 'semaine') { const m = new Date(t); m.setDate(t.getDate() - ((t.getDay() + 6) % 7)); const s = new Date(m); s.setDate(m.getDate() + 6); return [iso(m), iso(s)]; }
-  if (S.period === 'mois') return [iso(new Date(t.getFullYear(), t.getMonth(), 1, 12)), iso(new Date(t.getFullYear(), t.getMonth() + 1, 0, 12))];
-  return ['0000', '9999'];
-}
-function renderEquipe() {
-  $('exportBox').hidden = $('exportHint').hidden = store.mode === 'gas';
-  const P = [['jour', 'Aujourd\'hui'], ['semaine', 'Cette semaine'], ['mois', 'Ce mois'], ['tout', 'Tout']];
-  $('periods').innerHTML = P.map(([k, n]) => `<button class="chip" data-period="${k}" aria-pressed="${S.period === k}">${n}</button>`).join('');
-  const [a, b] = periodRange();
-  const L = store.lines.filter(l => l.date >= a && l.date <= b);
-  const total = L.reduce((s, l) => s + (l.montant || 0), 0);
-  // Jours : un projet = 1 jour, deux projets le même jour = 0,5 chacun ; valorisé = au moins 1 € produit
-  const per = DATA.techs.map(t => {
-    const mine = L.filter(l => l.tech === t), days = {};
-    mine.forEach(l => { (days[l.date] ||= { p: new Set(), m: 0 }); days[l.date].p.add(l.projet); days[l.date].m += l.montant || 0; });
-    const prod = mine.reduce((s, l) => s + (l.montant || 0), 0);
-    const valo = Object.values(days).filter(d => d.m > 0).length;
-    return { t, prod, valo, n: mine.length, moy: valo ? prod / valo : 0 };
-  }).sort((x, y) => y.prod - x.prod);
-  const max = Math.max(1, ...per.map(p => p.prod));
-  const filled = new Set(store.lines.filter(l => l.date === iso(new Date())).map(l => l.tech)).size;
-  $('kpis').innerHTML = `<div class="kpi"><b>${eur(total)}</b><span>production</span></div>
-    <div class="kpi"><b>${L.length}</b><span>lignes saisies</span></div>
-    <div class="kpi"><b>${filled}/${DATA.techs.length}</b><span>techs renseignés aujourd'hui</span></div>`;
-  $('ranking').innerHTML = `<table><thead><tr><th>#</th><th>Technicien</th><th class="r">Production</th><th></th><th class="r">Jours valorisés</th><th class="r">€ / jour</th></tr></thead><tbody>`
-    + per.map((p, i) => `<tr><td class="num">${p.prod > 0 ? i + 1 : '–'}</td><td>${esc(p.t)}</td><td class="r num">${eur(p.prod)}</td>
-      <td style="width:30%"><div class="bar" style="width:${(p.prod / max * 100).toFixed(1)}%"></div></td><td class="r num">${p.valo}</td><td class="r num">${p.valo ? eur(p.moy) : '–'}</td></tr>`).join('')
-    + '</tbody></table>';
-  $('techFilter').innerHTML = [['', 'Tous'], ...DATA.techs.map(t => [t, t])].map(([k, n]) =>
-    `<button class="chip" data-filter="${esc(k)}" aria-pressed="${S.filter === k}">${esc(n)}</button>`).join('');
-  const shown = L.filter(l => !S.filter || l.tech === S.filter).sort((x, y) => (y.date + y.at).localeCompare(x.date + x.at));
-  $('allLines').innerHTML = shown.length ? shown.map(l => lineHTML(l, true)).join('') : '<p class="empty">Aucune saisie sur cette période.</p>';
 }
 
 // ---- Événements ----
 document.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.tech) { S.tech = b.dataset.tech; ls.set('ja-tech', S.tech); }
+  if (b.dataset.tech) { S.tech = b.dataset.tech; ls.set('ja-tech', S.tech); store.mode === 'gas' && store.sync(); }
   else if (b.id === 'who') { S.tech = null; }
-  else if (b.id === 'tab-saisie' || b.id === 'tab-equipe') S.tab = b.id.slice(4);
   else if (b.id === 'today') S.date = iso(new Date());
   else if (b.id === 'yesterday') { const y = new Date(); y.setDate(y.getDate() - 1); S.date = iso(y); }
   else if (b.dataset.proj) {
     if (S.projet !== b.dataset.proj) {
-      S.projet = b.dataset.proj; S.q = ''; $('prestaSearch').value = ''; $('price').value = '';
+      S.projet = b.dataset.proj; S.q = ''; $('prestaSearch').value = '';
       const list = prestasOf(S.projet), def = list.find(x => x[1] === 'Ticket');
       S.presta = list.length === 1 ? list[0][0] : def ? def[0] : null;
     }
   }
-  else if (b.dataset.presta) { S.presta = b.dataset.presta; $('price').value = ''; }
+  else if (b.dataset.presta) S.presta = b.dataset.presta;
   else if (b.id === 'minus' || b.id === 'plus') { const q = qtyVal() + (b.id === 'plus' ? 1 : -1); $('qty').value = Math.max(0, q); }
-  else if (b.dataset.period) S.period = b.dataset.period;
-  else if (b.dataset.filter !== undefined) S.filter = b.dataset.filter;
   else if (b.dataset.del) { // confirmation dans la page (pas de confirm())
     b.parentElement.innerHTML = `<span class="confirm">Supprimer ? <button class="ghost" data-delok="${b.dataset.del}">Oui</button><button class="ghost" data-delno>Non</button></span>`; return;
   }
   else if (b.dataset.delok) { try { await store.del(b.dataset.delok); } catch (err) { toast('Suppression refusée : ' + (err.code || err.message)); } }
   else if (b.dataset.delno !== undefined) {}
   else if (b.id === 'save') return save();
-  else if (b.id === 'export') return exportXlsx();
   else return;
   render();
 });
 $('date').addEventListener('change', e => { S.date = e.target.value; render(); });
 $('prestaSearch').addEventListener('input', e => { S.q = e.target.value; render(); });
-['qty', 'price'].forEach(id => $(id).addEventListener('input', render));
+$('qty').addEventListener('input', render);
 
 let toastTimer;
 function toast(msg, undoId) {
@@ -465,38 +376,17 @@ async function save() {
   const multi = prestasOf(S.projet).length > 1;
   const line = {
     date: S.date, tech: S.tech, projet: S.projet, prestation: multi ? c.pr[1] : '',
-    qte: isAbs(S.projet) ? 1 : c.q, libelle: c.pr[1], designation: c.pr[2], code: c.pr[0], unite: c.pr[3],
-    pu: c.pu, montant: c.montant, ticket: $('ticket').value.trim(), comment: $('comment').value.trim(), at: new Date().toISOString()
+    qte: isAbs(S.projet) ? 1 : c.q, libelle: c.pr[1], code: c.pr[0], unite: c.pr[3], ticket: $('ticket').value.trim(), comment: $('comment').value.trim(), at: new Date().toISOString()
   };
   $('save').disabled = true;
   try {
     const id = await store.add(line);
     $('ticket').value = ''; $('comment').value = ''; $('qty').value = 1;
-    toast('Ligne enregistrée · ' + eur(line.montant), id);
+    toast('Ligne enregistrée', id);
   } catch (err) {
-    toast(err.code === 'not_granted' ? 'Vous n\'avez pas le droit d\'écrire ici. Demandez au responsable de vous donner l\'accès en modification.' : 'Enregistrement impossible : ' + (err.message || err.code));
+    toast('Enregistrement impossible : ' + (err.message || err.code));
   }
   render();
-}
-
-// Export au format de l'onglet « Justificatifs » (colonnes A à L)
-async function exportXlsx() {
-  if (!window.XLSX) { $('exportMsg').innerHTML = '<div class="note bad">Le module Excel n\'a pas pu se charger. Vérifiez la connexion puis réessayez.</div>'; return; }
-  const [a, b] = periodRange();
-  const L = store.lines.filter(l => l.date >= a && l.date <= b && (!S.filter || l.tech === S.filter))
-    .sort((x, y) => (x.date + x.tech + x.at).localeCompare(y.date + y.tech + y.at));
-  const head = ['Date', 'Technicien', 'Projet', 'Prestation (si le projet en a plusieurs)', 'Quantité (vide = 1)', 'Désignation (auto)', 'Code BPU (auto)', 'Unité (auto)', 'PU (€) (auto)', 'Montant (€) (auto)', 'N° ticket / référence', 'Commentaire'];
-  const rows = L.map(l => [new Date(l.date + 'T00:00:00'), l.tech, l.projet, l.prestation || '', l.qte === 1 ? '' : l.qte, l.designation, l.code, l.unite, l.pu, l.montant, l.ticket, l.comment]);
-  const ws = XLSX.utils.aoa_to_sheet([head, ...rows], { cellDates: true, dateNF: 'dd/mm/yyyy' });
-  ws['!cols'] = [12, 20, 12, 40, 10, 50, 14, 16, 10, 12, 18, 30].map(w => ({ wch: w }));
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Justificatifs');
-  const name = `justificatifs_${S.period === 'tout' ? 'tout' : a + '_' + b}.xlsx`;
-  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-  let dl = null; try { dl = window.claude?.use ? await window.claude.use('downloads') : null; } catch {}
-  try {
-    if (dl) await dl.save({ filename: name, data: buf }); else XLSX.writeFile(wb, name);
-    $('exportMsg').innerHTML = `<div class="note info">${L.length} ligne${L.length > 1 ? 's' : ''} dans ${esc(name)}.</div>`;
-  } catch (err) { if (err.code !== 'declined') $('exportMsg').innerHTML = `<div class="note bad">Téléchargement impossible : ${esc(err.message || err.code)}</div>`; }
 }
 
 store.listeners.push(render);

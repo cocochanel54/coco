@@ -1,6 +1,6 @@
 # Installer Journée agent (une seule fois, environ 15 minutes, sur ordinateur)
 
-Les techniciens saisissent sur une page web, depuis leur téléphone, sans compte ni mot de passe. Chaque saisie arrive dans un Google Sheet à toi, puis ton Excel `Journee_agent.xlsm` la récupère tout seul dans l'onglet « Justificatifs ».
+Les techniciens saisissent sur une page web, depuis leur téléphone, sans compte ni mot de passe. Ils ne voient aucun prix ni aucun montant : les prix ne quittent jamais ton Google Sheet. Chaque saisie arrive dans un Google Sheet à toi, puis ton Excel `Journee_agent.xlsm` la récupère tout seul dans l'onglet « Justificatifs ».
 
 ## 1. Créer le Google Sheet
 
@@ -45,14 +45,14 @@ Ensuite, c'est automatique : à chaque ouverture du fichier, puis toutes les 5 m
 - Seules les colonnes Date, Technicien, Projet, Prestation, Quantité, N° ticket et Commentaire sont remplies : le reste se calcule avec tes formules, et « Journée agent », « Classement », « Synthèse »… se mettent à jour.
 - Une ligne supprimée sur le web est retirée d'Excel à la synchro suivante. Les lignes que tu tapes toi-même dans Excel ne sont jamais touchées.
 - La colonne **U** de « Justificatifs » contient l'identifiant des lignes venues du web : ne la modifie pas.
-- Prix sur devis : le prix tapé sur le web est écrit en orange dans PU et Montant.
+- Prix sur devis : la ligne arrive sans prix (« Prix manquant dans le BPU » dans la colonne Contrôle). Complète le PU dans Excel.
 - Pour changer le lien : Alt+F8 → **ChangerLienWeb**.
 
 ## Au quotidien
 
 - **Voir les saisies** : onglet **Saisies** du Google Sheet, en direct. Les colonnes A à L sont celles de « Justificatifs ».
 - **Ton Excel** se remplit tout seul (étape 6). Sur Mac, la synchro automatique ne marche pas : copie les colonnes A à L de l'onglet Saisies et colle-les à la suite dans « Justificatifs ».
-- **Changer un prix** : dans l'onglet **BPU** du Google Sheet (c'est ce que voient les techniciens) et aussi dans l'onglet BPU de ton Excel (c'est ce qui calcule les montants). Garde les mêmes libellés des deux côtés. Laisse vide pour un prix sur devis.
+- **Changer un prix** : dans l'onglet **BPU** de ton Excel (c'est lui qui calcule les montants de « Justificatifs »). Si tu veux que le Google Sheet affiche les mêmes montants, change-le aussi dans son onglet BPU. Pour ajouter une prestation, ajoute-la dans les deux, avec le même libellé.
 - **Ajouter ou retirer un technicien** : onglet **Techniciens**. Ton Excel n'a que 6 colonnes de techniciens dans « Journée agent » : un nouveau nom doit aussi y être ajouté.
 - Les changements du Sheet apparaissent dans l'appli à la prochaine ouverture.
 

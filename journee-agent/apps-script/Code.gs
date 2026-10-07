@@ -7,6 +7,10 @@
  *   Techniciens  : la liste des noms proposés dans l'appli
  *   Projets      : les projets proposés, et s'ils sont des absences
  *   Jours fériés : affichés comme alerte dans l'appli
+ *
+ * Les techniciens ne voient jamais les prix : la page ne reçoit que les libellés,
+ * et le prix unitaire et le montant sont calculés ici, à partir de l'onglet BPU.
+ * (Toute fonction sans « _ » à la fin peut être appelée depuis la page : aucune ne renvoie de prix.)
  */
 
 var ONGLET_SAISIES = 'Saisies';
@@ -56,8 +60,15 @@ function remplir_(ss, nom, entetes, lignes) {
   sh.autoResizeColumns(1, entetes.length);
 }
 
-/** Listes de l'appli, lues dans les onglets (le responsable les modifie directement dans le Sheet). */
+/** Listes envoyées à la page, sans aucun prix. */
 function getConfig() {
+  var c = lireConfig_();
+  Object.keys(c.bpu).forEach(function (p) { c.bpu[p] = c.bpu[p].map(function (x) { return x.slice(0, 4); }); });
+  return c;
+}
+
+/** Listes lues dans les onglets (le responsable les modifie directement dans le Sheet), avec les prix. */
+function lireConfig_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var lire = function (nom) {
     var sh = ss.getSheetByName(nom);
@@ -76,12 +87,20 @@ function getConfig() {
   });
   var feries = {};
   lire('Jours fériés').forEach(function (r) { if (r[0] instanceof Date) feries[iso_(r[0])] = String(r[1]); });
-  if (!techs.length) return DEFAUT;
+  if (!techs.length) return JSON.parse(JSON.stringify(DEFAUT));
   return { techs: techs, projets: projets, bpu: bpu, feries: feries };
 }
 
-/** Lignes déjà saisies, pour « Ma journée » et la vue équipe. */
-function getLignes() {
+/** Lignes d'un technicien (60 derniers jours) pour « Ma journée », sans prix. */
+function getLignes(tech) {
+  var depuis = iso_(new Date(Date.now() - 60 * 864e5));
+  return lireLignes_().filter(function (l) { return l.tech === tech && l.date >= depuis; }).map(function (l) {
+    delete l.pu; delete l.montant; delete l.designation; return l;
+  });
+}
+
+/** Toutes les lignes de l'onglet Saisies, avec les prix. */
+function lireLignes_() {
   var sh = feuille_();
   if (sh.getLastRow() < 2) return [];
   return sh.getRange(2, 1, sh.getLastRow() - 1, ENTETES.length).getValues()
@@ -96,17 +115,28 @@ function getLignes() {
     });
 }
 
-/** Ajoute une ligne. Le même ID n'est jamais ajouté deux fois (renvoi après une coupure réseau). */
+/**
+ * Ajoute une ligne. Le prix vient de l'onglet BPU (jamais de la page).
+ * Le même ID n'est jamais ajouté deux fois (renvoi après une coupure réseau).
+ */
 function ajouterLigne(l) {
   if (!l || !l.id || !/^\d{4}-\d{2}-\d{2}$/.test(l.date) || !l.tech || !l.projet) throw new Error('Ligne incomplète');
+  var conf = lireConfig_();
+  if (conf.techs.indexOf(l.tech) < 0) throw new Error('Technicien inconnu : ' + l.tech);
+  var liste = conf.bpu[l.projet];
+  if (!liste || !liste.length) throw new Error('Projet inconnu : ' + l.projet);
+  var pr = liste.length === 1 ? liste[0] : liste.filter(function (x) { return x[0] === l.code; })[0];
+  if (!pr) throw new Error('Prestation inconnue pour ' + l.projet + ' : ' + l.code);
+  var q = Number(l.qte);
+  if (!isFinite(q) || q < 0) q = 1;
+  var pu = pr[4];                                  // null = prix sur devis, à compléter par le responsable
   var verrou = LockService.getScriptLock();
   verrou.waitLock(20000);
   try {
     var sh = feuille_();
     if (sh.getLastRow() > 1 && sh.getRange(2, 13, sh.getLastRow() - 1, 1).createTextFinder(l.id).matchEntireCell(true).findNext()) return l.id;
-    var q = Number(l.qte), pu = Number(l.pu);
-    sh.appendRow([jour_(l.date), texte_(l.tech), texte_(l.projet), texte_(l.prestation), q === 1 ? '' : q,
-      texte_(l.designation), texte_(l.code), texte_(l.unite), pu, Math.round(q * pu * 100) / 100,
+    sh.appendRow([jour_(l.date), texte_(l.tech), texte_(l.projet), liste.length > 1 ? texte_(pr[1]) : '', q === 1 ? '' : q,
+      texte_(pr[2]), texte_(pr[0]), texte_(pr[3]), pu == null ? '' : pu, pu == null ? '' : Math.round(q * pu * 100) / 100,
       texte_(l.ticket), texte_(l.comment), l.id, new Date()]);
     return l.id;
   } finally {
@@ -131,8 +161,9 @@ function supprimerLigne(id) {
 // Une ligne par saisie, séparateur tabulation, dates en aaaa-mm-jj, nombres avec un point
 function exportTsv_() {
   var propre = function (v) { return String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').replace(/^'/, ''); };
-  var lignes = getLignes().map(function (l) {
-    return [l.id, l.date, l.tech, l.projet, l.prestation, l.qte, l.ticket, l.comment, l.pu, l.montant].map(propre).join('\t');
+  // PU et Montant restent vides : Excel les calcule avec son propre BPU, et ce lien ne doit pas exposer les prix
+  var lignes = lireLignes_().map(function (l) {
+    return [l.id, l.date, l.tech, l.projet, l.prestation, l.qte, l.ticket, l.comment, '', ''].map(propre).join('\t');
   });
   var texte = ['ID\tDate\tTechnicien\tProjet\tPrestation\tQuantite\tTicket\tCommentaire\tPU\tMontant'].concat(lignes).join('\n');
   return ContentService.createTextOutput(texte).setMimeType(ContentService.MimeType.TEXT);
