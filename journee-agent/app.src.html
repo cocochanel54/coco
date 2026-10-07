@@ -88,6 +88,7 @@ input[type=date], input[type=text], input[type=search], input[type=number] {
 .line .t { font-weight: 600; min-width: 0; }
 .line .m { font-family: var(--f-data); text-align: right; }
 .line .d { font-size: 13px; color: var(--muted); min-width: 0; }
+.pend { color: var(--warn); font-family: var(--f-body); }
 .line .x { border: 0; background: none; color: var(--muted); font-size: 13px; text-decoration: underline; padding: 0; justify-self: end; }
 .daytot { display: flex; justify-content: space-between; font-weight: 600; }
 .empty { color: var(--muted); text-align: center; padding: 16px 8px; }
@@ -186,8 +187,8 @@ td.r, th.r { text-align: right; }
         <div class="tablewrap" id="ranking"></div>
       </section>
       <section class="panel">
-        <div class="row" style="align-items:center"><h2 style="margin-right:auto">Toutes les saisies</h2><button class="ghost" id="export">Télécharger l'Excel</button></div>
-        <p class="status">Le fichier reprend les colonnes A à L de l'onglet « Justificatifs » : copiez ses lignes et collez-les à la suite dans votre classeur.</p>
+        <div class="row" style="align-items:center"><h2 style="margin-right:auto">Toutes les saisies</h2><span id="exportBox"><button class="ghost" id="export">Télécharger l'Excel</button></span></div>
+        <p class="status" id="exportHint">Le fichier reprend les colonnes A à L de l'onglet « Justificatifs » : copiez ses lignes et collez-les à la suite dans votre classeur.</p>
         <div id="exportMsg"></div>
         <div class="row" id="techFilter" style="font-size:14px"></div>
         <div class="lines" id="allLines"></div>
@@ -205,7 +206,7 @@ td.r, th.r { text-align: right; }
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const DATA = /*DATA*/null;
+let DATA = /*DATA*/null;
 const $ = id => document.getElementById(id);
 const eur = n => (n || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 const iso = d => { const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 10); };
@@ -214,11 +215,14 @@ const ls = { get(k) { try { return localStorage.getItem(k) } catch { return null
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const isAbs = p => DATA.projets.find(x => x.nom === p)?.absence;
 
-// ---- Stockage : base partagée quand la page tourne dans claude.ai, sinon ce navigateur ----
+// ---- Stockage : Google Sheet (page servie par Apps Script), base claude.ai, ou ce navigateur ----
+const gas = (fn, ...args) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args));
+const newId = () => 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const store = {
-  mode: 'local', lines: [], listeners: [],
+  mode: 'local', lines: [], listeners: [], queue: [], offline: false,
   emit() { this.listeners.forEach(f => f()); },
   async init() {
+    if (window.google?.script?.run) return this.initGas();
     let db = null;
     try { db = window.claude?.use ? await window.claude.use('db') : null; } catch {}
     if (db) {
@@ -230,12 +234,47 @@ const store = {
       try { this.lines = JSON.parse(ls.get('ja-lignes') || '[]'); } catch { this.lines = []; }
     }
   },
+  async initGas() {
+    this.mode = 'gas';
+    try { this.queue = JSON.parse(ls.get('ja-queue') || '[]'); } catch { this.queue = []; }
+    try { this.server = JSON.parse(ls.get('ja-cache') || '[]'); } catch { this.server = []; }
+    try {
+      const cfg = await gas('getConfig');
+      if (cfg && cfg.techs && cfg.techs.length) { DATA = cfg; ls.set('ja-config', JSON.stringify(cfg)); }
+    } catch { try { const c = JSON.parse(ls.get('ja-config')); if (c) DATA = c; } catch {} }
+    await this.sync();
+    setInterval(() => this.sync(), 60000);
+    addEventListener('online', () => this.sync());
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.sync(); });
+  },
+  merge() { this.lines = [...this.server, ...this.queue.map(l => ({ ...l, pending: true }))]; this.emit(); },
+  // Envoie les saisies en attente puis relit la feuille
+  async sync() {
+    if (this.syncing) return; this.syncing = true;
+    try {
+      while (this.queue.length) {
+        await gas('ajouterLigne', this.queue[0]);
+        this.queue.shift(); ls.set('ja-queue', JSON.stringify(this.queue));
+      }
+      this.server = await gas('getLignes');
+      ls.set('ja-cache', JSON.stringify(this.server));
+      this.offline = false;
+    } catch { this.offline = true; }
+    this.syncing = false; this.merge();
+  },
   persist() { ls.set('ja-lignes', JSON.stringify(this.lines)); this.emit(); },
   async add(l) {
+    l = { ...l, id: newId() };
+    if (this.mode === 'gas') { this.queue.push(l); ls.set('ja-queue', JSON.stringify(this.queue)); this.merge(); this.sync(); return l.id; }
     if (this.mode === 'db') { const ref = await this.col.add(l); return ref.id; }
-    l = { ...l, id: 'l' + Date.now() + Math.random().toString(36).slice(2, 6) }; this.lines.push(l); this.persist(); return l.id;
+    this.lines.push(l); this.persist(); return l.id;
   },
   async del(id) {
+    if (this.mode === 'gas') {
+      if (this.queue.some(l => l.id === id)) { this.queue = this.queue.filter(l => l.id !== id); ls.set('ja-queue', JSON.stringify(this.queue)); return this.merge(); }
+      await gas('supprimerLigne', id);
+      this.server = this.server.filter(l => l.id !== id); this.merge(); return this.sync();
+    }
     if (this.mode === 'db') return this.col.doc(id).delete();
     this.lines = this.lines.filter(l => l.id !== id); this.persist();
   }
@@ -281,8 +320,10 @@ function render() {
   $('savebar').hidden = !ready || S.tab !== 'saisie';
   $('tab-saisie').setAttribute('aria-selected', S.tab === 'saisie');
   $('tab-equipe').setAttribute('aria-selected', S.tab === 'equipe');
-  $('status').textContent = !store.ready ? 'Connexion…' : store.mode === 'db'
-    ? 'Saisies partagées avec toute l\'équipe.'
+  const wait = store.queue.length;
+  $('status').textContent = !store.ready ? 'Connexion…'
+    : store.mode === 'gas' ? (store.offline ? `Pas de réseau. ${wait} saisie${wait > 1 ? 's' : ''} en attente, envoi automatique dès le retour du réseau.` : wait ? 'Envoi en cours…' : 'Saisies envoyées dans le tableau du responsable.')
+    : store.mode === 'db' ? 'Saisies partagées avec toute l\'équipe.'
     : 'Saisies gardées sur cet appareil. Téléchargez l\'Excel pour les transmettre.';
   if (!ready) { $('techList').innerHTML = DATA.techs.map(t => `<button data-tech="${esc(t)}">${esc(t)}</button>`).join(''); return; }
   if (S.tab === 'saisie') renderSaisie(); else renderEquipe();
@@ -335,7 +376,7 @@ function renderSaisie() {
 }
 
 function lineHTML(l, showWho) {
-  return `<div class="line"><span class="t">${esc(l.projet)} · ${esc(l.libelle)}</span><span class="m">${eur(l.montant)}</span>
+  return `<div class="line"><span class="t">${esc(l.projet)} · ${esc(l.libelle)}</span><span class="m">${eur(l.montant)}${l.pending ? '<br><small class="pend">en attente</small>' : ''}</span>
     <span class="d">${showWho ? esc(l.tech) + ' · ' + new Date(l.date + 'T12:00').toLocaleDateString('fr-FR') + ' · ' : ''}${isAbs(l.projet) ? '' : 'Qté ' + String(l.qte).replace('.', ',') + ' · '}${esc(l.code)}${l.ticket ? ' · n° ' + esc(l.ticket) : ''}${l.comment ? ' · ' + esc(l.comment) : ''}</span>
     <span class="x-wrap" data-wrap="${esc(l.id)}"><button class="x" data-del="${esc(l.id)}">Supprimer</button></span></div>`;
 }
@@ -349,6 +390,7 @@ function periodRange() {
   return ['0000', '9999'];
 }
 function renderEquipe() {
+  $('exportBox').hidden = $('exportHint').hidden = store.mode === 'gas';
   const P = [['jour', 'Aujourd\'hui'], ['semaine', 'Cette semaine'], ['mois', 'Ce mois'], ['tout', 'Tout']];
   $('periods').innerHTML = P.map(([k, n]) => `<button class="chip" data-period="${k}" aria-pressed="${S.period === k}">${n}</button>`).join('');
   const [a, b] = periodRange();
