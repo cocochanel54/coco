@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coco Tableur</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #6b7280;
+    --border: #e3e6eb; --accent: #1f7a4d; --accent-soft: #e6f4ec; --danger: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171c; --card: #1d2128; --text: #e7e9ee; --muted: #9aa1ad;
+      --border: #2e333c; --accent: #3fb27a; --accent-soft: #1f3329; --danger: #e5675a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  h1 { font-size: 20px; margin: 0 auto 0 0; }
+  button, label.btn, select, input[type=search] {
+    font: inherit; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); cursor: pointer;
+  }
+  button.primary, label.btn { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.danger { color: var(--danger); }
+  input[type=file] { display: none; }
+  main { padding: 0 16px 32px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .bar input[type=search] { flex: 1; min-width: 160px; cursor: text; }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
+  .stat b { display: block; font-size: 18px; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .wrap { overflow: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; max-height: 70vh; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border-bottom: 1px solid var(--border); padding: 0; text-align: left; white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--accent-soft); z-index: 1; }
+  th .h { display: flex; align-items: center; }
+  th input { font-weight: 600; }
+  th .sort { border: 0; background: none; padding: 4px 8px; color: var(--muted); }
+  td input, th input { border: 0; background: transparent; color: inherit; font: inherit; padding: 8px 10px; width: 100%; min-width: 90px; }
+  td input:focus, th input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+  td.num input { text-align: right; font-variant-numeric: tabular-nums; }
+  td.del { width: 1%; }
+  td.del button { border: 0; background: none; color: var(--muted); padding: 4px 10px; }
+  td.del button:hover { color: var(--danger); }
+  .empty { padding: 32px; text-align: center; color: var(--muted); }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Coco Tableur</h1>
+  <label class="btn">Ouvrir un Excel<input type="file" id="file" accept=".xlsx,.xls,.csv,.ods"></label>
+  <button id="export">Télécharger .xlsx</button>
+  <button id="reset" class="danger">Réinitialiser</button>
+</header>
+<main>
+  <div class="bar">
+    <select id="sheet" title="Feuille"></select>
+    <input type="search" id="search" placeholder="Rechercher…">
+    <button id="addRow" class="primary">+ Ligne</button>
+    <button id="addCol">+ Colonne</button>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="wrap" id="wrap"></div>
+  <p class="hint">Clique sur une case pour la modifier. Tout est sauvegardé automatiquement dans ton navigateur.</p>
+</main>
+<script>
+const STORE = 'coco-tableur-v1';
+const demo = () => ({
+  name: 'Budget', current: 0,
+  sheets: [{ name: 'Budget', headers: ['Date', 'Catégorie', 'Description', 'Montant'], rows: [
+    ['2026-10-01', 'Courses', 'Supermarché', '54.20'],
+    ['2026-10-02', 'Transport', 'Pass Navigo', '86.40'],
+    ['2026-10-03', 'Loisirs', 'Cinéma', '12.50'],
+    ['2026-10-05', 'Courses', 'Marché', '23.10'],
+  ]}]
+});
+let book; try { book = JSON.parse(localStorage.getItem(STORE)) } catch {}
+if (!book?.sheets?.length) book = demo();
+let sortCol = null, sortDir = 1;
+const $ = id => document.getElementById(id);
+const sheet = () => book.sheets[book.current];
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(book)) } catch {} };
+const toNum = v => { const s = String(v ?? '').replace(/\s/g, '').replace(',', '.'); return s !== '' && isFinite(s) ? +s : null; };
+const isNumCol = c => { const vals = sheet().rows.map(r => r[c]).filter(v => v !== '' && v != null); return vals.length > 0 && vals.every(v => toNum(v) !== null); };
+const fmt = n => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+
+function render() {
+  const s = sheet();
+  $('sheet').innerHTML = book.sheets.map((sh, i) => `<option value="${i}" ${i === book.current ? 'selected' : ''}>${esc(sh.name)}</option>`).join('');
+  $('sheet').style.display = book.sheets.length > 1 ? '' : 'none';
+  const q = $('search').value.trim().toLowerCase();
+  let idx = visibleRows();
+  if (sortCol !== null && sortCol < s.headers.length) {
+    const num = isNumCol(sortCol);
+    idx.sort((a, b) => {
+      const x = s.rows[a][sortCol] ?? '', y = s.rows[b][sortCol] ?? '';
+      return sortDir * (num ? toNum(x) - toNum(y) : String(x).localeCompare(String(y), 'fr', { numeric: true }));
+    });
+  }
+  const numCols = s.headers.map((_, c) => isNumCol(c));
+  let html = '<table><thead><tr>' + s.headers.map((h, c) =>
+    `<th><div class="h"><input data-h="${c}" value="${esc(h)}"><button class="sort" data-sort="${c}" title="Trier">${sortCol === c ? (sortDir > 0 ? '▲' : '▼') : '⇅'}</button></div></th>`
+  ).join('') + '<th></th></tr></thead><tbody>';
+  html += idx.map(r => '<tr>' + s.headers.map((_, c) =>
+    `<td class="${numCols[c] ? 'num' : ''}"><input data-r="${r}" data-c="${c}" value="${esc(s.rows[r][c] ?? '')}"></td>`
+  ).join('') + `<td class="del"><button data-del="${r}" title="Supprimer la ligne">✕</button></td></tr>`).join('');
+  html += '</tbody></table>';
+  $('wrap').innerHTML = s.headers.length ? html : '<div class="empty">Feuille vide</div>';
+  if (s.headers.length && !idx.length) $('wrap').insertAdjacentHTML('beforeend', '<div class="empty">Aucune ligne</div>');
+  renderStats(idx, q, numCols);
+}
+function visibleRows() {
+  const s = sheet(), q = $('search').value.trim().toLowerCase();
+  return s.rows.map((_, i) => i).filter(i => !q || s.rows[i].some(v => String(v ?? '').toLowerCase().includes(q)));
+}
+// Stats : nombre de lignes + total/moyenne de chaque colonne numérique
+function renderStats(idx = visibleRows(), q = $('search').value.trim(), numCols = sheet().headers.map((_, c) => isNumCol(c))) {
+  const s = sheet();
+  let st = `<div class="stat"><b>${idx.length}</b><span>ligne${idx.length > 1 ? 's' : ''}${q ? ' trouvées' : ''}</span></div>`;
+  s.headers.forEach((h, c) => {
+    if (!numCols[c]) return;
+    const vals = idx.map(r => toNum(s.rows[r][c])).filter(v => v !== null);
+    if (!vals.length) return;
+    const sum = vals.reduce((a, b) => a + b, 0);
+    st += `<div class="stat"><b>${fmt(sum)}</b><span>Total ${esc(h)} · moy. ${fmt(sum / vals.length)}</span></div>`;
+  });
+  $('stats').innerHTML = st;
+}
+function esc(v) { return String(v).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
+
+$('wrap').addEventListener('input', e => {
+  const t = e.target, s = sheet();
+  if (t.dataset.h !== undefined) s.headers[t.dataset.h] = t.value;
+  else if (t.dataset.r !== undefined) s.rows[t.dataset.r][t.dataset.c] = t.value;
+  save();
+});
+$('wrap').addEventListener('change', () => renderStats()); // sans reconstruire le tableau, pour garder le focus
+$('wrap').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.sort !== undefined) {
+    const c = +t.dataset.sort;
+    sortDir = sortCol === c ? -sortDir : 1; sortCol = c;
+  } else if (t.dataset.del !== undefined) {
+    sheet().rows.splice(+t.dataset.del, 1); save();
+  }
+  render();
+});
+$('addRow').onclick = () => {
+  const s = sheet(); if (!s.headers.length) s.headers.push('Colonne 1');
+  s.rows.push(s.headers.map(() => '')); sortCol = null; $('search').value = ''; save(); render();
+  const inputs = $('wrap').querySelectorAll('tbody tr:last-child input'); inputs[0]?.focus();
+};
+$('addCol').onclick = () => { const s = sheet(); s.headers.push('Colonne ' + (s.headers.length + 1)); s.rows.forEach(r => r.push('')); save(); render(); };
+$('search').oninput = render;
+$('sheet').onchange = e => { book.current = +e.target.value; sortCol = null; save(); render(); };
+$('reset').onclick = () => { if (confirm('Tout effacer et revenir à l\'exemple ?')) { book = demo(); sortCol = null; save(); render(); } };
+
+$('file').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+    book = { name: f.name.replace(/\.[^.]+$/, ''), current: 0, sheets: wb.SheetNames.map(n => {
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: false, defval: '', dateNF: 'yyyy-mm-dd' });
+      const width = Math.max(0, ...aoa.map(r => r.length));
+      const pad = r => Array.from({ length: width }, (_, i) => r[i] ?? '');
+      const headers = pad(aoa[0] || []).map((h, i) => h || 'Colonne ' + (i + 1));
+      return { name: n, headers, rows: aoa.slice(1).filter(r => r.some(v => v !== '')).map(pad) };
+    })};
+    sortCol = null; $('search').value = ''; save(); render();
+  } catch (err) { alert('Impossible de lire ce fichier : ' + err.message); }
+  e.target.value = '';
+};
+$('export').onclick = () => {
+  const wb = XLSX.utils.book_new();
+  book.sheets.forEach(s => {
+    const data = [s.headers, ...s.rows.map(r => r.map(v => toNum(v) ?? v))];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), s.name.slice(0, 31) || 'Feuille');
+  });
+  XLSX.writeFile(wb, (book.name || 'tableur') + '.xlsx');
+};
+render();
+</script>
+</body>
+</html>
