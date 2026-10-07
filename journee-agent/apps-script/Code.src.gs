@@ -17,8 +17,9 @@ var ENTETES = ['Date', 'Technicien', 'Projet', 'Prestation (si le projet en a pl
 // Données de départ, reprises du classeur Journee_agent.xlsm
 var DEFAUT = /*DATA*/null;
 
-/** Sert l'appli aux téléphones. */
-function doGet() {
+/** Sert la page aux téléphones, ou, avec ?export=tsv, les saisies pour la macro de synchronisation Excel. */
+function doGet(e) {
+  if (e && e.parameter && e.parameter.export) return exportTsv_();
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Journée agent')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
@@ -125,6 +126,16 @@ function supprimerLigne(id) {
   } finally {
     verrou.releaseLock();
   }
+}
+
+// Une ligne par saisie, séparateur tabulation, dates en aaaa-mm-jj, nombres avec un point
+function exportTsv_() {
+  var propre = function (v) { return String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').replace(/^'/, ''); };
+  var lignes = getLignes().map(function (l) {
+    return [l.id, l.date, l.tech, l.projet, l.prestation, l.qte, l.ticket, l.comment, l.pu, l.montant].map(propre).join('\t');
+  });
+  var texte = ['ID\tDate\tTechnicien\tProjet\tPrestation\tQuantite\tTicket\tCommentaire\tPU\tMontant'].concat(lignes).join('\n');
+  return ContentService.createTextOutput(texte).setMimeType(ContentService.MimeType.TEXT);
 }
 
 function feuille_() {

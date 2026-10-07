@@ -1,6 +1,6 @@
-# Installer Journée agent sur Google (une seule fois, environ 10 minutes, sur ordinateur)
+# Installer Journée agent (une seule fois, environ 15 minutes, sur ordinateur)
 
-Les techniciens saisissent sur leur téléphone, sans compte ni mot de passe. Chaque saisie arrive dans un Google Sheet à toi.
+Les techniciens saisissent sur une page web, depuis leur téléphone, sans compte ni mot de passe. Chaque saisie arrive dans un Google Sheet à toi, puis ton Excel `Journee_agent.xlsm` la récupère tout seul dans l'onglet « Justificatifs ».
 
 ## 1. Créer le Google Sheet
 
@@ -26,21 +26,33 @@ Les techniciens saisissent sur leur téléphone, sans compte ni mot de passe. Ch
 2. **Exécuter en tant que : Moi**. **Qui a accès : Tout le monde**.
 3. **Déployer**, puis copie l'**URL de l'application Web** (elle finit par `/exec`).
 
-## 5. Donner l'appli aux techniciens
+## 5. Donner la page aux techniciens
 
-1. Envoie l'URL par SMS ou WhatsApp.
-2. Sur le téléphone, ils l'ouvrent puis l'ajoutent à l'écran d'accueil, comme une appli :
-   - **iPhone (Safari)** : bouton Partager → **Sur l'écran d'accueil**.
-   - **Android (Chrome)** : menu ⋮ → **Ajouter à l'écran d'accueil**.
-3. Au premier lancement, chacun choisit son nom. Le téléphone s'en souvient.
+Envoie l'URL par SMS ou WhatsApp. Ils l'ouvrent dans le navigateur du téléphone et choisissent leur nom au premier passage. (Facultatif : « Ajouter à l'écran d'accueil » pour la retrouver en un geste.)
 
 Sans réseau, la saisie reste sur le téléphone et part toute seule au retour du réseau (« en attente » s'affiche à côté de la ligne).
+
+## 6. Brancher ton Excel (Excel sous Windows)
+
+1. Ouvre `Journee_agent.xlsm` et appuie sur **Alt+F11**.
+2. À gauche, clic droit sur le module **Saisie_macros** → **Supprimer Saisie_macros** → **Non** (pas besoin de l'exporter).
+3. Menu **Fichier → Importer un fichier…** → choisis [`excel/Saisie_macros.bas`](excel/Saisie_macros.bas). C'est ton module d'origine, avec la synchronisation en plus.
+4. Ferme l'éditeur, enregistre, ferme le fichier et rouvre-le (clique **Activer le contenu**).
+5. Sur la feuille « Saisie », clique le nouveau bouton **Synchroniser le web** (ou **Ctrl+Maj+S**). La première fois, colle l'URL de l'étape 4.
+
+Ensuite, c'est automatique : à chaque ouverture du fichier, puis toutes les 5 minutes tant qu'il est ouvert, les nouvelles saisies arrivent dans « Justificatifs ». Le message sous les boutons de la feuille « Saisie » indique la dernière synchro.
+
+- Seules les colonnes Date, Technicien, Projet, Prestation, Quantité, N° ticket et Commentaire sont remplies : le reste se calcule avec tes formules, et « Journée agent », « Classement », « Synthèse »… se mettent à jour.
+- Une ligne supprimée sur le web est retirée d'Excel à la synchro suivante. Les lignes que tu tapes toi-même dans Excel ne sont jamais touchées.
+- La colonne **U** de « Justificatifs » contient l'identifiant des lignes venues du web : ne la modifie pas.
+- Prix sur devis : le prix tapé sur le web est écrit en orange dans PU et Montant.
+- Pour changer le lien : Alt+F8 → **ChangerLienWeb**.
 
 ## Au quotidien
 
 - **Voir les saisies** : onglet **Saisies** du Google Sheet, en direct. Les colonnes A à L sont celles de « Justificatifs ».
-- **Les mettre dans ton Excel** : sélectionne les nouvelles lignes, colonnes A à L, copie, puis colle à la suite dans l'onglet « Justificatifs » de `Journee_agent.xlsm`. Tu peux aussi télécharger le Sheet : Fichier → Télécharger → Microsoft Excel.
-- **Changer un prix** : onglet **BPU**, colonne « Prix unitaire ». Laisse vide pour un prix sur devis (le technicien le tape).
+- **Ton Excel** se remplit tout seul (étape 6). Sur Mac, la synchro automatique ne marche pas : copie les colonnes A à L de l'onglet Saisies et colle-les à la suite dans « Justificatifs ».
+- **Changer un prix** : dans l'onglet **BPU** du Google Sheet (c'est ce que voient les techniciens) et aussi dans l'onglet BPU de ton Excel (c'est ce qui calcule les montants). Garde les mêmes libellés des deux côtés. Laisse vide pour un prix sur devis.
 - **Ajouter ou retirer un technicien** : onglet **Techniciens**. Ton Excel n'a que 6 colonnes de techniciens dans « Journée agent » : un nouveau nom doit aussi y être ajouté.
 - Les changements du Sheet apparaissent dans l'appli à la prochaine ouverture.
 
