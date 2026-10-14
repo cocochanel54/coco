@@ -1,0 +1,3 @@
+# Extractions Praxedo et classeur produit : données clients, à ne pas publier
+*.csv
+*.xlsx
