@@ -46,6 +46,10 @@ PREFIXE_IRIS = "MAL-"
 # Un ticket soldé le lendemain avant cette heure est du travail de nuit
 # (ex. 16 h - 0 h 25) : son temps compte en entier sur le jour où il a commencé.
 FIN_NUIT = dt.time(6, 0)
+# Noms Praxedo qui regroupent plusieurs équipes travaillant en même temps.
+# Leurs tickets sont répartis en équipes A, B… d'après l'enchaînement des
+# horaires (A = celle qui commence en premier dans la journée).
+EQUIPES_MULTIPLES = {"[RES] SADOK": 2}
 
 MOIS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet",
         "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
@@ -153,6 +157,37 @@ def temps_occupe(plages):
     if debut is not None:
         total += fin - debut
     return round(total.total_seconds() / 3600, 4)
+
+
+def separer_equipes(tickets):
+    """Répartit les tickets des noms de EQUIPES_MULTIPLES entre leurs équipes.
+
+    Jour par jour, un ticket rejoint l'équipe qui vient de finir son ticket
+    précédent (5 min de marge), sinon une nouvelle équipe tant qu'il en reste,
+    sinon celle déjà sur le même site, sinon celle qui finit le plus tôt.
+    """
+    marge = dt.timedelta(minutes=5)
+    jours = collections.defaultdict(list)
+    for t in tickets:
+        if t["equipe"] in EQUIPES_MULTIPLES:
+            jours[(t["equipe"], t["debut"].date())].append(t)
+    for (nom, _), ts in jours.items():
+        pistes = []  # [fin du dernier ticket, site du dernier ticket]
+        for t in sorted(ts, key=lambda t: (t["multi"], t["debut"], t["fin"])):
+            fin = t["debut"] if t["multi"] else t["fin"]
+            meme_site = [i for i, (f, s) in enumerate(pistes) if s == t["site"] and f > t["debut"] - marge]
+            libres = [i for i, (f, _) in enumerate(pistes) if f <= t["debut"] + marge]
+            if libres:
+                i = max(libres, key=lambda i: pistes[i][0])
+            elif len(pistes) < EQUIPES_MULTIPLES[nom]:
+                pistes.append([fin, t["site"]])
+                i = len(pistes) - 1
+            elif meme_site:
+                i = meme_site[0]
+            else:
+                i = min(range(len(pistes)), key=lambda i: pistes[i][0])
+            pistes[i] = [max(pistes[i][0], fin), t["site"]]
+            t["equipe"] = f"{nom} {'ABCDEFGH'[i]}"
 
 
 def libelle_mois(cle):
@@ -430,6 +465,8 @@ def construire(mois, sortie):
         "• Autre ticket ouvert sur plusieurs jours : 1 ticket par défaut, temps réel à saisir dans « À vérifier ».",
         "• Week-ends et jours fériés : les tickets comptent et sont majorés, mais ces jours ne comptent pas dans les jours ouvrés.",
         "• Tickets MAL- (IRIS) : payés à part, exclus.",
+        "• [RES] SADOK regroupe deux équipes dans Praxedo : elles sont séparées en SADOK A et SADOK B d'après "
+        "l'enchaînement des horaires (A = celle qui commence en premier dans la journée).",
         "• Dans « Détail tickets » et « Par équipe et jour » : lignes violettes = à vérifier, lignes orange = 2 h 30 ou plus, case verte = bonification.",
     ]
     for i, txt in enumerate(regles):
@@ -475,6 +512,8 @@ def main():
         print(f"{os.path.basename(chemin)} : {libelle_mois(cle)}, {len(tickets)} tickets"
               + (f", {len(ignores)} ignorés (annulés ou sans dates)" if ignores else ""))
     mois = [(cle, ts, ig) for cle, (ts, ig) in sorted(par_mois.items())]
+    for _, ts, _ in mois:
+        separer_equipes(ts)
     construire(mois, args.sortie)
     print(f"Classeur écrit : {args.sortie}")
 
