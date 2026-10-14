@@ -14,9 +14,11 @@ Règles appliquées (données par le responsable) :
   Moins de 2 h 30 = 1 ticket, puis +1 ticket à 2 h 30, 4 h 30, 6 h 30, etc.
   Le nombre de tickets comptés ne descend jamais sous le nombre de tickets
   faits : la bonification de la journée est la différence.
-- Un ticket ouvert sur plusieurs jours (Début et Soldée à des dates
-  différentes) compte 1 ticket sans majoration, et part dans l'onglet
-  « À vérifier » où l'on peut saisir le temps réellement travaillé.
+- Un ticket soldé le lendemain avant 6 h est du travail de nuit : son temps
+  compte en entier sur le jour où il a commencé.
+- Un autre ticket ouvert sur plusieurs jours compte 1 ticket sans
+  majoration, et part dans l'onglet « À vérifier » où l'on peut saisir le
+  temps réellement travaillé.
 - Équipes du mois = tickets ÷ 4 ÷ jours ouvrés (lundi à vendredi hors jours
   fériés). Les tickets des week-ends et jours fériés comptent quand même.
 """
@@ -29,6 +31,9 @@ import os
 import sys
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.chart import BarChart, LineChart, Reference
+from openpyxl.chart.shapes import GraphicalProperties
+from openpyxl.drawing.line import LineProperties
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -38,6 +43,9 @@ TICKETS_PAR_JOUR = 4
 SEUIL_H = 2.5
 TRANCHE_H = 2
 PREFIXE_IRIS = "MAL-"
+# Un ticket soldé le lendemain avant cette heure est du travail de nuit
+# (ex. 16 h - 0 h 25) : son temps compte en entier sur le jour où il a commencé.
+FIN_NUIT = dt.time(6, 0)
 
 MOIS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet",
         "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
@@ -93,7 +101,9 @@ def lire_export(chemin):
             ignores.append(t)
             continue
         t["iris"] = num.upper().startswith(PREFIXE_IRIS)
-        t["multi"] = t["debut"].date() != t["fin"].date()
+        lendemain = t["fin"].date() - t["debut"].date() == dt.timedelta(1)
+        t["nuit"] = lendemain and t["fin"].time() <= FIN_NUIT
+        t["multi"] = t["debut"].date() != t["fin"].date() and not t["nuit"]
         tickets.append(t)
     if not tickets:
         sys.exit(f"Aucun ticket lisible dans {chemin}")
@@ -193,6 +203,36 @@ def formule_tickets(cellule):
     return f"IF({h}<{P}!$C$5,1,2+INT(({h}-{P}!$C$5)/{P}!$C$6))"
 
 
+def graphique(syn, fin_syn, ligne):
+    """Équipes par mois, sans et avec majoration, et la ligne du forfait."""
+    mois = Reference(syn, min_col=1, min_row=5, max_row=fin_syn)
+    barres = BarChart()
+    barres.type, barres.grouping, barres.overlap, barres.gapWidth = "col", "clustered", -10, 60
+    barres.title = "Équipes par mois : sans et avec majoration, face au forfait"
+    barres.y_axis.title = "Équipes"
+    barres.y_axis.scaling.min = 0
+    barres.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill="E6E6E3"))
+    for col, couleur in ((6, "6DA7EC"), (9, "1C5CAB")):
+        barres.add_data(Reference(syn, min_col=col, min_row=4, max_row=fin_syn), titles_from_data=True)
+        s = barres.series[-1]
+        s.graphicalProperties.solidFill = couleur
+        s.graphicalProperties.line.noFill = True
+    barres.set_categories(mois)
+    forfait = LineChart()
+    forfait.add_data(Reference(syn, min_col=10, min_row=4, max_row=fin_syn), titles_from_data=True)
+    s = forfait.series[0]
+    s.graphicalProperties.line.solidFill = "52514E"
+    s.graphicalProperties.line.width = 22000
+    s.graphicalProperties.line.prstDash = "dash"
+    s.smooth = False
+    forfait.y_axis.axId = barres.y_axis.axId
+    barres += forfait
+    barres.x_axis.delete = barres.y_axis.delete = False
+    barres.legend.position = "b"
+    barres.width, barres.height = 24, 11
+    syn.add_chart(barres, f"A{ligne}")
+
+
 def construire(mois, sortie):
     tous = [t for _, ts, _ in mois for t in ts]
     annees = sorted({t["debut"].year for t in tous} | {t["fin"].year for t in tous})
@@ -241,8 +281,9 @@ def construire(mois, sortie):
     # plus bas, une fois les lignes des autres onglets connues.
     entetes(det, 1, ["Mois", "N° ticket", "Équipe / technicien", "Site", "Type d'intervention",
                      "Début", "Soldée", "Jour", "Durée affichée (h)", "IRIS (exclu)",
-                     "Sur plusieurs jours", "Ticket compté", "Bonification", "Total tickets"],
-            [14, 22, 18, 18, 30, 16, 16, 11, 10, 9, 10, 9, 12, 9])
+                     "Plusieurs jours / nuit", "Ticket compté", "Bonification", "Total tickets",
+                     "Pourquoi cette bonification (tickets de 2 h 30 et plus)"],
+            [14, 22, 18, 18, 30, 16, 16, 11, 10, 9, 10, 9, 12, 9, 70])
     ligne_det = {}
     r = 2
     for cle, ts, _ in mois:
@@ -250,7 +291,8 @@ def construire(mois, sortie):
             ligne_det[id(t)] = r
             ecrire(det, r, [libelle_mois(cle), t["num"], t["equipe"], t["site"], t["type"],
                             t["debut"], t["fin"], t["debut"].date(), f"=(G{r}-F{r})*24",
-                            "Oui" if t["iris"] else "Non", "Oui" if t["multi"] else "Non",
+                            "Oui" if t["iris"] else "Non",
+                            "Oui" if t["multi"] else "Nuit" if t["nuit"] else "Non",
                             f'=IF(J{r}="Oui",0,1)', 0, f"=L{r}+M{r}"],
                    {6: F_DATEH, 7: F_DATEH, 8: F_DATE, 9: F_DEC})
             r += 1
@@ -260,7 +302,8 @@ def construire(mois, sortie):
     ej["A1"] = "Temps occupé par équipe et par jour"
     ej["A1"].font = F_TITRE
     ej["A2"] = ("Temps occupé = de Début à Soldée des tickets du jour, chevauchements comptés une fois "
-                "(calculé à l'import). Hors IRIS et hors tickets sur plusieurs jours (voir « À vérifier »). "
+                "(calculé à l'import). Un ticket soldé le lendemain avant 6 h compte comme travail de nuit sur son jour "
+                "de début. Hors IRIS et hors tickets sur plusieurs jours (voir « À vérifier »). "
                 "La bonification du jour est portée par le ticket le plus long dans « Détail tickets ».")
     ej["A2"].font = F_NOTE
     entetes(ej, 3, ["Mois", "Équipe / technicien", "Jour", "", "Nb tickets faits", "Premier début",
@@ -277,7 +320,7 @@ def construire(mois, sortie):
             ecrire(ej, r, [libelle_mois(cle), equipe, jour, JOURS[jour.weekday()],
                            f'=COUNTIFS({D}!$A$2:$A${fin_det},A{r},{D}!$C$2:$C${fin_det},B{r},'
                            f'{D}!$H$2:$H${fin_det},C{r},{D}!$J$2:$J${fin_det},"Non",'
-                           f'{D}!$K$2:$K${fin_det},"Non")',
+                           f'{D}!$K$2:$K${fin_det},"<>Oui")',
                            min(t["debut"] for t in g).time(), max(t["fin"] for t in g).time(),
                            temps_occupe([(t["debut"], t["fin"]) for t in g]),
                            "=" + formule_tickets(f"H{r}"), f"=MAX(E{r},I{r})", f"=J{r}-E{r}"],
@@ -285,6 +328,18 @@ def construire(mois, sortie):
             porteur = max(g, key=lambda t: (t["fin"] - t["debut"], -ligne_det[id(t)]))
             c = det.cell(ligne_det[id(porteur)], 13, f"={EJ}!K{r}")
             c.font = F_LIEN
+            journee = (f'"la journée ("&ROUND({EJ}!H{r},1)&" h) vaut "&{EJ}!I{r}&" ticket(s), '
+                       f'l\'équipe en a fait "&{EJ}!E{r}')
+            for t in g:
+                d = ligne_det[id(t)]
+                sans = f'IF(I{d}<{P}!$C$5,"","Pas de bonif : "&{journee})'
+                if t is porteur:
+                    expl = f'=IF(M{d}>0,"Bonif +"&M{d}&" : "&{journee},{sans})'
+                else:
+                    expl = (f'=IF(I{d}<{P}!$C$5,"",IF({EJ}!K{r}>0,'
+                            f'"Bonif de la journée comptée sur le ticket {porteur["num"]}",{sans}))')
+                det.cell(d, 15, expl).font = F_NORMAL
+                det.cell(d, 15).border = BORD
             r += 1
 
     # À vérifier : tickets ouverts sur plusieurs jours, hors IRIS.
@@ -307,8 +362,12 @@ def construire(mois, sortie):
                            f'=IF(H{r}="",1,{formule_tickets(f"H{r}")})', f"=I{r}-1"],
                    {5: F_DATEH, 6: F_DATEH, 7: F_DEC, 8: F_DEC})
             av.cell(r, 8).fill, av.cell(r, 8).font = FOND_SAISIE, F_SAISIE
-            c = det.cell(ligne_det[id(t)], 13, f"={AV}!J{r}")
+            d = ligne_det[id(t)]
+            c = det.cell(d, 13, f"={AV}!J{r}")
             c.font = F_LIEN
+            det.cell(d, 15, f'=IF(M{d}>0,"Bonif +"&M{d}&" : temps réel saisi dans « À vérifier »",'
+                            f'"Sur plusieurs jours : 1 ticket, temps réel à saisir dans « À vérifier »")')
+            det.cell(d, 15).font, det.cell(d, 15).border = F_NORMAL, BORD
             r += 1
     if r == 4:
         av["A4"] = "Aucun ticket sur plusieurs jours."
@@ -366,9 +425,11 @@ def construire(mois, sortie):
         "• Pour chaque équipe et chaque jour : temps occupé par ses tickets (chevauchements comptés une fois).",
         "• Moins de 2 h 30 = 1 ticket ; 2 h 30 = 2 ; 4 h 30 = 3 ; 6 h 30 = 4 ; puis +1 toutes les 2 h.",
         "• Jamais moins que le nombre de tickets faits : deux tickets de 2 h 30 le même jour = 3 tickets (un seul majoré).",
-        "• Ticket ouvert sur plusieurs jours : 1 ticket par défaut, temps réel à saisir dans « À vérifier ».",
+        "• Ticket soldé le lendemain avant 6 h : travail de nuit, compté en entier sur son jour de début.",
+        "• Autre ticket ouvert sur plusieurs jours : 1 ticket par défaut, temps réel à saisir dans « À vérifier ».",
         "• Week-ends et jours fériés : les tickets comptent et sont majorés, mais ces jours ne comptent pas dans les jours ouvrés.",
         "• Tickets MAL- (IRIS) : payés à part, exclus.",
+        "• Dans « Détail tickets » et « Par équipe et jour » : lignes orange = 2 h 30 ou plus, case verte = bonification.",
     ]
     for i, txt in enumerate(regles):
         c = syn.cell(r + 2 + i, 1, txt)
@@ -378,7 +439,14 @@ def construire(mois, sortie):
         ws.page_setup.orientation = "landscape"
         ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
         ws.sheet_properties.pageSetUpPr.fitToPage = True
-    det.auto_filter.ref = f"A1:N{fin_det}"
+    orange = PatternFill("solid", fgColor="FCE4D6")
+    det.conditional_formatting.add(f"M2:M{fin_det}", FormulaRule(formula=["$M2>0"], fill=vert))
+    det.conditional_formatting.add(f"A2:O{fin_det}", FormulaRule(formula=[f"$I2>={P}!$C$5"], fill=orange))
+    fin_ej = max(ej.max_row, 4)
+    ej.conditional_formatting.add(f"K4:K{fin_ej}", FormulaRule(formula=["$K4>0"], fill=vert))
+    ej.conditional_formatting.add(f"A4:K{fin_ej}", FormulaRule(formula=[f"$H4>={P}!$C$5"], fill=orange))
+    graphique(syn, fin_syn, r + 2 + len(regles) + 1)
+    det.auto_filter.ref = f"A1:O{fin_det}"
     ej.auto_filter.ref = f"A3:K{ej.max_row}"
     av.auto_filter.ref = f"A3:J{av.max_row}"
     wb.save(sortie)
