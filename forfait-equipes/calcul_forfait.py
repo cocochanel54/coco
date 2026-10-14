@@ -46,7 +46,8 @@ PREFIXE_IRIS = "MAL-"
 # Un ticket soldé le lendemain avant cette heure est du travail de nuit
 # (ex. 16 h - 0 h 25) : son temps compte en entier sur le jour où il a commencé.
 FIN_NUIT = dt.time(6, 0)
-# Noms Praxedo qui regroupent plusieurs équipes travaillant en même temps.
+# Noms Praxedo qui regroupent plusieurs équipes travaillant en même temps,
+# quand l'extraction n'a pas la colonne « Prénom technicien ».
 # Leurs tickets sont répartis en équipes A, B… d'après l'enchaînement des
 # horaires (A = celle qui commence en premier dans la journée).
 EQUIPES_MULTIPLES = {"[RES] SADOK": 2}
@@ -95,6 +96,7 @@ def lire_export(chemin):
         t = {
             "num": num,
             "equipe": str(l.get("Nom technicien") or "").strip() or "(sans nom)",
+            "prenom": str(l.get("Prénom technicien") or "").strip(),
             "site": str(l.get("Site") or "").strip(),
             "type": str(l.get("Type inter.") or "").strip(),
             "statut": str(l.get("Statut") or "").strip(),
@@ -159,8 +161,21 @@ def temps_occupe(plages):
     return round(total.total_seconds() / 3600, 4)
 
 
+def nommer_par_prenom(tickets):
+    """Ajoute le prénom au nom quand un même nom couvre plusieurs prénoms
+    dans le mois (ex. « [RES] SADOK (Mohamed) » et « [RES] SADOK (Kada) »)."""
+    prenoms = collections.defaultdict(set)
+    for t in tickets:
+        if t["prenom"]:
+            prenoms[t["equipe"]].add(t["prenom"])
+    for t in tickets:
+        if len(prenoms[t["equipe"]]) > 1 and t["prenom"]:
+            t["equipe"] = f"{t['equipe']} ({t['prenom']})"
+
+
 def separer_equipes(tickets):
-    """Répartit les tickets des noms de EQUIPES_MULTIPLES entre leurs équipes.
+    """Répartit les tickets des noms de EQUIPES_MULTIPLES entre leurs équipes,
+    quand l'extraction n'a pas de prénom pour les distinguer.
 
     Jour par jour, un ticket rejoint l'équipe qui vient de finir son ticket
     précédent (5 min de marge), sinon une nouvelle équipe tant qu'il en reste,
@@ -465,8 +480,8 @@ def construire(mois, sortie):
         "• Autre ticket ouvert sur plusieurs jours : 1 ticket par défaut, temps réel à saisir dans « À vérifier ».",
         "• Week-ends et jours fériés : les tickets comptent et sont majorés, mais ces jours ne comptent pas dans les jours ouvrés.",
         "• Tickets MAL- (IRIS) : payés à part, exclus.",
-        "• [RES] SADOK regroupe deux équipes dans Praxedo : elles sont séparées en SADOK A et SADOK B d'après "
-        "l'enchaînement des horaires (A = celle qui commence en premier dans la journée).",
+        "• Un nom porté par plusieurs techniciens (ex. [RES] SADOK) est séparé par prénom. Sans prénom dans "
+        "l'extraction, SADOK est séparé en A et B d'après l'enchaînement des horaires.",
         "• Dans « Détail tickets » et « Par équipe et jour » : lignes violettes = à vérifier, lignes orange = 2 h 30 ou plus, case verte = bonification.",
     ]
     for i, txt in enumerate(regles):
@@ -513,6 +528,7 @@ def main():
               + (f", {len(ignores)} ignorés (annulés ou sans dates)" if ignores else ""))
     mois = [(cle, ts, ig) for cle, (ts, ig) in sorted(par_mois.items())]
     for _, ts, _ in mois:
+        nommer_par_prenom(ts)
         separer_equipes(ts)
     construire(mois, args.sortie)
     print(f"Classeur écrit : {args.sortie}")
