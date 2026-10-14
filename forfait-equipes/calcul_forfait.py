@@ -348,7 +348,8 @@ def construire(mois, sortie):
     av["A2"] = ("La durée affichée n'est pas du travail réel (ticket soldé plus tard). Par défaut : "
                 "1 ticket sans majoration. Si vous connaissez le temps réellement travaillé, tapez-le "
                 "en heures dans la colonne jaune (ex. 8 pour une intervention de 16 h à 0 h, 7.5 pour 7 h 30). "
-                "Plusieurs tickets faits ensemble : mettre le temps sur un seul d'entre eux.")
+                "Plusieurs tickets faits ensemble : mettre le temps sur un seul d'entre eux. "
+                "Une ligne reste violette tant que son temps n'est pas saisi.")
     av["A2"].font = F_NOTE
     entetes(av, 3, ["Mois", "N° ticket", "Équipe / technicien", "Site", "Début", "Soldée",
                     "Durée affichée (h)", "Temps réellement travaillé (h)", "Tickets comptés",
@@ -429,7 +430,7 @@ def construire(mois, sortie):
         "• Autre ticket ouvert sur plusieurs jours : 1 ticket par défaut, temps réel à saisir dans « À vérifier ».",
         "• Week-ends et jours fériés : les tickets comptent et sont majorés, mais ces jours ne comptent pas dans les jours ouvrés.",
         "• Tickets MAL- (IRIS) : payés à part, exclus.",
-        "• Dans « Détail tickets » et « Par équipe et jour » : lignes orange = 2 h 30 ou plus, case verte = bonification.",
+        "• Dans « Détail tickets » et « Par équipe et jour » : lignes violettes = à vérifier, lignes orange = 2 h 30 ou plus, case verte = bonification.",
     ]
     for i, txt in enumerate(regles):
         c = syn.cell(r + 2 + i, 1, txt)
@@ -440,11 +441,16 @@ def construire(mois, sortie):
         ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
         ws.sheet_properties.pageSetUpPr.fitToPage = True
     orange = PatternFill("solid", fgColor="FCE4D6")
+    violet = PatternFill("solid", fgColor="E4DFEC")
     det.conditional_formatting.add(f"M2:M{fin_det}", FormulaRule(formula=["$M2>0"], fill=vert))
+    det.conditional_formatting.add(f"A2:O{fin_det}", FormulaRule(formula=['$K2="Oui"'], fill=violet))
     det.conditional_formatting.add(f"A2:O{fin_det}", FormulaRule(formula=[f"$I2>={P}!$C$5"], fill=orange))
     fin_ej = max(ej.max_row, 4)
     ej.conditional_formatting.add(f"K4:K{fin_ej}", FormulaRule(formula=["$K4>0"], fill=vert))
     ej.conditional_formatting.add(f"A4:K{fin_ej}", FormulaRule(formula=[f"$H4>={P}!$C$5"], fill=orange))
+    fin_av = max(av.max_row, 4)
+    for zone in (f"A4:G{fin_av}", f"I4:J{fin_av}"):
+        av.conditional_formatting.add(zone, FormulaRule(formula=['AND($B4<>"",$H4="")'], fill=violet))
     graphique(syn, fin_syn, r + 2 + len(regles) + 1)
     det.auto_filter.ref = f"A1:O{fin_det}"
     ej.auto_filter.ref = f"A3:K{ej.max_row}"
