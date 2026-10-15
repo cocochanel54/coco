@@ -15,6 +15,10 @@ Règles appliquées (données par le responsable) :
   Moins de 2 h 30 = 1 ticket, puis +1 ticket à 2 h 30, 4 h 30, 6 h 30, etc.
   Le nombre de tickets comptés ne descend jamais sous le nombre de tickets
   faits : la bonification de la journée est la différence.
+- Si le dernier ticket de la journée est soldé après 16 h, l'équipe a
+  dépassé sa journée : ses tickets de 2 h 30 et plus sont alors majorés
+  même si elle a fait d'autres tickets (leur temps est regroupé : deux
+  tickets de 2 h 30 = un seul majoré).
 - Un ticket soldé le lendemain avant 6 h est du travail de nuit : son temps
   compte en entier sur le jour où il a commencé.
 - Un autre ticket ouvert sur plusieurs jours compte 1 ticket sans
@@ -36,7 +40,7 @@ from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.comments import Comment
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
-from openpyxl.formatting.rule import FormulaRule
+from openpyxl.formatting.rule import DataBarRule, FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -48,6 +52,7 @@ PREFIXE_IRIS = "MAL-"
 # Un ticket soldé le lendemain avant cette heure est du travail de nuit
 # (ex. 16 h - 0 h 25) : son temps compte en entier sur le jour où il a commencé.
 FIN_NUIT = dt.time(6, 0)
+FIN_JOURNEE = dt.time(16, 0)
 # Noms Praxedo qui regroupent plusieurs équipes travaillant en même temps,
 # quand l'extraction n'a pas la colonne « Prénom technicien ».
 # Leurs tickets sont répartis en équipes A, B… d'après l'enchaînement des
@@ -207,6 +212,30 @@ def separer_equipes(tickets):
             t["equipe"] = f"{nom} {'ABCDEFGH'[i]}"
 
 
+def tickets(heures):
+    """Tickets pour une durée : 1 sous le seuil, puis +1 par tranche."""
+    h = round(heures, 4)
+    return 1 if h < SEUIL_H else 2 + int((h - SEUIL_H) // TRANCHE_H)
+
+
+def duree(t):
+    return (t["fin"] - t["debut"]).total_seconds() / 3600
+
+
+def longs(g):
+    return [t for t in g if round(duree(t), 4) >= SEUIL_H]
+
+
+def tickets_journee(g):
+    """Tickets comptés pour une équipe et un jour (même règle que le classeur)."""
+    compte = max(len(g), tickets(temps_occupe([(t["debut"], t["fin"]) for t in g])))
+    jour = min(t["debut"] for t in g).date()
+    if max(t["fin"] for t in g) > dt.datetime.combine(jour, FIN_JOURNEE) and longs(g):
+        lg = longs(g)
+        compte = max(compte, len(g) - len(lg) + tickets(temps_occupe([(t["debut"], t["fin"]) for t in lg])))
+    return compte
+
+
 def libelle_mois(cle):
     return f"{MOIS[cle[1] - 1]} {cle[0]}"
 
@@ -255,7 +284,7 @@ def formule_tickets(cellule):
     return f"IF({h}<{P}!$C$5,1,2+INT(({h}-{P}!$C$5)/{P}!$C$6))"
 
 
-def graphique(syn, fin_syn, ligne):
+def graphique(syn, fin_syn, ligne, dest=None, colonne="A"):
     """Équipes par mois, sans et avec majoration, et la ligne du forfait."""
     mois = Reference(syn, min_col=1, min_row=5, max_row=fin_syn)
     barres = BarChart()
@@ -282,7 +311,169 @@ def graphique(syn, fin_syn, ligne):
     barres.x_axis.delete = barres.y_axis.delete = False
     barres.legend.position = "b"
     barres.width, barres.height = 24, 11
-    syn.add_chart(barres, f"A{ligne}")
+    (dest or syn).add_chart(barres, f"{colonne}{ligne}")
+
+
+def graphique_tickets(syn, fin_syn, dest, ancre):
+    """Tickets faits + bonifications par mois, face aux tickets couverts par le forfait."""
+    barres = BarChart()
+    barres.type, barres.grouping, barres.overlap, barres.gapWidth = "col", "stacked", 100, 60
+    barres.title = "Tickets par mois : faits + bonifications, face au forfait"
+    barres.y_axis.title = "Tickets"
+    barres.y_axis.scaling.min = 0
+    barres.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill="E6E6E3"))
+    for col, couleur in ((5, "6DA7EC"), (7, "1C5CAB")):
+        barres.add_data(Reference(syn, min_col=col, min_row=4, max_row=fin_syn), titles_from_data=True)
+        s = barres.series[-1]
+        s.graphicalProperties.solidFill = couleur
+        s.graphicalProperties.line.solidFill = "FFFFFF"
+    barres.set_categories(Reference(syn, min_col=1, min_row=5, max_row=fin_syn))
+    forfait = LineChart()
+    forfait.add_data(Reference(syn, min_col=11, min_row=4, max_row=fin_syn), titles_from_data=True)
+    s = forfait.series[0]
+    s.graphicalProperties.line.solidFill = "52514E"
+    s.graphicalProperties.line.width = 22000
+    s.graphicalProperties.line.prstDash = "dash"
+    s.smooth = False
+    forfait.y_axis.axId = barres.y_axis.axId
+    barres += forfait
+    barres.x_axis.delete = barres.y_axis.delete = False
+    barres.legend.position = "b"
+    barres.width, barres.height = 24, 11
+    dest.add_chart(barres, ancre)
+
+
+def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
+    """Onglet d'indicateurs : chiffres clés, évolution par mois, par équipe."""
+    tb = wb.create_sheet("Tableau de bord", 0)
+    S, tot = "'Synthèse'", fin_syn + 1
+    plage = lambda col: f"{S}!${col}$5:${col}${fin_syn}"
+    tb.sheet_view.showGridLines = False
+    tb.column_dimensions["A"].width = 2
+    for i in range(2, 15):
+        tb.column_dimensions[get_column_letter(i)].width = 12.5
+    tb.column_dimensions["B"].width = 16
+    tb["B1"] = "Tableau de bord : forfait 3,8 équipes"
+    tb["B1"].font = Font(name=POLICE, size=16, bold=True)
+    tb["B2"] = f'="Période : "&{S}!A5&" à "&{S}!A{fin_syn}&" · "&COUNTA({plage("A")})&" mois · règles dans l\'onglet Synthèse"'
+    tb["B2"].font = F_NOTE
+
+    # Chiffres clés : 6 cases de 2 colonnes.
+    fond = PatternFill("solid", fgColor="F3F6FA")
+    cases = [
+        ("Équipes en moyenne, avec majoration", f"={S}!I{tot}", F_DEC,
+         f'="sans majoration : "&FIXED({S}!F{tot},2)&" · forfait "&FIXED({P}!$C$3,1)'),
+        ("Mois au-dessus du forfait", f'=COUNTIF({plage("I")},">"&{P}!$C$3)&" sur "&COUNTA({plage("A")})', None,
+         f'="seuil : "&FIXED({P}!$C$3,1)&" équipes"'),
+        ("Mois le plus chargé", f'=INDEX({plage("A")},MATCH(MAX({plage("I")}),{plage("I")},0))', None,
+         f'=FIXED(MAX({plage("I")}),2)&" équipes avec majoration"'),
+        ("Apport de la majoration", f'="+"&FIXED({S}!I{tot}-{S}!F{tot},2)&" équipe"', None,
+         f'="+"&{S}!G{tot}&" tickets, soit +"&FIXED({S}!G{tot}/{S}!E{tot}*100,0)&" %"'),
+        ("Dernier mois", f"={S}!I{fin_syn}", F_DEC,
+         f'={S}!A{fin_syn}&" · "&IF({S}!I{fin_syn}>={S}!I{max(fin_syn - 1, 5)},"+","")'
+         f'&FIXED({S}!I{fin_syn}-{S}!I{max(fin_syn - 1, 5)},2)&" vs mois précédent"'),
+        ("Marge sur la période (tickets)", f"=-{S}!L{tot}", "0;-0;0",
+         f'=IF({S}!L{tot}<0,"encore sous le forfait","au-dessus du forfait")'),
+    ]
+    for i, (titre, valeur, fmt, sous) in enumerate(cases):
+        c1, c2 = get_column_letter(2 + 2 * i), get_column_letter(3 + 2 * i)
+        for r, contenu, police in ((4, titre, Font(name=POLICE, size=9, color="52514E")),
+                                   (5, valeur, Font(name=POLICE, size=20 if fmt else 15, bold=True)),
+                                   (6, sous, Font(name=POLICE, size=9, color="52514E"))):
+            tb.merge_cells(f"{c1}{r}:{c2}{r}")
+            c = tb[f"{c1}{r}"]
+            c.value, c.font = contenu, police
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            if fmt and r == 5:
+                c.number_format = fmt
+            for col in (c1, c2):
+                tb[f"{col}{r}"].fill = fond
+    tb.row_dimensions[4].height, tb.row_dimensions[5].height, tb.row_dimensions[6].height = 26, 34, 26
+    rouge, vert = PatternFill("solid", fgColor="F8D7DA"), PatternFill("solid", fgColor="D4EDDA")
+    for zone, formule in (("B5:C5", f"$B$5>{P}!$C$3"), ("J5:K5", f"$J$5>{P}!$C$3")):
+        tb.conditional_formatting.add(zone, FormulaRule(formula=[formule], fill=rouge))
+        tb.conditional_formatting.add(zone, FormulaRule(formula=[f"NOT({formule})"], fill=vert))
+
+    # Évolution mois par mois.
+    tb["B8"] = "Évolution mois par mois"
+    tb["B8"].font = Font(name=POLICE, size=12, bold=True)
+    noms = ["Mois", "Tickets faits", "Bonifications", "Équipes sans majoration", "Équipes avec majoration",
+            "Évolution vs mois précédent", "Part du forfait utilisée", "Journées finies après 16 h",
+            "Tickets de 2 h 30 et plus", "Tickets par jour ouvré", "Tickets à vérifier", "Résultat"]
+    for i, nom in enumerate(noms):
+        c = tb.cell(9, 2 + i, nom)
+        c.font, c.fill, c.border = F_GRAS, FOND_ENTETE, BORD
+        c.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center")
+    tb.row_dimensions[9].height = 42
+    tb.column_dimensions["M"].width = 22
+    eA, eJ = f"{EJ}!$A$4:$A${fin_ej}", f"{EJ}!$J$4:$J${fin_ej}"
+    dA, dJ, dI = (f"{D}!${c}$2:${c}${fin_det}" for c in "AJI")
+    r = 10
+    for k in range(5, fin_syn + 1):
+        ecrire(tb, r, [None, f"={S}!A{k}", f"={S}!E{k}", f"={S}!G{k}", f"={S}!F{k}", f"={S}!I{k}",
+                       "–" if r == 10 else f"=F{r}-F{r - 1}", f"=F{r}/{P}!$C$3",
+                       f"=IFERROR(COUNTIFS({eA},B{r},{eJ},\"Oui\")/COUNTIFS({eA},B{r}),0)",
+                       f'=IFERROR(COUNTIFS({dA},B{r},{dJ},"Non",{dI},">="&{P}!$C$5)/C{r},0)',
+                       f"=C{r}/{S}!C{k}", f"={S}!N{k}", f"={S}!M{k}"],
+               {5: F_DEC, 6: F_DEC, 7: "+0.00;-0.00;0.00", 8: "0%", 9: "0%", 10: "0%", 11: "0.0"})
+        tb.cell(r, 1).border = Border()
+        r += 1
+    fin_tb = r - 1
+    ecrire(tb, r, [None, "Période", f"={S}!E{tot}", f"={S}!G{tot}", f"={S}!F{tot}", f"={S}!I{tot}",
+                   f"=F{fin_tb}-F10", f"=F{r}/{P}!$C$3",
+                   f'=IFERROR(COUNTIFS({eJ},"Oui")/COUNTA({eA}),0)',
+                   f'=IFERROR(COUNTIFS({dJ},"Non",{dI},">="&{P}!$C$5)/C{r},0)',
+                   f"=C{r}/{S}!C{tot}", f"={S}!N{tot}", f"={S}!M{tot}"],
+           {5: F_DEC, 6: F_DEC, 7: "+0.00;-0.00;0.00", 8: "0%", 9: "0%", 10: "0%", 11: "0.0"}, police=F_GRAS)
+    tb.cell(r, 1).border = Border()
+    for c in range(2, 14):
+        tb.cell(r, c).fill = FOND_TOTAL
+    tb.cell(r + 1, 2, "Évolution de la ligne « Période » : du premier au dernier mois.").font = F_NOTE
+    tb.conditional_formatting.add(f"H10:H{r}", DataBarRule(start_type="num", start_value=0, end_type="num",
+                                                           end_value=1.3, color="6DA7EC"))
+    for zone in (f"F10:F{r} M10:M{r}",):
+        tb.conditional_formatting.add(zone, FormulaRule(formula=[f"$F10>{P}!$C$3"], fill=rouge))
+        tb.conditional_formatting.add(zone, FormulaRule(formula=[f"$F10<={P}!$C$3"], fill=vert))
+
+    # Graphiques.
+    g = r + 3
+    graphique(wb["Synthèse"], fin_syn, g, dest=tb, colonne="B")
+    graphique_tickets(wb["Synthèse"], fin_syn, tb, f"B{g + 23}")
+
+    # Par équipe.
+    r = g + 47
+    tb.cell(r, 2, "Par équipe, sur toute la période").font = Font(name=POLICE, size=12, bold=True)
+    r += 1
+    noms = ["Équipe / technicien", "", "Jours travaillés", "Tickets faits", "Bonifications", "Tickets comptés",
+            "Tickets par jour", "Journées finies après 16 h", "Part des journées après 16 h",
+            "Tickets de 2 h 30 et plus", "Part des bonifications de la période"]
+    for i, nom in enumerate(noms):
+        c = tb.cell(r, 2 + i, nom)
+        c.font, c.fill, c.border = F_GRAS, FOND_ENTETE, BORD
+        c.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center")
+    tb.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+    tb.row_dimensions[r].height = 42
+    debut_eq = r + 1
+    compte = collections.Counter(t["equipe"] for _, ts, _ in mois for t in ts if not t["iris"])
+    eB, dC, dM = f"{EJ}!$B$4:$B${fin_ej}", f"{D}!$C$2:$C${fin_det}", f"{D}!$M$2:$M${fin_det}"
+    for equipe, _ in compte.most_common():
+        r += 1
+        ecrire(tb, r, [None, equipe, None, f"=COUNTIFS({eB},B{r})",
+                       f'=COUNTIFS({dC},B{r},{dJ},"Non")', f"=SUMIFS({dM},{dC},B{r})", f"=E{r}+F{r}",
+                       f"=IFERROR(E{r}/D{r},0)", f'=COUNTIFS({eB},B{r},{eJ},"Oui")', f"=IFERROR(I{r}/D{r},0)",
+                       f'=COUNTIFS({dC},B{r},{dJ},"Non",{dI},">="&{P}!$C$5)',
+                       f"=IFERROR(F{r}/SUM($F${debut_eq}:$F${debut_eq + len(compte) - 1}),0)"],
+               {8: "0.0", 10: "0%", 12: "0%"})
+        tb.cell(r, 1).border = Border()
+        tb.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+    tb.conditional_formatting.add(f"E{debut_eq}:E{r}", DataBarRule(start_type="num", start_value=0,
+                                                                     end_type="max", color="6DA7EC"))
+    tb.conditional_formatting.add(f"F{debut_eq}:F{r}", DataBarRule(start_type="num", start_value=0,
+                                                                     end_type="max", color="1C5CAB"))
+    tb.page_setup.orientation = "landscape"
+    tb.page_setup.fitToWidth, tb.page_setup.fitToHeight = 1, 0
+    tb.sheet_properties.pageSetUpPr.fitToPage = True
+    wb.active = 0
 
 
 def lire_reprise(chemin):
@@ -321,10 +512,13 @@ def construire(mois, sortie, reprise=({}, {})):
         ("Tickets par équipe et par jour", TICKETS_PAR_JOUR, "Journée type 8 h - 16 h = 4 tickets"),
         ("Majoration à partir de (heures)", SEUIL_H, "Tolérance : moins de 2 h 30 = 1 ticket"),
         ("Puis +1 ticket toutes les (heures)", TRANCHE_H, "2 h 30 = 2, 4 h 30 = 3, 6 h 30 = 4…"),
+        ("Fin de journée normale", FIN_JOURNEE, "Journée finie après : les longs tickets sont majorés"),
     ], start=3):
         par.cell(r, 2, lib).font = F_NORMAL
         c = par.cell(r, 3, val)
         c.font, c.fill, c.border = F_SAISIE, FOND_SAISIE, BORD
+        if isinstance(val, dt.time):
+            c.number_format = F_HEURE
         par.cell(r, 4, note).font = F_NOTE
     par["B8"] = "Préfixe des tickets IRIS (exclus, payés à part)"
     par["B8"].font = F_NORMAL
@@ -351,6 +545,7 @@ def construire(mois, sortie, reprise=({}, {})):
                      "Pourquoi cette bonification (tickets de 2 h 30 et plus)"],
             [14, 22, 18, 18, 30, 16, 16, 11, 10, 9, 10, 9, 12, 9, 70])
     ligne_det = {}
+    attendu = collections.defaultdict(int)  # bonification calculée, pour la reprise
     r = 2
     for cle, ts, _ in mois:
         for t in sorted(ts, key=lambda t: (t["equipe"], t["debut"])):
@@ -370,12 +565,15 @@ def construire(mois, sortie, reprise=({}, {})):
     ej["A2"] = ("Temps occupé = de Début à Soldée des tickets du jour, chevauchements comptés une fois "
                 "(calculé à l'import). Un ticket soldé le lendemain avant 6 h compte comme travail de nuit sur son jour "
                 "de début. Hors IRIS et hors tickets sur plusieurs jours (voir « À vérifier »). "
-                "La bonification du jour est portée par le ticket le plus long dans « Détail tickets ».")
+                "Si le dernier ticket est soldé après la fin de journée normale (16 h), les tickets de 2 h 30 et plus "
+                "sont majorés même si l'équipe a fait d'autres tickets (colonne « Temps des tickets de 2 h 30 et plus », "
+                "calculée à l'import). La bonification du jour est portée par le ticket le plus long dans « Détail tickets ».")
     ej["A2"].font = F_NOTE
     entetes(ej, 3, ["Mois", "Équipe / technicien", "Jour", "", "Nb tickets faits", "Premier début",
-                    "Dernière fin", "Temps occupé (h)", "Tickets selon le temps", "Tickets comptés",
-                    "Bonification"],
-            [14, 18, 11, 6, 9, 9, 9, 10, 10, 10, 12])
+                    "Dernière fin", "Temps occupé (h)", "Tickets selon le temps", "Fini après 16 h",
+                    "Tickets de 2 h 30 et plus", "Temps des tickets de 2 h 30 et plus (h)",
+                    "Tickets si les longs sont majorés", "Tickets comptés", "Bonification"],
+            [14, 22, 11, 6, 9, 9, 9, 10, 10, 9, 10, 12, 11, 10, 12])
     r = 4
     for cle, ts, _ in mois:
         groupes = collections.defaultdict(list)
@@ -387,22 +585,30 @@ def construire(mois, sortie, reprise=({}, {})):
                            f'=COUNTIFS({D}!$A$2:$A${fin_det},A{r},{D}!$C$2:$C${fin_det},B{r},'
                            f'{D}!$H$2:$H${fin_det},C{r},{D}!$J$2:$J${fin_det},"Non",'
                            f'{D}!$K$2:$K${fin_det},"<>Oui")',
-                           min(t["debut"] for t in g).time(), max(t["fin"] for t in g).time(),
+                           min(t["debut"] for t in g).time(), max(t["fin"] for t in g),
                            temps_occupe([(t["debut"], t["fin"]) for t in g]),
-                           "=" + formule_tickets(f"H{r}"), f"=MAX(E{r},I{r})", f"=J{r}-E{r}"],
-                   {3: F_DATE, 6: F_HEURE, 7: F_HEURE, 8: F_DEC})
+                           "=" + formule_tickets(f"H{r}"),
+                           f'=IF(G{r}>C{r}+{P}!$C$7,"Oui","Non")',
+                           f'=COUNTIFS({D}!$A$2:$A${fin_det},A{r},{D}!$C$2:$C${fin_det},B{r},'
+                           f'{D}!$H$2:$H${fin_det},C{r},{D}!$J$2:$J${fin_det},"Non",'
+                           f'{D}!$K$2:$K${fin_det},"<>Oui",{D}!$I$2:$I${fin_det},">="&{P}!$C$5)',
+                           temps_occupe([(t["debut"], t["fin"]) for t in longs(g)]),
+                           f"=IF(K{r}=0,E{r},E{r}-K{r}+{formule_tickets(f'L{r}')})",
+                           f'=IF(J{r}="Oui",MAX(E{r},I{r},M{r}),MAX(E{r},I{r}))', f"=N{r}-E{r}"],
+                   {3: F_DATE, 6: F_HEURE, 7: F_HEURE, 8: F_DEC, 12: F_DEC})
             porteur = max(g, key=lambda t: (t["fin"] - t["debut"], -ligne_det[id(t)]))
-            c = det.cell(ligne_det[id(porteur)], 13, f"={EJ}!K{r}")
+            c = det.cell(ligne_det[id(porteur)], 13, f"={EJ}!O{r}")
             c.font = F_LIEN
-            journee = (f'"la journée ("&ROUND({EJ}!H{r},1)&" h) vaut "&{EJ}!I{r}&" ticket(s), '
-                       f'l\'équipe en a fait "&{EJ}!E{r}')
+            attendu[id(porteur)] = tickets_journee(g) - len(g)
+            journee = (f'"journée de "&ROUND({EJ}!H{r},1)&" h finie à "&TEXT({EJ}!G{r},"hh:mm")&", "'
+                       f'&{EJ}!E{r}&" ticket(s) faits, "&{EJ}!N{r}&" compté(s)"')
             for t in g:
                 d = ligne_det[id(t)]
                 sans = f'IF(I{d}<{P}!$C$5,"","Pas de bonif : "&{journee})'
                 if t is porteur:
                     expl = f'=IF(M{d}>0,"Bonif +"&M{d}&" : "&{journee},{sans})'
                 else:
-                    expl = (f'=IF(I{d}<{P}!$C$5,"",IF({EJ}!K{r}>0,'
+                    expl = (f'=IF(I{d}<{P}!$C$5,"",IF({EJ}!O{r}>0,'
                             f'"Bonif de la journée comptée sur le ticket {porteur["num"]}",{sans}))')
                 det.cell(d, 15, expl).font = F_NORMAL
                 det.cell(d, 15).border = BORD
@@ -430,6 +636,8 @@ def construire(mois, sortie, reprise=({}, {})):
                    {5: F_DATEH, 6: F_DATEH, 7: F_DEC, 8: F_DEC})
             av.cell(r, 8).fill, av.cell(r, 8).font = FOND_SAISIE, F_SAISIE
             d = ligne_det[id(t)]
+            h = reprise[0].get(t["num"])
+            attendu[id(t)] = tickets(h) - 1 if h is not None else 0
             c = det.cell(d, 13, f"={AV}!J{r}")
             c.font = F_LIEN
             det.cell(d, 15, f'=IF(M{d}>0,"Bonif +"&M{d}&" : temps réel saisi dans « À vérifier »",'
@@ -492,6 +700,7 @@ def construire(mois, sortie, reprise=({}, {})):
         "• Pour chaque équipe et chaque jour : temps occupé par ses tickets (chevauchements comptés une fois).",
         "• Moins de 2 h 30 = 1 ticket ; 2 h 30 = 2 ; 4 h 30 = 3 ; 6 h 30 = 4 ; puis +1 toutes les 2 h.",
         "• Jamais moins que le nombre de tickets faits : deux tickets de 2 h 30 le même jour = 3 tickets (un seul majoré).",
+        "• Journée finie après 16 h : les tickets de 2 h 30 et plus sont majorés même si l'équipe a fait d'autres tickets.",
         "• Ticket soldé le lendemain avant 6 h : travail de nuit, compté en entier sur son jour de début.",
         "• Autre ticket ouvert sur plusieurs jours : 1 ticket par défaut, temps réel à saisir dans « À vérifier ».",
         "• Week-ends et jours fériés : les tickets comptent et sont majorés, mais ces jours ne comptent pas dans les jours ouvrés.",
@@ -517,21 +726,22 @@ def construire(mois, sortie, reprise=({}, {})):
     for cle, ts, _ in mois:
         for t in ts:
             d = ligne_det[id(t)]
-            avant, maintenant = reprise[1].get(t["num"]), det.cell(d, 13).value
-            if avant is None or avant == maintenant:
+            avant = reprise[1].get(t["num"])
+            if avant is None or avant == attendu[id(t)]:
                 continue
             det.cell(d, 13, avant).font = F_SAISIE
             det.cell(d, 13).comment = Comment("Bonification saisie à la main (reprise de l'ancien classeur)", "Forfait")
             det.cell(d, 15, f'="Bonif +"&M{d}&" saisie à la main"')
     fin_ej = max(ej.max_row, 4)
-    ej.conditional_formatting.add(f"K4:K{fin_ej}", FormulaRule(formula=["$K4>0"], fill=vert))
-    ej.conditional_formatting.add(f"A4:K{fin_ej}", FormulaRule(formula=[f"$H4>={P}!$C$5"], fill=orange))
+    ej.conditional_formatting.add(f"O4:O{fin_ej}", FormulaRule(formula=["$O4>0"], fill=vert))
+    ej.conditional_formatting.add(f"A4:O{fin_ej}", FormulaRule(formula=[f"$H4>={P}!$C$5"], fill=orange))
     fin_av = max(av.max_row, 4)
     for zone in (f"A4:G{fin_av}", f"I4:J{fin_av}"):
         av.conditional_formatting.add(zone, FormulaRule(formula=['AND($B4<>"",$H4="")'], fill=violet))
     graphique(syn, fin_syn, r + 2 + len(regles) + 1)
+    tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej)
     det.auto_filter.ref = f"A1:O{fin_det}"
-    ej.auto_filter.ref = f"A3:K{ej.max_row}"
+    ej.auto_filter.ref = f"A3:O{ej.max_row}"
     av.auto_filter.ref = f"A3:J{av.max_row}"
     wb.save(sortie)
 

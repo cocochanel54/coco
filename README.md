@@ -33,4 +33,4 @@ python3 forfait-equipes/calcul_forfait.py export_JUIN.csv export_SEPTEMBRE.csv
 
 Pour ajouter un mois sans perdre ce qui a été rempli à la main (temps des tickets « À vérifier », bonifications corrigées), ajouter `--reprendre ancien_classeur.xlsx`.
 
-Prend les extractions Praxedo (une par mois, `.csv` ou `.xlsx`) et écrit `forfait-equipes/Forfait_equipes.xlsx` : synthèse par mois, temps par équipe et par jour, tickets ouverts sur plusieurs jours à vérifier, détail des tickets. Les tickets `MAL-` (IRIS) sont exclus. Les extractions et le classeur restent en local (`.gitignore`) : ils contiennent des données clients.
+Prend les extractions Praxedo (une par mois, `.csv` ou `.xlsx`) et écrit `forfait-equipes/Forfait_equipes.xlsx` : tableau de bord (chiffres clés, évolution, par équipe), synthèse par mois, temps par équipe et par jour, tickets ouverts sur plusieurs jours à vérifier, détail des tickets. Les tickets `MAL-` (IRIS) sont exclus. Les extractions et le classeur restent en local (`.gitignore`) : ils contiennent des données clients.
