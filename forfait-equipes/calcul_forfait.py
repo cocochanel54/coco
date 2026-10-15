@@ -7,9 +7,12 @@ points-virgules ou .xlsx) et produit un classeur Excel avec formules :
     python3 forfait-equipes/calcul_forfait.py *.csv -o Forfait_equipes.xlsx
     python3 forfait-equipes/calcul_forfait.py *.csv --reprendre ancien_classeur_rempli.xlsx
     python3 forfait-equipes/calcul_forfait.py glaucos/*.csv --nom Glaucos --forfait 0.05
-    python3 forfait-equipes/calcul_forfait.py losange/*.csv --nom Losange --reel --prix PRIX_EQUIPE_MOIS
+    python3 forfait-equipes/calcul_forfait.py losange/*.csv --nom Losange --reel --cerfa-devis --prix PRIX_EQUIPE_MOIS
 
 Règles appliquées (données par le responsable) :
+- Avec --cerfa-devis (ex. Losange), les tickets marqués « Oui » dans la
+  colonne Cerfa / Plainte / Constat sont payés sur devis : listés, mais
+  exclus du calcul comme les IRIS.
 - Les tickets dont le numéro commence par MAL- sont des IRIS, payés à part :
   ils sont listés mais ne comptent pas dans les équipes.
 - Pour chaque équipe et chaque jour, on prend le temps réellement occupé par
@@ -53,6 +56,7 @@ TICKETS_PAR_JOUR = 4
 SEUIL_H = 2.5
 TRANCHE_H = 2
 PREFIXE_IRIS = "MAL-"
+CERFA_DEVIS = False  # --cerfa-devis : tickets « Cerfa / Plainte / Constat = Oui » payés sur devis, exclus
 # Un ticket soldé le lendemain avant cette heure est du travail de nuit
 # (ex. 16 h - 0 h 25) : son temps compte en entier sur le jour où il a commencé.
 FIN_NUIT = dt.time(6, 0)
@@ -111,6 +115,7 @@ def lire_export(chemin):
             "site": str(l.get("Site") or "").strip(),
             "type": str(l.get("Type inter.") or "").strip(),
             "statut": str(l.get("Statut") or "").strip(),
+            "cerfa": str(l.get("Cerfa / Plainte/ Constat") or "").strip().lower() == "oui",
             "debut": lire_date(l.get("Début")),
             "fin": lire_date(l.get("Soldée")),
         }
@@ -118,6 +123,8 @@ def lire_export(chemin):
             ignores.append(t)
             continue
         t["iris"] = num.upper().startswith(PREFIXE_IRIS)
+        t["devis"] = CERFA_DEVIS and t["cerfa"] and not t["iris"]
+        t["exclu"] = t["iris"] or t["devis"]
         lendemain = t["fin"].date() - t["debut"].date() == dt.timedelta(1)
         t["nuit"] = lendemain and t["fin"].time() <= FIN_NUIT
         t["multi"] = t["debut"].date() != t["fin"].date() and not t["nuit"]
@@ -494,7 +501,7 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
     tb.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
     tb.row_dimensions[r].height = 42
     debut_eq = r + 1
-    compte = collections.Counter(t["equipe"] for _, ts, _ in mois for t in ts if not t["iris"])
+    compte = collections.Counter(t["equipe"] for _, ts, _ in mois for t in ts if not t["exclu"])
     eB, dC, dM = f"{EJ}!$B$4:$B${fin_ej}", f"{D}!$C$2:$C${fin_det}", f"{D}!$M$2:$M${fin_det}"
     for equipe, _ in compte.most_common():
         r += 1
@@ -589,7 +596,7 @@ def construire(mois, sortie, reprise=({}, {})):
     # Détail tickets : une ligne par ticket. Les bonifications sont reliées
     # plus bas, une fois les lignes des autres onglets connues.
     entetes(det, 1, ["Mois", "N° ticket", "Équipe / technicien", "Site", "Type d'intervention",
-                     "Début", "Soldée", "Jour", "Durée affichée (h)", "IRIS (exclu)",
+                     "Début", "Soldée", "Jour", "Durée affichée (h)", "Exclu (IRIS / devis)",
                      "Plusieurs jours / nuit", "Ticket compté", "Bonification", "Total tickets",
                      "Pourquoi cette bonification (tickets de 2 h 30 et plus)"],
             [14, 22, 18, 18, 30, 16, 16, 11, 10, 9, 10, 9, 12, 9, 70])
@@ -601,9 +608,9 @@ def construire(mois, sortie, reprise=({}, {})):
             ligne_det[id(t)] = r
             ecrire(det, r, [libelle_mois(cle), t["num"], t["equipe"], t["site"], t["type"],
                             t["debut"], t["fin"], t["debut"].date(), f"=ROUND((G{r}-F{r})*24,4)",
-                            "Oui" if t["iris"] else "Non",
+                            "IRIS" if t["iris"] else "Devis" if t["devis"] else "Non",
                             "Oui" if t["multi"] else "Nuit" if t["nuit"] else "Non",
-                            f'=IF(J{r}="Oui",0,1)', 0, f"=L{r}+M{r}"],
+                            f'=IF(J{r}="Non",1,0)', 0, f"=L{r}+M{r}"],
                    {6: F_DATEH, 7: F_DATEH, 8: F_DATE, 9: F_DEC})
             r += 1
     fin_det = r - 1
@@ -627,7 +634,7 @@ def construire(mois, sortie, reprise=({}, {})):
     for cle, ts, _ in mois:
         groupes = collections.defaultdict(list)
         for t in ts:
-            if not t["iris"] and not t["multi"]:
+            if not t["exclu"] and not t["multi"]:
                 groupes[(t["equipe"], t["debut"].date())].append(t)
         for (equipe, jour), g in sorted(groupes.items()):
             ecrire(ej, r, [libelle_mois(cle), equipe, jour, JOURS[jour.weekday()],
@@ -678,7 +685,7 @@ def construire(mois, sortie, reprise=({}, {})):
             [14, 22, 18, 18, 16, 16, 10, 14, 10, 12])
     r = 4
     for cle, ts, _ in mois:
-        for t in sorted((t for t in ts if t["multi"] and not t["iris"]), key=lambda t: (t["equipe"], t["debut"])):
+        for t in sorted((t for t in ts if t["multi"] and not t["exclu"]), key=lambda t: (t["equipe"], t["debut"])):
             ecrire(av, r, [libelle_mois(cle), t["num"], t["equipe"], t["site"], t["debut"], t["fin"],
                            f"=ROUND((F{r}-E{r})*24,4)", reprise[0].get(t["num"]),
                            f'=IF(H{r}="",1,{formule_tickets(f"H{r}")})', f"=I{r}-1"],
@@ -702,11 +709,14 @@ def construire(mois, sortie, reprise=({}, {})):
                  else f"{titre_forfait()[0].upper()}{titre_forfait()[1:]} : est-ce qu'on dépasse avec la majoration ?")
     syn["A1"].font = F_TITRE
     syn["A2"] = ("Équipes = tickets ÷ tickets par équipe et par jour ÷ jours ouvrés (lundi à vendredi hors "
-                 "fériés). Les tickets IRIS (MAL-) sont exclus. Majoration : voir les règles plus bas."
+                 "fériés). Les tickets IRIS (MAL-) sont exclus"
+                 + (", ainsi que les tickets Cerfa payés sur devis" if CERFA_DEVIS else "")
+                 + ". Majoration : voir les règles plus bas."
                  + (" Montant = équipes × prix d'une équipe par mois (onglet Paramètres). Ligne Total : "
                     "équipes en moyenne, montants additionnés." if FORFAIT is None else ""))
     syn["A2"].font = F_NOTE
-    noms = ["Mois", "Premier jour", "Jours ouvrés", "Tickets IRIS (exclus)", "Tickets faits",
+    noms = ["Mois", "Premier jour", "Jours ouvrés",
+            "Tickets exclus (IRIS, devis)" if CERFA_DEVIS else "Tickets IRIS (exclus)", "Tickets faits",
             "Équipes sans majoration", "Bonifications", "Tickets avec majoration",
             "Équipes avec majoration", "Forfait (équipes)", "Tickets couverts par le forfait",
             "Écart en tickets (+ = au-dessus)", "Résultat", "Tickets sur plusieurs jours à vérifier"]
@@ -721,7 +731,7 @@ def construire(mois, sortie, reprise=({}, {})):
         ecrire(syn, r, [
             libelle_mois(cle), dt.date(cle[0], cle[1], 1),
             f"=NETWORKDAYS(B{r},EOMONTH(B{r},0),{plage_feries})",
-            f'=COUNTIFS({dA},A{r},{dJ},"Oui")',
+            f'=COUNTIFS({dA},A{r},{dJ},"<>Non")',
             f'=COUNTIFS({dA},A{r},{dJ},"Non")',
             f"=E{r}/{P}!$C$4/C{r}",
             f"=SUMIFS({dM},{dA},A{r})",
@@ -765,6 +775,7 @@ def construire(mois, sortie, reprise=({}, {})):
         "• Autre ticket ouvert sur plusieurs jours : 1 ticket par défaut, temps réel à saisir dans « À vérifier ».",
         "• Week-ends et jours fériés : les tickets comptent et sont majorés, mais ces jours ne comptent pas dans les jours ouvrés.",
         "• Tickets MAL- (IRIS) : payés à part, exclus.",
+        *(["• Tickets avec Cerfa / Plainte / Constat = Oui : payés sur devis, exclus."] if CERFA_DEVIS else []),
         "• Un nom porté par plusieurs techniciens (ex. [RES] SADOK) est séparé par prénom. Sans prénom dans "
         "l'extraction, SADOK est séparé en A et B d'après l'enchaînement des horaires.",
         "• Dans « Détail tickets » et « Par équipe et jour » : lignes violettes = à vérifier, lignes orange = 2 h 30 ou plus, case verte = bonification.",
@@ -807,7 +818,7 @@ def construire(mois, sortie, reprise=({}, {})):
 
 
 def main():
-    global FORFAIT, NOM, F_EQ, PRIX
+    global FORFAIT, NOM, F_EQ, PRIX, CERFA_DEVIS
     ici = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("exports", nargs="+", help="Extractions Praxedo (.csv ou .xlsx), une par mois")
@@ -816,11 +827,14 @@ def main():
     ap.add_argument("--nom", default="", help="Nom du contrat, affiché dans les titres (ex. Glaucos)")
     ap.add_argument("--reel", action="store_true",
                     help="Pas de forfait, payé au réel : équipes du mois × prix d'une équipe par mois")
+    ap.add_argument("--cerfa-devis", action="store_true",
+                    help="Exclure les tickets Cerfa / Plainte / Constat = Oui (payés sur devis)")
     ap.add_argument("--prix", type=float, help="Payé au réel : prix d'une équipe par mois, en euros (modifiable ensuite)")
     ap.add_argument("--reprendre", metavar="ANCIEN.xlsx",
                     help="Classeur déjà rempli : reprend ses temps « À vérifier » et ses bonifications tapées à la main")
     args = ap.parse_args()
     FORFAIT, NOM, PRIX = (None if args.reel else args.forfait), args.nom.strip(), args.prix
+    CERFA_DEVIS = args.cerfa_devis
     F_EQ = "0.000" if FORFAIT is not None and FORFAIT < 1 else F_DEC
     args.sortie = args.sortie or os.path.join(ici, f"Forfait_equipes{'_' + NOM if NOM else ''}.xlsx")
     reprise = lire_reprise(args.reprendre) if args.reprendre else ({}, {})

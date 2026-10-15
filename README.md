@@ -31,7 +31,7 @@ Vérifie si le forfait de 3,8 équipes par mois tient quand on applique la major
 python3 forfait-equipes/calcul_forfait.py export_JUIN.csv export_SEPTEMBRE.csv
 ```
 
-Pour un autre contrat : `--nom Glaucos --forfait 0.05` (titres, seuil et fichier `Forfait_equipes_Glaucos.xlsx`). Un mois sans extraction entre le premier et le dernier compte 0 ticket.
+Pour un autre contrat : `--nom Glaucos --forfait 0.05` (titres, seuil et fichier `Forfait_equipes_Glaucos.xlsx`). Un mois sans extraction entre le premier et le dernier compte 0 ticket. Projet payé au réel, sans forfait : `--reel` (et `--prix` pour le prix d'une équipe par mois). Tickets Cerfa payés sur devis à exclure : `--cerfa-devis`.
 
 Pour ajouter un mois sans perdre ce qui a été rempli à la main (temps des tickets « À vérifier », bonifications corrigées), ajouter `--reprendre ancien_classeur.xlsx`.
 
