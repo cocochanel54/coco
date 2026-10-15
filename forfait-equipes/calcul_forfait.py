@@ -370,6 +370,27 @@ def graphique_tickets(syn, fin_syn, dest, ancre):
     dest.add_chart(barres, ancre)
 
 
+def graphique_montants(syn, fin_syn, dest, ancre):
+    """Payé au réel : montant par mois, sans majoration + gain de la majoration."""
+    barres = BarChart()
+    barres.type, barres.grouping, barres.overlap, barres.gapWidth = "col", "stacked", 100, 60
+    barres.title = "Montant facturable par mois : sans majoration + gain de la majoration"
+    barres.y_axis.title = "Euros"
+    barres.y_axis.numFmt = F_EUR
+    barres.y_axis.scaling.min = 0
+    barres.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill="E6E6E3"))
+    for col, couleur in ((11, "6DA7EC"), (13, "1C5CAB")):
+        barres.add_data(Reference(syn, min_col=col, min_row=4, max_row=fin_syn), titles_from_data=True)
+        s = barres.series[-1]
+        s.graphicalProperties.solidFill = couleur
+        s.graphicalProperties.line.solidFill = "FFFFFF"
+    barres.set_categories(Reference(syn, min_col=1, min_row=5, max_row=fin_syn))
+    barres.x_axis.delete = barres.y_axis.delete = False
+    barres.legend.position = "b"
+    barres.width, barres.height = 24, 11
+    dest.add_chart(barres, ancre)
+
+
 def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
     """Onglet d'indicateurs : chiffres clés, évolution par mois, par équipe."""
     tb = wb.create_sheet("Tableau de bord", 0)
@@ -484,8 +505,12 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
 
     # Graphiques.
     g = r + 3
-    graphique(wb["Synthèse"], fin_syn, g, dest=tb, colonne="B")
-    graphique_tickets(wb["Synthèse"], fin_syn, tb, f"B{g + 23}")
+    if FORFAIT is None:
+        graphique_montants(wb["Synthèse"], fin_syn, tb, f"B{g}")
+        graphique(wb["Synthèse"], fin_syn, g + 23, dest=tb, colonne="B")
+    else:
+        graphique(wb["Synthèse"], fin_syn, g, dest=tb, colonne="B")
+        graphique_tickets(wb["Synthèse"], fin_syn, tb, f"B{g + 23}")
 
     # Par équipe.
     r = g + 47
