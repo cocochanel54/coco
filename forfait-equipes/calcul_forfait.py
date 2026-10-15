@@ -5,6 +5,7 @@ points-virgules ou .xlsx) et produit un classeur Excel avec formules :
 
     python3 forfait-equipes/calcul_forfait.py export_JUIN.csv export_SEPTEMBRE.csv
     python3 forfait-equipes/calcul_forfait.py *.csv -o Forfait_equipes.xlsx
+    python3 forfait-equipes/calcul_forfait.py *.csv --reprendre ancien_classeur_rempli.xlsx
 
 Règles appliquées (données par le responsable) :
 - Les tickets dont le numéro commence par MAL- sont des IRIS, payés à part :
@@ -32,6 +33,7 @@ import sys
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.chart import BarChart, LineChart, Reference
+from openpyxl.comments import Comment
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
 from openpyxl.formatting.rule import FormulaRule
@@ -283,7 +285,21 @@ def graphique(syn, fin_syn, ligne):
     syn.add_chart(barres, f"A{ligne}")
 
 
-def construire(mois, sortie):
+def lire_reprise(chemin):
+    """Saisies d'un classeur déjà rempli : temps réels de « À vérifier » et
+    bonifications tapées à la main dans « Détail tickets », par n° de ticket."""
+    wb = load_workbook(chemin)
+    temps, bonifs = {}, {}
+    for ligne in wb["À vérifier"].iter_rows(min_row=4, values_only=True):
+        if ligne[1] and isinstance(ligne[7], (int, float)):
+            temps[str(ligne[1]).strip()] = ligne[7]
+    for ligne in wb["Détail tickets"].iter_rows(min_row=2, values_only=True):
+        if ligne[1] and isinstance(ligne[12], (int, float)):
+            bonifs[str(ligne[1]).strip()] = ligne[12]
+    return temps, bonifs
+
+
+def construire(mois, sortie, reprise=({}, {})):
     tous = [t for _, ts, _ in mois for t in ts]
     annees = sorted({t["debut"].year for t in tous} | {t["fin"].year for t in tous})
 
@@ -409,7 +425,7 @@ def construire(mois, sortie):
     for cle, ts, _ in mois:
         for t in sorted((t for t in ts if t["multi"] and not t["iris"]), key=lambda t: (t["equipe"], t["debut"])):
             ecrire(av, r, [libelle_mois(cle), t["num"], t["equipe"], t["site"], t["debut"], t["fin"],
-                           f"=(F{r}-E{r})*24", None,
+                           f"=(F{r}-E{r})*24", reprise[0].get(t["num"]),
                            f'=IF(H{r}="",1,{formule_tickets(f"H{r}")})', f"=I{r}-1"],
                    {5: F_DATEH, 6: F_DATEH, 7: F_DEC, 8: F_DEC})
             av.cell(r, 8).fill, av.cell(r, 8).font = FOND_SAISIE, F_SAISIE
@@ -497,6 +513,16 @@ def construire(mois, sortie):
     det.conditional_formatting.add(f"M2:M{fin_det}", FormulaRule(formula=["$M2>0"], fill=vert))
     det.conditional_formatting.add(f"A2:O{fin_det}", FormulaRule(formula=['$K2="Oui"'], fill=violet))
     det.conditional_formatting.add(f"A2:O{fin_det}", FormulaRule(formula=[f"$I2>={P}!$C$5"], fill=orange))
+    # Bonifications tapées à la main dans un ancien classeur : gardées telles quelles.
+    for cle, ts, _ in mois:
+        for t in ts:
+            d = ligne_det[id(t)]
+            avant, maintenant = reprise[1].get(t["num"]), det.cell(d, 13).value
+            if avant is None or avant == maintenant:
+                continue
+            det.cell(d, 13, avant).font = F_SAISIE
+            det.cell(d, 13).comment = Comment("Bonification saisie à la main (reprise de l'ancien classeur)", "Forfait")
+            det.cell(d, 15, f'="Bonif +"&M{d}&" saisie à la main"')
     fin_ej = max(ej.max_row, 4)
     ej.conditional_formatting.add(f"K4:K{fin_ej}", FormulaRule(formula=["$K4>0"], fill=vert))
     ej.conditional_formatting.add(f"A4:K{fin_ej}", FormulaRule(formula=[f"$H4>={P}!$C$5"], fill=orange))
@@ -515,7 +541,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("exports", nargs="+", help="Extractions Praxedo (.csv ou .xlsx), une par mois")
     ap.add_argument("-o", "--sortie", default=os.path.join(ici, "Forfait_equipes.xlsx"))
+    ap.add_argument("--reprendre", metavar="ANCIEN.xlsx",
+                    help="Classeur déjà rempli : reprend ses temps « À vérifier » et ses bonifications tapées à la main")
     args = ap.parse_args()
+    reprise = lire_reprise(args.reprendre) if args.reprendre else ({}, {})
 
     par_mois = {}
     for chemin in args.exports:
@@ -530,7 +559,7 @@ def main():
     for _, ts, _ in mois:
         nommer_par_prenom(ts)
         separer_equipes(ts)
-    construire(mois, args.sortie)
+    construire(mois, args.sortie, reprise)
     print(f"Classeur écrit : {args.sortie}")
 
 
