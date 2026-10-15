@@ -7,6 +7,7 @@ points-virgules ou .xlsx) et produit un classeur Excel avec formules :
     python3 forfait-equipes/calcul_forfait.py *.csv -o Forfait_equipes.xlsx
     python3 forfait-equipes/calcul_forfait.py *.csv --reprendre ancien_classeur_rempli.xlsx
     python3 forfait-equipes/calcul_forfait.py glaucos/*.csv --nom Glaucos --forfait 0.05
+    python3 forfait-equipes/calcul_forfait.py losange/*.csv --nom Losange --reel
 
 Règles appliquées (données par le responsable) :
 - Les tickets dont le numéro commence par MAL- sont des IRIS, payés à part :
@@ -264,10 +265,12 @@ F_EQ = F_DEC  # format des équipes : 3 décimales pour un petit forfait (voir m
 
 
 def nb_dec():
-    return 3 if FORFAIT < 1 else 2
+    return 3 if FORFAIT is not None and FORFAIT < 1 else 2
 
 
 def titre_forfait():
+    if FORFAIT is None:
+        return f"{NOM + ' : ' if NOM else ''}payé au réel"
     return f"{NOM + ' : ' if NOM else ''}forfait {FORFAIT:g} équipes".replace(".", ",")
 
 
@@ -300,7 +303,8 @@ def graphique(syn, fin_syn, ligne, dest=None, colonne="A"):
     mois = Reference(syn, min_col=1, min_row=5, max_row=fin_syn)
     barres = BarChart()
     barres.type, barres.grouping, barres.overlap, barres.gapWidth = "col", "clustered", -10, 60
-    barres.title = "Équipes par mois : sans et avec majoration, face au forfait"
+    barres.title = ("Équipes par mois : sans et avec majoration, face aux équipes présentes" if FORFAIT is None
+                    else "Équipes par mois : sans et avec majoration, face au forfait")
     barres.y_axis.title = "Équipes"
     barres.y_axis.scaling.min = 0
     barres.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill="E6E6E3"))
@@ -311,7 +315,8 @@ def graphique(syn, fin_syn, ligne, dest=None, colonne="A"):
         s.graphicalProperties.line.noFill = True
     barres.set_categories(mois)
     forfait = LineChart()
-    forfait.add_data(Reference(syn, min_col=10, min_row=4, max_row=fin_syn), titles_from_data=True)
+    forfait.add_data(Reference(syn, min_col=12 if FORFAIT is None else 10, min_row=4, max_row=fin_syn),
+                     titles_from_data=True)
     s = forfait.series[0]
     s.graphicalProperties.line.solidFill = "52514E"
     s.graphicalProperties.line.width = 22000
@@ -329,7 +334,8 @@ def graphique_tickets(syn, fin_syn, dest, ancre):
     """Tickets faits + bonifications par mois, face aux tickets couverts par le forfait."""
     barres = BarChart()
     barres.type, barres.grouping, barres.overlap, barres.gapWidth = "col", "stacked", 100, 60
-    barres.title = "Tickets par mois : faits + bonifications, face au forfait"
+    barres.title = ("Tickets par mois : faits + bonifications" if FORFAIT is None
+                    else "Tickets par mois : faits + bonifications, face au forfait")
     barres.y_axis.title = "Tickets"
     barres.y_axis.scaling.min = 0
     barres.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill="E6E6E3"))
@@ -339,15 +345,16 @@ def graphique_tickets(syn, fin_syn, dest, ancre):
         s.graphicalProperties.solidFill = couleur
         s.graphicalProperties.line.solidFill = "FFFFFF"
     barres.set_categories(Reference(syn, min_col=1, min_row=5, max_row=fin_syn))
-    forfait = LineChart()
-    forfait.add_data(Reference(syn, min_col=11, min_row=4, max_row=fin_syn), titles_from_data=True)
-    s = forfait.series[0]
-    s.graphicalProperties.line.solidFill = "52514E"
-    s.graphicalProperties.line.width = 22000
-    s.graphicalProperties.line.prstDash = "dash"
-    s.smooth = False
-    forfait.y_axis.axId = barres.y_axis.axId
-    barres += forfait
+    if FORFAIT is not None:
+        forfait = LineChart()
+        forfait.add_data(Reference(syn, min_col=11, min_row=4, max_row=fin_syn), titles_from_data=True)
+        s = forfait.series[0]
+        s.graphicalProperties.line.solidFill = "52514E"
+        s.graphicalProperties.line.width = 22000
+        s.graphicalProperties.line.prstDash = "dash"
+        s.smooth = False
+        forfait.y_axis.axId = barres.y_axis.axId
+        barres += forfait
     barres.x_axis.delete = barres.y_axis.delete = False
     barres.legend.position = "b"
     barres.width, barres.height = 24, 11
@@ -371,6 +378,21 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
 
     # Chiffres clés : 6 cases de 2 colonnes.
     fond = PatternFill("solid", fgColor="F3F6FA")
+    cases_reel = [
+        ("Équipes facturables en moyenne (avec majoration)", f"={S}!I{tot}", F_EQ,
+         f'="sans majoration : "&FIXED({S}!F{tot},{nb_dec()})'),
+        ("Équipes présentes en moyenne", f"={S}!L{tot}", F_EQ,
+         f'="tickets comptés par jour-équipe : "&FIXED({S}!M{tot},1)'),
+        ("Mois le plus chargé", f'=INDEX({plage("A")},MATCH(MAX({plage("I")}),{plage("I")},0))', None,
+         f'=FIXED(MAX({plage("I")}),{nb_dec()})&" équipes avec majoration"'),
+        ("Apport de la majoration", f'="+"&FIXED({S}!I{tot}-{S}!F{tot},{nb_dec()})&" équipe"', None,
+         f'="+"&{S}!G{tot}&" tickets, soit +"&FIXED({S}!G{tot}/{S}!E{tot}*100,0)&" %"'),
+        ("Dernier mois", f"={S}!I{fin_syn}", F_EQ,
+         f'={S}!A{fin_syn}&" · "&IF({S}!I{fin_syn}>={S}!I{max(fin_syn - 1, 5)},"+","")'
+         f'&FIXED({S}!I{fin_syn}-{S}!I{max(fin_syn - 1, 5)},{nb_dec()})&" vs mois précédent"'),
+        ("Tickets avec majoration (période)", f"={S}!H{tot}", "0",
+         f'={S}!E{tot}&" faits + "&{S}!G{tot}&" bonifications"'),
+    ]
     cases = [
         ("Équipes en moyenne, avec majoration", f"={S}!I{tot}", F_EQ,
          f'="sans majoration : "&FIXED({S}!F{tot},{nb_dec()})&" · forfait "&FIXED({P}!$C$3,2)'),
@@ -386,7 +408,7 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
         ("Marge sur la période (tickets)", f"=-{S}!L{tot}", "0;-0;0",
          f'=IF({S}!L{tot}<0,"encore sous le forfait","au-dessus du forfait")'),
     ]
-    for i, (titre, valeur, fmt, sous) in enumerate(cases):
+    for i, (titre, valeur, fmt, sous) in enumerate(cases_reel if FORFAIT is None else cases):
         c1, c2 = get_column_letter(2 + 2 * i), get_column_letter(3 + 2 * i)
         for r, contenu, police in ((4, titre, Font(name=POLICE, size=9, color="52514E")),
                                    (5, valeur, Font(name=POLICE, size=20 if fmt else 15, bold=True)),
@@ -401,7 +423,7 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
                 tb[f"{col}{r}"].fill = fond
     tb.row_dimensions[4].height, tb.row_dimensions[5].height, tb.row_dimensions[6].height = 26, 34, 26
     rouge, vert = PatternFill("solid", fgColor="F8D7DA"), PatternFill("solid", fgColor="D4EDDA")
-    for zone, formule in (("B5:C5", f"$B$5>{P}!$C$3"), ("J5:K5", f"$J$5>{P}!$C$3")):
+    for zone, formule in () if FORFAIT is None else (("B5:C5", f"$B$5>{P}!$C$3"), ("J5:K5", f"$J$5>{P}!$C$3")):
         tb.conditional_formatting.add(zone, FormulaRule(formula=[formule], fill=rouge))
         tb.conditional_formatting.add(zone, FormulaRule(formula=[f"NOT({formule})"], fill=vert))
 
@@ -409,8 +431,12 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
     tb["B8"] = "Évolution mois par mois"
     tb["B8"].font = Font(name=POLICE, size=12, bold=True)
     noms = ["Mois", "Tickets faits", "Bonifications", "Équipes sans majoration", "Équipes avec majoration",
-            "Évolution vs mois précédent", "Part du forfait utilisée", "Journées finies après 16 h",
-            "Tickets de 2 h 30 et plus", "Tickets par jour ouvré", "Tickets à vérifier", "Résultat"]
+            "Évolution vs mois précédent", "Équipes présentes" if FORFAIT is None else "Part du forfait utilisée",
+            "Journées finies après 16 h", "Tickets de 2 h 30 et plus", "Tickets par jour ouvré", "Tickets à vérifier",
+            "Tickets comptés par jour-équipe" if FORFAIT is None else "Résultat"]
+    reel = FORFAIT is None
+    f_h = (lambda r, k: f"={S}!L{k}") if reel else (lambda r, k: f"=F{r}/{P}!$C$3")
+    f_res = {8: F_EQ, 13: "0.0"} if reel else {8: "0%"}
     for i, nom in enumerate(noms):
         c = tb.cell(9, 2 + i, nom)
         c.font, c.fill, c.border = F_GRAS, FOND_ENTETE, BORD
@@ -422,27 +448,28 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
     r = 10
     for k in range(5, fin_syn + 1):
         ecrire(tb, r, [None, f"={S}!A{k}", f"={S}!E{k}", f"={S}!G{k}", f"={S}!F{k}", f"={S}!I{k}",
-                       "–" if r == 10 else f"=F{r}-F{r - 1}", f"=F{r}/{P}!$C$3",
+                       "–" if r == 10 else f"=F{r}-F{r - 1}", f_h(r, k),
                        f"=IFERROR(COUNTIFS({eA},B{r},{eJ},\"Oui\")/COUNTIFS({eA},B{r}),0)",
                        f'=IFERROR(COUNTIFS({dA},B{r},{dJ},"Non",{dI},">="&{P}!$C$5)/C{r},0)',
                        f"=C{r}/{S}!C{k}", f"={S}!N{k}", f"={S}!M{k}"],
-               {5: F_EQ, 6: F_EQ, 7: f"+{F_EQ};-{F_EQ};{F_EQ}", 8: "0%", 9: "0%", 10: "0%", 11: "0.0"})
+               {5: F_EQ, 6: F_EQ, 7: f"+{F_EQ};-{F_EQ};{F_EQ}", 9: "0%", 10: "0%", 11: "0.0", **f_res})
         tb.cell(r, 1).border = Border()
         r += 1
     fin_tb = r - 1
     ecrire(tb, r, [None, "Période", f"={S}!E{tot}", f"={S}!G{tot}", f"={S}!F{tot}", f"={S}!I{tot}",
-                   f"=F{fin_tb}-F10", f"=F{r}/{P}!$C$3",
+                   f"=F{fin_tb}-F10", f_h(r, tot),
                    f'=IFERROR(COUNTIFS({eJ},"Oui")/COUNTA({eA}),0)',
                    f'=IFERROR(COUNTIFS({dJ},"Non",{dI},">="&{P}!$C$5)/C{r},0)',
                    f"=C{r}/{S}!C{tot}", f"={S}!N{tot}", f"={S}!M{tot}"],
-           {5: F_EQ, 6: F_EQ, 7: f"+{F_EQ};-{F_EQ};{F_EQ}", 8: "0%", 9: "0%", 10: "0%", 11: "0.0"}, police=F_GRAS)
+           {5: F_EQ, 6: F_EQ, 7: f"+{F_EQ};-{F_EQ};{F_EQ}", 9: "0%", 10: "0%", 11: "0.0", **f_res}, police=F_GRAS)
     tb.cell(r, 1).border = Border()
     for c in range(2, 14):
         tb.cell(r, c).fill = FOND_TOTAL
     tb.cell(r + 1, 2, "Évolution de la ligne « Période » : du premier au dernier mois.").font = F_NOTE
-    tb.conditional_formatting.add(f"H10:H{r}", DataBarRule(start_type="num", start_value=0, end_type="num",
-                                                           end_value=1.3, color="6DA7EC"))
-    for zone in (f"F10:F{r} M10:M{r}",):
+    if not reel:
+        tb.conditional_formatting.add(f"H10:H{r}", DataBarRule(start_type="num", start_value=0, end_type="num",
+                                                               end_value=1.3, color="6DA7EC"))
+    for zone in () if reel else (f"F10:F{r} M10:M{r}",):
         tb.conditional_formatting.add(zone, FormulaRule(formula=[f"$F10>{P}!$C$3"], fill=rouge))
         tb.conditional_formatting.add(zone, FormulaRule(formula=[f"$F10<={P}!$C$3"], fill=vert))
 
@@ -519,7 +546,8 @@ def construire(mois, sortie, reprise=({}, {})):
     par["A2"] = "Cases jaunes à texte bleu : modifiables, tout le classeur se recalcule."
     par["A2"].font = F_NOTE
     for r, (lib, val, note) in enumerate([
-        ("Forfait payé (équipes par mois)", FORFAIT, "Contrat"),
+        ("Forfait payé (équipes par mois)", "Au réel" if FORFAIT is None else FORFAIT,
+         "Pas de forfait : payé au nombre d'équipes réel" if FORFAIT is None else "Contrat"),
         ("Tickets par équipe et par jour", TICKETS_PAR_JOUR, "Journée type 8 h - 16 h = 4 tickets"),
         ("Majoration à partir de (heures)", SEUIL_H, "Tolérance : moins de 2 h 30 = 1 ticket"),
         ("Puis +1 ticket toutes les (heures)", TRANCHE_H, "2 h 30 = 2, 4 h 30 = 3, 6 h 30 = 4…"),
@@ -660,7 +688,8 @@ def construire(mois, sortie, reprise=({}, {})):
         av["A4"].font = F_NOTE
 
     # Synthèse
-    syn["A1"] = f"{titre_forfait()[0].upper()}{titre_forfait()[1:]} : est-ce qu'on dépasse avec la majoration ?"
+    syn["A1"] = (f"{NOM + ' : ' if NOM else ''}payé au réel, combien d'équipes avec la majoration ?" if FORFAIT is None
+                 else f"{titre_forfait()[0].upper()}{titre_forfait()[1:]} : est-ce qu'on dépasse avec la majoration ?")
     syn["A1"].font = F_TITRE
     syn["A2"] = ("Équipes = tickets ÷ tickets par équipe et par jour ÷ jours ouvrés (lundi à vendredi hors "
                  "fériés). Les tickets IRIS (MAL-) sont exclus. Majoration : voir les règles plus bas.")
@@ -669,6 +698,10 @@ def construire(mois, sortie, reprise=({}, {})):
             "Équipes sans majoration", "Bonifications", "Tickets avec majoration",
             "Équipes avec majoration", "Forfait (équipes)", "Tickets couverts par le forfait",
             "Écart en tickets (+ = au-dessus)", "Résultat", "Tickets sur plusieurs jours à vérifier"]
+    if FORFAIT is None:
+        noms[9:13] = ["Apport de la majoration (équipes)", "Jours-équipe (présence)",
+                      "Équipes présentes en moyenne", "Tickets comptés par jour-équipe"]
+    presence = {cle: len({(t["equipe"], t["debut"].date()) for t in ts if not t["iris"]}) for cle, ts, _ in mois}
     entetes(syn, 4, noms, [16, 12, 9, 10, 9, 11, 12, 11, 11, 9, 11, 12, 22, 12])
     syn.freeze_panes = None
     dA, dJ, dK, dM = (f"{D}!${c}$2:${c}${fin_det}" for c in "AJKM")
@@ -683,28 +716,33 @@ def construire(mois, sortie, reprise=({}, {})):
             f"=SUMIFS({dM},{dA},A{r})",
             f"=E{r}+G{r}",
             f"=H{r}/{P}!$C$4/C{r}",
-            f"={P}!$C$3",
-            f"=J{r}*{P}!$C$4*C{r}",
-            f"=H{r}-K{r}",
-            f'=IF(I{r}>J{r},"AU-DESSUS du forfait","En dessous du forfait")',
+            *([f"=I{r}-F{r}", presence[cle], f"=K{r}/C{r}", f"=IFERROR(H{r}/K{r},0)"] if FORFAIT is None else
+              [f"={P}!$C$3", f"=J{r}*{P}!$C$4*C{r}", f"=H{r}-K{r}",
+               f'=IF(I{r}>J{r},"AU-DESSUS du forfait","En dessous du forfait")']),
             f'=COUNTIFS({dA},A{r},{dK},"Oui",{dJ},"Non")',
-        ], {2: F_DATE, 6: F_EQ, 9: F_EQ, 10: F_EQ, 11: "0.0", 12: "+0.0;-0.0;0"})
+        ], {2: F_DATE, 6: F_EQ, 9: F_EQ, 10: F_EQ,
+            **({11: "0", 12: F_EQ, 13: "0.0"} if FORFAIT is None else {11: "0.0", 12: "+0.0;-0.0;0"})})
         r += 1
     fin_syn = r - 1
     ecrire(syn, r, ["Total / moyenne", None, f"=SUM(C5:C{fin_syn})", f"=SUM(D5:D{fin_syn})",
                     f"=SUM(E5:E{fin_syn})", f"=E{r}/{P}!$C$4/C{r}", f"=SUM(G5:G{fin_syn})",
-                    f"=SUM(H5:H{fin_syn})", f"=H{r}/{P}!$C$4/C{r}", f"={P}!$C$3",
-                    f"=SUM(K5:K{fin_syn})", f"=H{r}-K{r}",
-                    f'=IF(I{r}>J{r},"AU-DESSUS du forfait","En dessous du forfait")',
+                    f"=SUM(H5:H{fin_syn})", f"=H{r}/{P}!$C$4/C{r}",
+                    *([f"=I{r}-F{r}", f"=SUM(K5:K{fin_syn})", f"=K{r}/C{r}", f"=IFERROR(H{r}/K{r},0)"]
+                      if FORFAIT is None else
+                      [f"={P}!$C$3", f"=SUM(K5:K{fin_syn})", f"=H{r}-K{r}",
+                       f'=IF(I{r}>J{r},"AU-DESSUS du forfait","En dessous du forfait")']),
                     f"=SUM(N5:N{fin_syn})"],
-           {6: F_EQ, 9: F_EQ, 10: F_EQ, 11: "0.0", 12: "+0.0;-0.0;0"}, police=F_GRAS)
+           {6: F_EQ, 9: F_EQ, 10: F_EQ,
+            **({11: "0", 12: F_EQ, 13: "0.0"} if FORFAIT is None else {11: "0.0", 12: "+0.0;-0.0;0"})},
+           police=F_GRAS)
     for c in range(1, 15):
         syn.cell(r, c).fill = FOND_TOTAL
     rouge = PatternFill("solid", fgColor="F8D7DA")
     vert = PatternFill("solid", fgColor="D4EDDA")
-    zone = f"I5:I{r} M5:M{r}"
-    syn.conditional_formatting.add(zone, FormulaRule(formula=[f"$I5>$J5"], fill=rouge))
-    syn.conditional_formatting.add(zone, FormulaRule(formula=[f"$I5<=$J5"], fill=vert))
+    if FORFAIT is not None:
+        zone = f"I5:I{r} M5:M{r}"
+        syn.conditional_formatting.add(zone, FormulaRule(formula=[f"$I5>$J5"], fill=rouge))
+        syn.conditional_formatting.add(zone, FormulaRule(formula=[f"$I5<=$J5"], fill=vert))
 
     regles = [
         "Règles du calcul",
@@ -765,11 +803,13 @@ def main():
     ap.add_argument("-o", "--sortie", help="Classeur à écrire (par défaut Forfait_equipes[_NOM].xlsx à côté du programme)")
     ap.add_argument("--forfait", type=float, default=FORFAIT, help="Forfait payé, en équipes par mois (3.8 par défaut)")
     ap.add_argument("--nom", default="", help="Nom du contrat, affiché dans les titres (ex. Glaucos)")
+    ap.add_argument("--reel", action="store_true",
+                    help="Pas de forfait, payé au réel : compare aux équipes réellement présentes (jours-équipe)")
     ap.add_argument("--reprendre", metavar="ANCIEN.xlsx",
                     help="Classeur déjà rempli : reprend ses temps « À vérifier » et ses bonifications tapées à la main")
     args = ap.parse_args()
-    FORFAIT, NOM = args.forfait, args.nom.strip()
-    F_EQ = "0.000" if FORFAIT < 1 else F_DEC
+    FORFAIT, NOM = (None if args.reel else args.forfait), args.nom.strip()
+    F_EQ = "0.000" if FORFAIT is not None and FORFAIT < 1 else F_DEC
     args.sortie = args.sortie or os.path.join(ici, f"Forfait_equipes{'_' + NOM if NOM else ''}.xlsx")
     reprise = lire_reprise(args.reprendre) if args.reprendre else ({}, {})
 
