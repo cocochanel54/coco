@@ -55,6 +55,8 @@ Ensuite, c'est automatique : à chaque ouverture du fichier, puis toutes les 5 m
 - **Changer un prix** : dans l'onglet **BPU** de ton Excel (c'est lui qui calcule les montants de « Justificatifs »). Si tu veux que le Google Sheet affiche les mêmes montants, change-le aussi dans son onglet BPU. Pour ajouter une prestation, ajoute-la dans les deux, avec le même libellé.
 - **Ajouter ou retirer un technicien** : onglet **Techniciens**. Ton Excel n'a que 6 colonnes de techniciens dans « Journée agent » : un nouveau nom doit aussi y être ajouté.
 - Les changements du Sheet apparaissent dans l'appli à la prochaine ouverture.
+- **Chantier sur plusieurs jours** (câble tiré sur 2 jours, forfait payé à l'activation) : les jours où rien n'est encore payé, le technicien choisit COVAGE → « Chantier en cours (payé à l'activation) » et tape un n° de référence. Le jour de l'activation, il saisit la prestation payée avec le même n° de référence. La feuille de prod (`feuille-prod/Feuille_prod.xlsx`) partage alors la valeur du chantier entre tous ses jours.
+  Si ton Google Sheet a été installé avant cette ligne, ajoute-la à la main dans son onglet **BPU** : Projet `COVAGE`, Code BPU `COVAGE-CHANTIER`, Libellé `Chantier en cours (payé à l'activation)`, Unité `La journée`, Prix `0`. Ajoute-la aussi dans l'onglet BPU de ton Excel (même libellé, prix 0), sinon « Justificatifs » affiche « Prix manquant ». Pour un autre marché, même chose avec un code qui finit par `-CHANTIER` (par exemple `AXIONE-CHANTIER`).
 
 ## Mettre à jour le code plus tard
 

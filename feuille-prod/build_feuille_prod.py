@@ -33,7 +33,9 @@ REGLES = [
     ("CELESTE · SAV",              "SAV",          "au nombre", 2,
      "D'après toi : 2 par jour, pour F0, F1 et F2. Si un F2 prend plus longtemps, on peut le mettre à part."),
     ("FREE · Ticket",              "ticket",       "au nombre", None, "À compléter : combien de tickets FREE par jour ? Le prix du ticket FREE manque aussi dans le BPU."),
-    ("Ne compte pas",              "—",            "ne compte pas", None,
+    ("Chantier en cours",          "jour",         "chantier",  None,
+     "Jour de chantier payé plus tard (câble tiré avant l'activation, forfait payé à l'activation). Même n° de référence (colonne K) les jours de chantier et le jour de l'activation : la valeur de la prestation finale est partagée en parts égales entre tous ces jours, même avec plusieurs techniciens."),
+    ("Ne compte pas",             "—",            "ne compte pas", None,
      "Location de nacelle, plus-values de câble, rendez-vous, majoration hotline : de l'argent en plus, pas du travail en plus."),
     ("Absence",                    "—",            "absence",   None, "Congés et absences : le jour n'est pas compté comme travaillé, il ne fait donc pas baisser le taux."),
 ]
@@ -45,6 +47,7 @@ HEURES = {'MC-T1', 'MC-T2', 'MC-T3', 'MC-T4', 'MC-T5', 'COV-56.4', 'COV-63.1', '
 NE_COMPTE_PAS = {'MC-T6', 'COV-59.2', 'COV-60.3', 'COV-61.4', 'COV-12.11'} | {f'COV-55.{n}' for n in range(5, 14)}
 
 def categorie(projet, code):
+    if code.endswith('-CHANTIER'): return "Chantier en cours"
     if code in HEURES: return "Heure de technicien"
     if code in NE_COMPTE_PAS: return "Ne compte pas"
     if projet in ('CONGÉS', 'ABSENCE'): return "Absence"
@@ -109,14 +112,19 @@ texte = [
     ("3. Onglet « Production » : choisis les dates (du… au…). Jours travaillés, journées produites, taux, classement et CA se calculent seuls.", False),
     ("", False),
     ("Cases jaunes, chiffres en bleu = à remplir. Le reste est calculé : ne pas modifier.", False),
-    ("La colonne V de « Saisies » signale les lignes à vérifier (code inconnu, prix sur devis manquant, technicien absent de la liste…).", False),
+    ("La colonne W de « Saisies » signale les lignes à vérifier (code inconnu, prix sur devis manquant, technicien absent de la liste…).", False),
+    ("", False),
+    ("CHANTIER SUR PLUSIEURS JOURS (câble tiré sur 2 jours, forfait payé à l'activation…)", True),
+    ("Les jours où rien n'est encore payé, le technicien saisit « Chantier en cours » avec un n° de référence. Le jour de l'activation, il saisit la prestation payée (forfait, câble…) avec le même n° de référence.", False),
+    ("La valeur de la prestation finale est alors partagée en parts égales entre tous les jours du chantier, même si plusieurs techniciens y ont travaillé. Sans ça, les jours de tirage seraient à 0 % et tout irait au jour de l'activation.", False),
+    ("Si le câble est payé au mètre, il suffit de saisir les mètres le jour où ils sont tirés : pas besoin de « Chantier en cours ».", False),
     ("", False),
     ("POUR CHANGER UNE RÈGLE", True),
     ("• Changer un nombre : onglet « Règles », colonne D. Tout se recalcule.", False),
     ("• Une prestation mal comptée : onglet « Prestations », change sa catégorie (colonne F).", False),
     ("• Ajouter un technicien : onglet « Production », colonne A (15 places).", False),
-    (f"• Plus de {SA2 - SA1 + 1} lignes de saisie : sélectionne la dernière ligne de « Saisies », colonnes O à V, et tire-la vers le bas.", False),
-    ("• Onglet « Exemple » : quatre techniciens, une journée normale chacun sur quatre marchés, pour voir la différence avec les euros.", False),
+    (f"• Plus de {SA2 - SA1 + 1} lignes de saisie : sélectionne la dernière ligne de « Saisies », colonnes O à W, et tire-la vers le bas.", False),
+    ("• Onglet « Exemple » : quatre techniciens, une journée normale chacun sur quatre marchés, pour voir la différence avec les euros, puis un chantier sur 3 jours.", False),
 ]
 for i, (t, gras) in enumerate(texte, start=3):
     c = ws.cell(i, 1, t); c.font = SOUS if gras else F(); c.alignment = Alignment(wrap_text=True, vertical='top')
@@ -131,7 +139,7 @@ wpr['B4'] = datetime(2026, 10, 31)
 for a in ('A3', 'A4'): wpr[a].font = F(bold=True)
 for a in ('B3', 'B4'):
     wpr[a].number_format = DATE; wpr[a].font = BLEU; wpr[a].fill = SAISIE; wpr[a].border = BORD
-wpr['C3'] = '=COUNTIF(Saisies!$V$2:$V$100000,"?*")&" ligne(s) à vérifier dans l\'onglet Saisies (colonne V)"'
+wpr['C3'] = '=COUNTIF(Saisies!$W$2:$W$100000,"?*")&" ligne(s) à vérifier dans l\'onglet Saisies (colonne W)"'
 wpr['C3'].font = F(bold=True, color='C00000')
 wpr['C4'] = "Choisis les dates : une semaine, un mois, l'année…"; wpr['C4'].font = NOTE
 entetes(wpr, 6, ['Technicien', 'Jours travaillés', 'Journées produites', 'Taux de production',
@@ -141,13 +149,13 @@ for k, r in enumerate(range(TE1, TE2 + 1)):
     nom = data['techs'][k] if k < len(data['techs']) else None
     f = {
         'A': nom,
-        'B': f'=IF($A{r}="","",SUMIFS(Saisies!$U:$U,Saisies!$B:$B,$A{r},{periode}))',
-        'C': f'=IF($A{r}="","",SUMIFS(Saisies!$S:$S,Saisies!$B:$B,$A{r},{periode}))',
+        'B': f'=IF($A{r}="","",SUMIFS(Saisies!$V:$V,Saisies!$B:$B,$A{r},{periode}))',
+        'C': f'=IF($A{r}="","",SUMIFS(Saisies!$T:$T,Saisies!$B:$B,$A{r},{periode}))',
         'D': f'=IF(OR($A{r}="",N(B{r})=0),"",C{r}/B{r})',
         'E': f'=IF(D{r}="","",RANK(D{r},$D${TE1}:$D${TE2}))',
         'F': f'=IF($A{r}="","",SUMIFS(Saisies!$R:$R,Saisies!$B:$B,$A{r},{periode}))',
         'G': f'=IF(OR($A{r}="",N(F{r})=0),"",RANK(F{r},$F${TE1}:$F${TE2}))',
-        'H': f'=IF($A{r}="","",COUNTIFS(Saisies!$B:$B,$A{r},{periode},Saisies!$V:$V,"?*"))',
+        'H': f'=IF($A{r}="","",COUNTIFS(Saisies!$B:$B,$A{r},{periode},Saisies!$W:$W,"?*"))',
     }
     for col, v in f.items():
         c = wpr[f'{col}{r}']; c.value = v; c.font = F(); c.border = BORD
@@ -175,7 +183,7 @@ entetes(wpr, m0, ['Marché', 'Journées produites', 'CA (€)', 'CA pour une jou
 for k, m in enumerate(marches):
     r = m0 + 1 + k
     f = {'A': m,
-         'B': f'=SUMIFS(Saisies!$S:$S,Saisies!$C:$C,$A{r},{periode})',
+         'B': f'=SUMIFS(Saisies!$T:$T,Saisies!$C:$C,$A{r},{periode})',
          'C': f'=SUMIFS(Saisies!$R:$R,Saisies!$C:$C,$A{r},{periode})',
          'D': f'=IF(N(B{r})=0,"",C{r}/B{r})'}
     for col, v in f.items():
@@ -192,7 +200,8 @@ cols_google = ['Date', 'Technicien', 'Projet', 'Prestation (si le projet en a pl
                'Désignation', 'Code BPU', 'Unité', 'PU (€) (vide = prix du BPU)', 'Montant (€)',
                'N° ticket / référence', 'Commentaire', 'ID', 'Saisi le']
 cols_calc = ['Catégorie (calculé)', 'Comment ça compte (calculé)', 'PU retenu (€) (calculé)', 'Montant (€) (calculé)',
-             'Journées produites (calculé)', 'Travail (calculé)', 'Jour travaillé (calculé)', 'À vérifier (calculé)']
+             'Journées de la prestation (calculé)', 'Journées produites, chantiers partagés (calculé)',
+             'Travail (calculé)', 'Jour travaillé (calculé)', 'À vérifier (calculé)']
 entetes(wsa, 1, cols_google + cols_calc, 45)
 for j in range(len(cols_google) + 1, len(cols_google) + len(cols_calc) + 1):
     wsa.cell(1, j).fill = PatternFill('solid', fgColor='595959')
@@ -200,17 +209,23 @@ for r in range(SA1, SA2 + 1):
     im = f'MATCH($O{r},{R_A},0)'
     qte = f'IF($E{r}="",1,$E{r})'
     prix_bpu = f'INDEX({P_E},MATCH($G{r},{P_B},0))'
+    # jours « Chantier en cours » qui partagent la même référence et le même projet que cette ligne
+    n_chantier = f'COUNTIFS($K:$K,$K{r},$C:$C,$C{r},$P:$P,"chantier")'
     f = {
-        'O': f'=IF($G{r}="","",IFERROR(INDEX({P_F},MATCH($G{r},{P_B},0)),"?"))',
+        'O': f'=IF($G{r}="","",IFERROR(INDEX({P_F},MATCH($G{r},{P_B},0)),IF(RIGHT($G{r},8)="CHANTIER","Chantier en cours","?")))',
         'P': f'=IF($O{r}="","",IF($O{r}="?","?",IFERROR(INDEX({R_C},{im}),"?")))',
         'Q': f'=IF($G{r}="","",IF(ISNUMBER($I{r}),$I{r},IFERROR(IF(ISNUMBER({prix_bpu}),{prix_bpu},""),"")))',
         'R': f'=IFERROR(IF(ISNUMBER($Q{r}),$Q{r}*{qte},""),"")',
         'S': (f'=IFERROR(IF($P{r}="au nombre",IF(N(INDEX({R_D},{im}))>0,{qte}/INDEX({R_D},{im}),""),'
               f'IF($P{r}="au prix",IF(AND(ISNUMBER($R{r}),N(INDEX({R_E},{im}))>0),$R{r}/INDEX({R_E},{im}),""),'
-              f'IF(OR($P{r}="ne compte pas",$P{r}="absence"),0,""))),"")'),
-        'T': f'=IF(AND(ISNUMBER($A{r}),$B{r}<>"",$G{r}<>"",$P{r}<>"absence"),1,0)',
-        'U': f'=IF($T{r}=1,IF(COUNTIFS($B${SA1}:$B{r},$B{r},$A${SA1}:$A{r},$A{r},$T${SA1}:$T{r},1)=1,1,0),0)',
-        'V': (f'=IF(AND($A{r}="",$B{r}="",$G{r}=""),"",'
+              f'IF(OR($P{r}="ne compte pas",$P{r}="absence",$P{r}="chantier"),0,""))),"")'),
+        # chantier : la valeur des prestations finales (même référence) est partagée entre elles et les jours de chantier
+        'T': (f'=IFERROR(IF($S{r}="","",IF($K{r}="",$S{r},'
+              f'IF($P{r}="chantier",SUMIFS($S:$S,$K:$K,$K{r},$C:$C,$C{r},$P:$P,"<>chantier")/({n_chantier}+1),'
+              f'$S{r}/({n_chantier}+1)))),"")'),
+        'U': f'=IF(AND(ISNUMBER($A{r}),$B{r}<>"",$G{r}<>"",$P{r}<>"absence"),1,0)',
+        'V': f'=IF($U{r}=1,IF(COUNTIFS($B${SA1}:$B{r},$B{r},$A${SA1}:$A{r},$A{r},$U${SA1}:$U{r},1)=1,1,0),0)',
+        'W': (f'=IF(AND($A{r}="",$B{r}="",$G{r}=""),"",'
               f'IF(NOT(ISNUMBER($A{r})),"Date manquante ou non reconnue",'
               f'IF($B{r}="","Technicien manquant",'
               f'IF(COUNTIF(Production!$A${TE1}:$A${TE2},$B{r})=0,"Technicien absent de la liste (onglet Production)",'
@@ -219,21 +234,24 @@ for r in range(SA1, SA2 + 1):
               f'IF($P{r}="?","Catégorie inconnue (onglet Règles)",'
               f'IF(AND($E{r}<>"",NOT(ISNUMBER($E{r}))),"Quantité non reconnue",'
               f'IF(AND($P{r}="au prix",NOT(ISNUMBER($Q{r}))),"Prix sur devis à saisir (colonne I)",'
-              f'IF($S{r}="","Règle à compléter (onglet Règles)",""))))))))))'),
+              f'IF(AND($P{r}="chantier",$K{r}=""),"Référence manquante (colonne K) : ce jour de chantier ne compte pas",'
+              f'IF(AND($P{r}="chantier",N($T{r})=0),"Chantier en attente : prestation finale pas encore saisie avec la même référence",'
+              f'IF($S{r}="","Règle à compléter (onglet Règles)",""))))))))))))'),
     }
     for col, v in f.items():
         c = wsa[f'{col}{r}']; c.value = v; c.font = F(); c.fill = GRIS
     wsa[f'A{r}'].number_format = DATE; wsa[f'N{r}'].number_format = 'dd/mm/yyyy hh:mm'
     for col in 'IJQ': wsa[f'{col}{r}'].number_format = EUROS2
-    wsa[f'R{r}'].number_format = EUROS2; wsa[f'S{r}'].number_format = JOURS
-    wsa[f'V{r}'].font = F(bold=True, color='C00000')
+    wsa[f'R{r}'].number_format = EUROS2; wsa[f'S{r}'].number_format = JOURS; wsa[f'T{r}'].number_format = JOURS
+    wsa[f'W{r}'].font = F(bold=True, color='C00000')
 dv_t = DataValidation(type='list', formula1=f'=Production!$A${TE1}:$A${TE2}', allow_blank=True)
 dv_c = DataValidation(type='list', formula1=f'={P_B}', allow_blank=True)
 for dv, col in ((dv_t, 'B'), (dv_c, 'G')):
     dv.showErrorMessage = False; wsa.add_data_validation(dv); dv.add(f'{col}{SA1}:{col}{SA2}')
 largeurs(wsa, {'A': 11, 'B': 18, 'C': 11, 'D': 22, 'E': 9, 'F': 34, 'G': 16, 'H': 12, 'I': 11, 'J': 11,
-               'K': 14, 'L': 18, 'M': 10, 'N': 15, 'O': 24, 'P': 13, 'Q': 11, 'R': 11, 'S': 11, 'T': 8, 'U': 9, 'V': 34})
-wsa.freeze_panes = 'C2'; wsa.auto_filter.ref = f'A1:V{SA2}'
+               'K': 14, 'L': 18, 'M': 10, 'N': 15, 'O': 24, 'P': 13, 'Q': 11, 'R': 11, 'S': 11, 'T': 13,
+               'U': 8, 'V': 9, 'W': 40})
+wsa.freeze_panes = 'C2'; wsa.auto_filter.ref = f'A1:W{SA2}'
 
 # ---------- Règles ----------
 wr = wb.create_sheet('Règles')
@@ -252,9 +270,11 @@ for i, (cat, unite, mode, n, rem) in enumerate(REGLES, start=RG1):
         wr.cell(i, 4).fill = SAISIE; wr.cell(i, 4).font = BLEU
     wr.cell(i, 4).alignment = Alignment(horizontal='center', vertical='top')
     wr.cell(i, 5).number_format = EUROS
-    wr.cell(i, 6).value = (f'=IF(C{i}="au nombre",IF(N(D{i})>0,"1 "&B{i}&" = 1/"&D{i}&" de journée","À COMPLÉTER : combien par jour ?"),'
+    wr.cell(i, 6).value = (f'=IF(C{i}="au nombre",IF(N(D{i})>=1,"1 "&B{i}&" = 1/"&D{i}&" de journée",'
+                           f'IF(N(D{i})>0,"1 "&B{i}&" = "&ROUND(1/D{i},1)&" journées","À COMPLÉTER : combien par jour ?")),'
                            f'IF(C{i}="au prix",IF(N(E{i})>0,"son prix ÷ "&ROUND(E{i},0)&" €","À COMPLÉTER"),'
-                           f'IF(C{i}="absence","jour non travaillé","0 : ne compte pas")))')
+                           f'IF(C{i}="chantier","sa part de la prestation finale",'
+                           f'IF(C{i}="absence","jour non travaillé","0 : ne compte pas"))))')
 for cat, (cat_ticket, code_ticket) in REF_AU_PRIX.items():
     i = ligne_regle[cat]
     wr.cell(i, 5).value = f'=IFERROR(D{ligne_regle[cat_ticket]}*INDEX({P_E},MATCH("{code_ticket}",{P_B},0)),"")'
@@ -306,7 +326,28 @@ for k, t in enumerate([
         "En journées, chacun a fait exactement une journée normale (1,00) : ils sont à égalité, ce qui est juste.",
         "C'est le marché qui rapporte plus ou moins, pas le technicien : ça se voit dans « Production », tableau « Par marché »."], start=e2 + 2):
     we.cell(k, 1, t).font = NOTE
-largeurs(we, {'A': 14, 'B': 11, 'C': 16, 'D': 55, 'E': 10, 'F': 14, 'G': 12, 'H': 12, 'I': 12})
+
+c0 = e2 + 7
+we.cell(c0, 1, 'UN CHANTIER SUR 3 JOURS : CÂBLE TIRÉ LES 2 PREMIERS JOURS, FORFAIT PAYÉ À L\'ACTIVATION').font = SOUS
+entetes(we, c0 + 1, ['Jour', 'Marché', 'Code BPU', 'Ce qu\'il a fait', 'Référence (colonne K)', 'Ce que paie le client (€)',
+                     'Journées sans partage', 'Journées avec partage'], 42)
+chantier = [('Jour 1', 'COVAGE-CHANTIER'), ('Jour 2', 'COVAGE-CHANTIER'), ('Jour 3', 'COV-SF-Z200')]
+k1, k2 = c0 + 2, c0 + 1 + len(chantier)
+for i, (jour, code) in enumerate(chantier, start=k1):
+    trouve = f'MATCH($C{i},{P_B},0)'
+    vals = [jour, 'COVAGE', code, f'=IFERROR(INDEX({P_C},{trouve}),"")', 'R-1234',
+            f'=IFERROR(INDEX({P_E},{trouve}),"")', f'=IFERROR(INDEX({P_G},{trouve}),"")',
+            f'=IFERROR(SUM($G${k1}:$G${k2})/COUNT($G${k1}:$G${k2}),"")']
+    for j, v in enumerate(vals, 1):
+        c = we.cell(i, j, v); c.font = F(); c.border = BORD
+    we.cell(i, 3).font = BLEU; we.cell(i, 3).fill = SAISIE
+    we.cell(i, 6).number_format = EUROS; we.cell(i, 7).number_format = JOURS; we.cell(i, 8).number_format = JOURS
+for k, t in enumerate([
+        "Sans partage, les deux jours de tirage valent 0 et tout arrive le jour de l'activation.",
+        "Avec la même référence sur les trois lignes, la valeur du forfait est partagée : chaque jour vaut sa part, même si deux techniciens se sont relayés."],
+        start=k2 + 2):
+    we.cell(k, 1, t).font = NOTE
+largeurs(we,{'A': 14, 'B': 11, 'C': 16, 'D': 55, 'E': 10, 'F': 14, 'G': 12, 'H': 12, 'I': 12})
 
 for s in wb.worksheets: s.sheet_view.showGridLines = False
 wb.save(OUT)
