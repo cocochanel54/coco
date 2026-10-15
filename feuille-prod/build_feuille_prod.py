@@ -1,6 +1,6 @@
 # Construit Feuille_prod.xlsx : la production des techniciens comptée en journées, pas en euros.
 # Chaque prestation vaut une part de journée selon le nombre qu'un technicien en fait dans une
-# journée normale (onglet Règles). Les prix viennent du BPU de journee-agent/data.json.
+# journée normale (onglet Règles). Les prix et les règles viennent de journee-agent/data.json.
 # Usage : python3 feuille-prod/build_feuille_prod.py
 import json, os
 from datetime import datetime
@@ -14,49 +14,17 @@ DATA = os.path.join(ICI, '..', 'journee-agent', 'data.json')
 OUT = os.path.join(ICI, 'Feuille_prod.xlsx')
 data = json.load(open(DATA, encoding='utf-8'))
 
-# Règles : (catégorie, ce qu'on compte, comment ça compte, combien par journée, remarque)
+# Règles et catégories des prestations : section « prod » de data.json, partagée avec le Google Sheet
+# (Code.gs). Une règle : (catégorie, ce qu'on compte, comment ça compte, combien par journée, remarque).
 # « au prix » : la valeur d'une journée est celle d'une journée de tickets du même marché (colonne E).
-REGLES = [
-    ("AXIONE · City Fast",         "intervention", "au nombre", 4,
-     "D'après toi : 4 par jour, pour N1, N2 et N3. Si un N3 (tirage de câble) prend plus longtemps, on peut le mettre à part."),
-    ("Heure de technicien",        "heure",        "au nombre", 7,
-     "AXIONE RHD57 et heures COVAGE (56.4, 63.1, 63.2). Journée de 7 h : mets 8 si vos journées font 8 h. « 2 techniciens + nacelle » : seul celui qui saisit la ligne est compté."),
-    ("COVAGE · Ticket",            "ticket",       "au nombre", 2, "D'après toi : 2 par jour (sites éloignés)."),
-    ("COVAGE · Autres prestations", "prestation",  "au prix",   None,
-     "Raccordements, câble, boîtes, études… comptés au prix : 1 journée = ce que rapporte une journée de tickets COVAGE. Tu peux taper une autre valeur en E."),
-    ("ALTITUDE · Ticket",          "ticket",       "au nombre", 4, "D'après toi : 4 par jour."),
-    ("ALTITUDE · Malfaçons",       "malfaçon",     "au prix",   None,
-     "Au prix d'une journée de tickets ALTITUDE : une malfaçon aérienne (200 €) ≈ 1 ticket, une souterraine (100 €) ≈ ½ ticket. À vérifier."),
-    ("LOSANGE · Ticket",           "ticket",       "au nombre", 4, "D'après toi : 4 par jour."),
-    ("LOSANGE · Malfaçons",        "malfaçon",     "au prix",   None, "Comme ALTITUDE, au prix d'une journée de tickets LOSANGE. À vérifier."),
-    ("IELO · Ticket",              "ticket",       "au nombre", 2, "D'après toi : 2 par jour (sites éloignés)."),
-    ("CELESTE · SAV",              "SAV",          "au nombre", 2,
-     "D'après toi : 2 par jour, pour F0, F1 et F2. Si un F2 prend plus longtemps, on peut le mettre à part."),
-    ("FREE · Ticket",              "ticket",       "au nombre", None, "À compléter : combien de tickets FREE par jour ? Le prix du ticket FREE manque aussi dans le BPU."),
-    ("Chantier en cours",          "jour",         "chantier",  None,
-     "Jour de chantier payé plus tard (câble tiré avant l'activation, forfait payé à l'activation). Même n° de référence (colonne K) les jours de chantier et le jour de l'activation : la valeur de la prestation finale est partagée en parts égales entre tous ces jours, même avec plusieurs techniciens."),
-    ("Ne compte pas",             "—",            "ne compte pas", None,
-     "Location de nacelle, plus-values de câble, rendez-vous, majoration hotline : de l'argent en plus, pas du travail en plus."),
-    ("Absence",                    "—",            "absence",   None, "Congés et absences : le jour n'est pas compté comme travaillé, il ne fait donc pas baisser le taux."),
-]
-# Pour les règles « au prix » : le ticket du même marché qui donne la valeur d'une journée
-REF_AU_PRIX = {"COVAGE · Autres prestations": ("COVAGE · Ticket", "COVAGE-TICKET"),
-               "ALTITUDE · Malfaçons": ("ALTITUDE · Ticket", "ALTITUDE-TICKET"),
-               "LOSANGE · Malfaçons": ("LOSANGE · Ticket", "LOSANGE-TICKET")}
-HEURES = {'MC-T1', 'MC-T2', 'MC-T3', 'MC-T4', 'MC-T5', 'COV-56.4', 'COV-63.1', 'COV-63.2'}
-NE_COMPTE_PAS = {'MC-T6', 'COV-59.2', 'COV-60.3', 'COV-61.4', 'COV-12.11'} | {f'COV-55.{n}' for n in range(5, 14)}
+PROD = data['prod']
+REGLES = [(c, u, m, n, rem) for c, u, m, n, t, rem in PROD['regles']]
+# Pour les règles « au prix » : la règle du ticket et le code du ticket qui donnent la valeur d'une journée
+REF_AU_PRIX = {c: (PROD['categories'][t], t) for c, u, m, n, t, rem in PROD['regles'] if t}
 
 def categorie(projet, code):
-    if code.endswith('-CHANTIER'): return "Chantier en cours"
-    if code in HEURES: return "Heure de technicien"
-    if code in NE_COMPTE_PAS: return "Ne compte pas"
-    if projet in ('CONGÉS', 'ABSENCE'): return "Absence"
-    if code.endswith('-TICKET'): return f"{projet} · Ticket"
-    if projet == 'AXIONE' and code.startswith('CF-'): return "AXIONE · City Fast"
-    if projet in ('ALTITUDE', 'LOSANGE') and '-MALF-' in code: return f"{projet} · Malfaçons"
-    if projet == 'CELESTE' and code.startswith('SAV-'): return "CELESTE · SAV"
-    if projet == 'COVAGE': return "COVAGE · Autres prestations"
-    raise SystemExit(f'Prestation sans catégorie : {projet} {code}')
+    if code in PROD['categories']: return PROD['categories'][code]
+    raise SystemExit(f'Prestation sans catégorie dans data.json (prod.categories) : {projet} {code}')
 
 lignes = [(p, r[0], r[1], r[3], r[4], categorie(p, r[0])) for p, rows in data['bpu'].items() for r in rows]
 assert {l[5] for l in lignes} <= {r[0] for r in REGLES}
@@ -105,6 +73,8 @@ texte = [
     ("Pour chaque marché, tu dis combien un technicien en fait dans une journée normale (onglet Règles) : 4 tickets LOSANGE = 1 journée, 2 tickets COVAGE = 1 journée, 7 heures AXIONE = 1 journée.", False),
     ("Taux de production = journées produites ÷ jours travaillés. 100 % = une journée normale chaque jour travaillé, quel que soit le marché.", False),
     ("Les euros ne disparaissent pas : le CA est toujours calculé, par technicien et par marché, pour toi.", False),
+    ("", False),
+    ("Plus simple : la même feuille de prod existe dans le Google Sheet de Journée agent (onglet « Production »), où elle se remplit toute seule à chaque saisie des techniciens. Ce fichier Excel, lui, se remplit en collant les saisies.", True),
     ("", False),
     ("CE QUE TU AS À FAIRE", True),
     ("1. Onglet « Règles » : vérifie les nombres des cases jaunes (combien dans une journée normale). FREE est à compléter.", False),

@@ -5,8 +5,10 @@
 import json, pathlib
 d = pathlib.Path(__file__).parent
 data = json.loads((d / 'data.json').read_text())
-# la page ne reçoit jamais les prix : [code, libellé, désignation, unité] sans le prix
-page = dict(data, bpu={p: [x[:4] for x in l] for p, l in data['bpu'].items()})
+# la page ne reçoit jamais les prix : [code, libellé, désignation, unité] sans le prix,
+# ni les règles de la feuille de prod (elles ne servent qu'au Google Sheet)
+page = {k: v for k, v in data.items() if k != 'prod'}
+page['bpu'] = {p: [x[:4] for x in l] for p, l in data['bpu'].items()}
 html = (d / 'app.src.html').read_text().replace('/*DATA*/null', json.dumps(page, ensure_ascii=False, separators=(',', ':')))
 (d / 'index.html').write_text(html)
 (d / 'apps-script' / 'Index.html').write_text(html)
