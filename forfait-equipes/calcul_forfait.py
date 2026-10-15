@@ -1,4 +1,4 @@
-"""Forfait 3,8 équipes : est-ce qu'on dépasse avec la majoration des tickets ?
+"""Forfait en équipes (3,8 par défaut) : est-ce qu'on dépasse avec la majoration des tickets ?
 
 Lit une ou plusieurs extractions Praxedo (une par mois, .csv séparé par des
 points-virgules ou .xlsx) et produit un classeur Excel avec formules :
@@ -6,6 +6,7 @@ points-virgules ou .xlsx) et produit un classeur Excel avec formules :
     python3 forfait-equipes/calcul_forfait.py export_JUIN.csv export_SEPTEMBRE.csv
     python3 forfait-equipes/calcul_forfait.py *.csv -o Forfait_equipes.xlsx
     python3 forfait-equipes/calcul_forfait.py *.csv --reprendre ancien_classeur_rempli.xlsx
+    python3 forfait-equipes/calcul_forfait.py glaucos/*.csv --nom Glaucos --forfait 0.05
 
 Règles appliquées (données par le responsable) :
 - Les tickets dont le numéro commence par MAL- sont des IRIS, payés à part :
@@ -45,6 +46,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 FORFAIT = 3.8
+NOM = ""  # nom du contrat, affiché dans les titres (ex. « Glaucos »)
 TICKETS_PAR_JOUR = 4
 SEUIL_H = 2.5
 TRANCHE_H = 2
@@ -258,6 +260,15 @@ F_DATE = "dd/mm/yyyy"
 F_DATEH = "dd/mm/yyyy hh:mm"
 F_HEURE = "hh:mm"
 F_DEC = "0.00"
+F_EQ = F_DEC  # format des équipes : 3 décimales pour un petit forfait (voir main)
+
+
+def nb_dec():
+    return 3 if FORFAIT < 1 else 2
+
+
+def titre_forfait():
+    return f"{NOM + ' : ' if NOM else ''}forfait {FORFAIT:g} équipes".replace(".", ",")
 
 
 def entetes(ws, ligne, noms, largeurs):
@@ -353,7 +364,7 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
     for i in range(2, 15):
         tb.column_dimensions[get_column_letter(i)].width = 12.5
     tb.column_dimensions["B"].width = 16
-    tb["B1"] = "Tableau de bord : forfait 3,8 équipes"
+    tb["B1"] = f"Tableau de bord {titre_forfait()}"
     tb["B1"].font = Font(name=POLICE, size=16, bold=True)
     tb["B2"] = f'="Période : "&{S}!A5&" à "&{S}!A{fin_syn}&" · "&COUNTA({plage("A")})&" mois · règles dans l\'onglet Synthèse"'
     tb["B2"].font = F_NOTE
@@ -361,17 +372,17 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
     # Chiffres clés : 6 cases de 2 colonnes.
     fond = PatternFill("solid", fgColor="F3F6FA")
     cases = [
-        ("Équipes en moyenne, avec majoration", f"={S}!I{tot}", F_DEC,
-         f'="sans majoration : "&FIXED({S}!F{tot},2)&" · forfait "&FIXED({P}!$C$3,1)'),
+        ("Équipes en moyenne, avec majoration", f"={S}!I{tot}", F_EQ,
+         f'="sans majoration : "&FIXED({S}!F{tot},{nb_dec()})&" · forfait "&FIXED({P}!$C$3,2)'),
         ("Mois au-dessus du forfait", f'=COUNTIF({plage("I")},">"&{P}!$C$3)&" sur "&COUNTA({plage("A")})', None,
-         f'="seuil : "&FIXED({P}!$C$3,1)&" équipes"'),
+         f'="seuil : "&FIXED({P}!$C$3,2)&" équipes"'),
         ("Mois le plus chargé", f'=INDEX({plage("A")},MATCH(MAX({plage("I")}),{plage("I")},0))', None,
-         f'=FIXED(MAX({plage("I")}),2)&" équipes avec majoration"'),
-        ("Apport de la majoration", f'="+"&FIXED({S}!I{tot}-{S}!F{tot},2)&" équipe"', None,
+         f'=FIXED(MAX({plage("I")}),{nb_dec()})&" équipes avec majoration"'),
+        ("Apport de la majoration", f'="+"&FIXED({S}!I{tot}-{S}!F{tot},{nb_dec()})&" équipe"', None,
          f'="+"&{S}!G{tot}&" tickets, soit +"&FIXED({S}!G{tot}/{S}!E{tot}*100,0)&" %"'),
-        ("Dernier mois", f"={S}!I{fin_syn}", F_DEC,
+        ("Dernier mois", f"={S}!I{fin_syn}", F_EQ,
          f'={S}!A{fin_syn}&" · "&IF({S}!I{fin_syn}>={S}!I{max(fin_syn - 1, 5)},"+","")'
-         f'&FIXED({S}!I{fin_syn}-{S}!I{max(fin_syn - 1, 5)},2)&" vs mois précédent"'),
+         f'&FIXED({S}!I{fin_syn}-{S}!I{max(fin_syn - 1, 5)},{nb_dec()})&" vs mois précédent"'),
         ("Marge sur la période (tickets)", f"=-{S}!L{tot}", "0;-0;0",
          f'=IF({S}!L{tot}<0,"encore sous le forfait","au-dessus du forfait")'),
     ]
@@ -415,7 +426,7 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
                        f"=IFERROR(COUNTIFS({eA},B{r},{eJ},\"Oui\")/COUNTIFS({eA},B{r}),0)",
                        f'=IFERROR(COUNTIFS({dA},B{r},{dJ},"Non",{dI},">="&{P}!$C$5)/C{r},0)',
                        f"=C{r}/{S}!C{k}", f"={S}!N{k}", f"={S}!M{k}"],
-               {5: F_DEC, 6: F_DEC, 7: "+0.00;-0.00;0.00", 8: "0%", 9: "0%", 10: "0%", 11: "0.0"})
+               {5: F_EQ, 6: F_EQ, 7: f"+{F_EQ};-{F_EQ};{F_EQ}", 8: "0%", 9: "0%", 10: "0%", 11: "0.0"})
         tb.cell(r, 1).border = Border()
         r += 1
     fin_tb = r - 1
@@ -424,7 +435,7 @@ def tableau_de_bord(wb, mois, fin_syn, fin_det, fin_ej):
                    f'=IFERROR(COUNTIFS({eJ},"Oui")/COUNTA({eA}),0)',
                    f'=IFERROR(COUNTIFS({dJ},"Non",{dI},">="&{P}!$C$5)/C{r},0)',
                    f"=C{r}/{S}!C{tot}", f"={S}!N{tot}", f"={S}!M{tot}"],
-           {5: F_DEC, 6: F_DEC, 7: "+0.00;-0.00;0.00", 8: "0%", 9: "0%", 10: "0%", 11: "0.0"}, police=F_GRAS)
+           {5: F_EQ, 6: F_EQ, 7: f"+{F_EQ};-{F_EQ};{F_EQ}", 8: "0%", 9: "0%", 10: "0%", 11: "0.0"}, police=F_GRAS)
     tb.cell(r, 1).border = Border()
     for c in range(2, 14):
         tb.cell(r, c).fill = FOND_TOTAL
@@ -649,7 +660,7 @@ def construire(mois, sortie, reprise=({}, {})):
         av["A4"].font = F_NOTE
 
     # Synthèse
-    syn["A1"] = "Forfait 3,8 équipes : est-ce qu'on dépasse avec la majoration ?"
+    syn["A1"] = f"{titre_forfait()[0].upper()}{titre_forfait()[1:]} : est-ce qu'on dépasse avec la majoration ?"
     syn["A1"].font = F_TITRE
     syn["A2"] = ("Équipes = tickets ÷ tickets par équipe et par jour ÷ jours ouvrés (lundi à vendredi hors "
                  "fériés). Les tickets IRIS (MAL-) sont exclus. Majoration : voir les règles plus bas.")
@@ -677,7 +688,7 @@ def construire(mois, sortie, reprise=({}, {})):
             f"=H{r}-K{r}",
             f'=IF(I{r}>J{r},"AU-DESSUS du forfait","En dessous du forfait")',
             f'=COUNTIFS({dA},A{r},{dK},"Oui",{dJ},"Non")',
-        ], {2: F_DATE, 6: F_DEC, 9: F_DEC, 10: F_DEC, 11: "0.0", 12: "+0.0;-0.0;0"})
+        ], {2: F_DATE, 6: F_EQ, 9: F_EQ, 10: F_EQ, 11: "0.0", 12: "+0.0;-0.0;0"})
         r += 1
     fin_syn = r - 1
     ecrire(syn, r, ["Total / moyenne", None, f"=SUM(C5:C{fin_syn})", f"=SUM(D5:D{fin_syn})",
@@ -686,7 +697,7 @@ def construire(mois, sortie, reprise=({}, {})):
                     f"=SUM(K5:K{fin_syn})", f"=H{r}-K{r}",
                     f'=IF(I{r}>J{r},"AU-DESSUS du forfait","En dessous du forfait")',
                     f"=SUM(N5:N{fin_syn})"],
-           {6: F_DEC, 9: F_DEC, 10: F_DEC, 11: "0.0", 12: "+0.0;-0.0;0"}, police=F_GRAS)
+           {6: F_EQ, 9: F_EQ, 10: F_EQ, 11: "0.0", 12: "+0.0;-0.0;0"}, police=F_GRAS)
     for c in range(1, 15):
         syn.cell(r, c).fill = FOND_TOTAL
     rouge = PatternFill("solid", fgColor="F8D7DA")
@@ -747,13 +758,19 @@ def construire(mois, sortie, reprise=({}, {})):
 
 
 def main():
+    global FORFAIT, NOM, F_EQ
     ici = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("exports", nargs="+", help="Extractions Praxedo (.csv ou .xlsx), une par mois")
-    ap.add_argument("-o", "--sortie", default=os.path.join(ici, "Forfait_equipes.xlsx"))
+    ap.add_argument("-o", "--sortie", help="Classeur à écrire (par défaut Forfait_equipes[_NOM].xlsx à côté du programme)")
+    ap.add_argument("--forfait", type=float, default=FORFAIT, help="Forfait payé, en équipes par mois (3.8 par défaut)")
+    ap.add_argument("--nom", default="", help="Nom du contrat, affiché dans les titres (ex. Glaucos)")
     ap.add_argument("--reprendre", metavar="ANCIEN.xlsx",
                     help="Classeur déjà rempli : reprend ses temps « À vérifier » et ses bonifications tapées à la main")
     args = ap.parse_args()
+    FORFAIT, NOM = args.forfait, args.nom.strip()
+    F_EQ = "0.000" if FORFAIT < 1 else F_DEC
+    args.sortie = args.sortie or os.path.join(ici, f"Forfait_equipes{'_' + NOM if NOM else ''}.xlsx")
     reprise = lire_reprise(args.reprendre) if args.reprendre else ({}, {})
 
     par_mois = {}
@@ -765,6 +782,13 @@ def main():
         deja[1].extend(ignores)
         print(f"{os.path.basename(chemin)} : {libelle_mois(cle)}, {len(tickets)} tickets"
               + (f", {len(ignores)} ignorés (annulés ou sans dates)" if ignores else ""))
+    # Un mois sans extraction entre le premier et le dernier compte 0 ticket.
+    a, m = min(par_mois)
+    while (a, m) < max(par_mois):
+        if (a, m) not in par_mois:
+            par_mois[(a, m)] = ([], [])
+            print(f"{libelle_mois((a, m))} : aucune extraction, compté à 0 ticket")
+        a, m = (a + 1, 1) if m == 12 else (a, m + 1)
     mois = [(cle, ts, ig) for cle, (ts, ig) in sorted(par_mois.items())]
     for _, ts, _ in mois:
         nommer_par_prenom(ts)
