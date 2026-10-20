@@ -22,3 +22,16 @@ Appli de saisie pour les techniciens, faite à partir du classeur `Journee_agent
 - La même page fonctionne aussi en artifact claude.ai (saisies partagées entre comptes claude.ai) ou ouverte directement (saisies gardées sur l'appareil).
 
 Les sources sont `app.src.html`, `apps-script/Code.src.gs` et `data.json`. Après modification, lancer `python3 journee-agent/build.py` pour régénérer `index.html`, `apps-script/Index.html` et `apps-script/Code.gs`.
+
+# Duel des Royaumes (`duel/`)
+
+Jeu de cartes à collectionner façon Hearthstone, en français, qui marche sur ordinateur et sur téléphone. Ouvre `duel/index.html` dans un navigateur.
+
+- 4 héros (Mage, Guerrier, Prêtresse, Rôdeuse) avec chacun un pouvoir et un deck de départ, 50 cartes en 4 raretés (commune, rare, épique, légendaire).
+- Contre l'ordinateur, ou en ligne contre un ami avec un code de partie à 4 caractères (sur claude.ai par le salon partagé de la page, ailleurs par PeerJS).
+- Boutique : l'or gagné en jouant achète des paquets de 5 cartes et des dos de cartes ; cartes premium holographiques ; collection et éditeur de decks.
+- Animations : cartes en 3D qui suivent le doigt, reflets holographiques, attaques avec impact, sorts lancés, entrée des légendaires.
+
+Les sources sont `duel/jeu.html` (aussi la version publiée sur claude.ai) et les images de `duel/art/`. Après modification, lancer `python3 duel/build.py` pour régénérer `duel/index.html`.
+
+Illustrations : peintures et gravures anciennes du domaine public (Wikimedia Commons, liste dans l'écran Règles du jeu) et illustrations composées à partir des Fluent Emoji 3D de Microsoft (© Microsoft Corporation, licence MIT).
