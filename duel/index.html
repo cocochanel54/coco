@@ -605,9 +605,9 @@ h3 { font-size: 21px; color: var(--or-2); }
 /* ---------- Ouverture des paquets ---------- */
 .open-stage { min-height: calc(100% - 60px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding-block: 10px 30px; }
 .open-hint { font: 700 20px var(--f-titre); color: var(--or-2); margin: 0; animation: pulse 2s ease-in-out infinite; }
-.pack-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 34px 14px; max-width: 980px; perspective: 1200px; }
-.slot .card { --w: min(170px, 28vw); }
-.slot { --w: min(170px, 28vw); width: var(--w); aspect-ratio: 5 / 7; position: relative; cursor: pointer; font-size: calc(var(--w) * .1); animation: deal .6s both cubic-bezier(.2, 1.2, .4, 1); }
+.pack-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 34px 16px; max-width: 980px; perspective: 1200px; }
+.slot .card { --w: min(170px, 26vw); }
+.slot { --w: min(170px, 26vw); width: var(--w); aspect-ratio: 5 / 7; position: relative; cursor: pointer; font-size: calc(var(--w) * .1); animation: deal .6s both cubic-bezier(.2, 1.2, .4, 1); }
 @keyframes deal { from { opacity: 0; transform: translateY(60%) scale(.3) rotate(-20deg); } }
 .slot .flip { width: 100%; height: 100%; transition: transform .7s cubic-bezier(.3, 1.3, .4, 1); }
 .slot.open .flip { transform: rotateY(180deg); }
@@ -623,6 +623,50 @@ h3 { font-size: 21px; color: var(--or-2); }
 .tagp.gold { color: var(--or-2); border-color: var(--or); }
 .tagp.prem { color: #fff; background: linear-gradient(90deg, #ff3fb4, #4fd8ff); border: 0; }
 
+
+/* ---------- Orbes ---------- */
+.orb {
+  --o1: #d9c8ff; --o2: #8a5cff; --o3: #2a1280;
+  position: relative; width: min(230px, 58vw); aspect-ratio: 1; border-radius: 50%; cursor: pointer; flex: none;
+  background: radial-gradient(circle at 34% 28%, #ffffff 0, var(--o1) 10%, var(--o2) 46%, var(--o3) 84%);
+  box-shadow: 0 0 40px var(--o2), 0 0 110px color-mix(in srgb, var(--o2) 55%, transparent), inset 0 0 40px rgba(0,0,0,.4), inset -16px -22px 46px rgba(0,0,0,.4);
+  animation: orbfloat 3.4s ease-in-out infinite;
+}
+.orb.small { width: 110px; cursor: default; }
+.orb-core { position: absolute; inset: 28%; border-radius: 50%; background: radial-gradient(circle, #fff 0, var(--o1) 38%, transparent 70%); filter: blur(3px); animation: orbpulse 1.8s ease-in-out infinite; }
+.orb-swirl { position: absolute; inset: 7%; border-radius: 50%; background: conic-gradient(from 0deg, transparent, rgba(255,255,255,.6), transparent 28%, rgba(255,255,255,.35), transparent 62%, rgba(255,255,255,.5), transparent 85%); mix-blend-mode: overlay; filter: blur(5px); animation: spin2 3.6s linear infinite; }
+.orb-shine { position: absolute; left: 17%; top: 11%; width: 32%; height: 20%; border-radius: 50%; background: radial-gradient(ellipse, rgba(255,255,255,.9), transparent 70%); transform: rotate(-32deg); }
+.orb::before { content: ''; position: absolute; inset: -16%; border-radius: 50%; border: 2px dashed color-mix(in srgb, var(--o1) 55%, transparent); animation: spin2 14s linear infinite; }
+.orb::after { content: ''; position: absolute; inset: -30%; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--o2) 35%, transparent), transparent 62%); z-index: -1; animation: orbpulse 2.4s ease-in-out infinite; }
+@keyframes orbfloat { 50% { transform: translateY(-12px); } }
+@keyframes orbpulse { 50% { opacity: .55; transform: scale(1.08); } }
+.orb.charge { animation: charge .9s ease-in forwards; }
+@keyframes charge { 0% { transform: scale(1); } 25% { transform: scale(1.05) rotate(-4deg); } 45% { transform: scale(1.1) rotate(4deg); } 65% { transform: scale(1.16) rotate(-5deg); filter: brightness(1.7); } 85% { transform: scale(1.24) rotate(3deg); filter: brightness(2.6); } 100% { transform: scale(1.6); filter: brightness(5); opacity: 0; } }
+.orbwrap { position: relative; display: grid; place-items: center; padding: 18px 0 8px; }
+.orbx { position: absolute; right: -6px; bottom: 6px; font: 900 22px var(--f-texte); color: var(--or-2); text-shadow: 0 2px 6px #000; }
+#whiteflash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 48; }
+#whiteflash.on { animation: wflash .7s ease-out; }
+@keyframes wflash { 0% { opacity: .95; } 100% { opacity: 0; } }
+#s-open { background: radial-gradient(ellipse at 50% 40%, rgba(120,80,255,.35), transparent 65%), radial-gradient(ellipse at 20% 90%, rgba(255,80,180,.18), transparent 60%); }
+#open-sky { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#s-open .screen-in { position: relative; }
+.open-title { margin: 0; font: 700 clamp(26px, 6vw, 36px) var(--f-titre); color: var(--or-2); text-shadow: 0 0 24px rgba(244,194,79,.5); }
+.orb-choice { justify-content: center; }
+.open-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 30px; }
+.reveal-info { position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 3px; white-space: nowrap; opacity: 0; transition: opacity .3s .55s; z-index: 6; }
+.slot.open .reveal-info { opacity: 1; }
+.reveal-info .rar { font: 800 .62em var(--f-texte); letter-spacing: .16em; text-transform: uppercase; }
+.newcard { font: 700 1.05em/1 var(--f-titre); color: #fff; text-shadow: 0 0 12px var(--or), 0 2px 0 #3a2200; animation: pop .6s .6s both cubic-bezier(.2, 1.6, .4, 1); }
+.pack-cards { row-gap: 72px !important; padding-bottom: 50px; }
+/* Illustrations vivantes quand la carte est montrée en grand */
+@keyframes kenburns { from { transform: scale(1.02) translate(0, 0); } to { transform: scale(1.1) translate(-2%, -2%); } }
+.tiltwrap .art, .slot.open .art, #flash .art, .fan .art { animation: kenburns 9s ease-in-out infinite alternate; }
+.tiltwrap .face::after, .slot.open .face::after, #flash .face::after, .fan .face::after {
+  content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none; mix-blend-mode: screen; opacity: .8;
+  background-image: radial-gradient(2px 2px at 20% 30%, #fff, transparent 70%), radial-gradient(1.5px 1.5px at 70% 60%, #fff, transparent 70%), radial-gradient(2.5px 2.5px at 40% 80%, #fff8d0, transparent 70%), radial-gradient(1.5px 1.5px at 85% 20%, #fff, transparent 70%), radial-gradient(2px 2px at 10% 70%, #e0f4ff, transparent 70%);
+  background-size: 100% 50%; animation: motes 6s linear infinite;
+}
+@keyframes motes { from { background-position: 0 0; } to { background-position: 0 -100%; } }
 /* ---------- Collection et decks ---------- */
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip { padding: 7px 14px; border-radius: 999px; cursor: pointer; font: 700 14px var(--f-texte); border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.05); color: var(--texte); }
@@ -740,11 +784,11 @@ h3 { font-size: 21px; color: var(--or-2); }
         <ul>
           <li>Chaque carte a une rareté, visible à la couleur de son cadre : <b>commune</b> (argent), <b>rare</b> (bleu), <b>épique</b> (violet), <b>légendaire</b> (or, une seule par deck).</li>
           <li>Chaque partie rapporte de l'<b>or</b> (plus en cas de victoire, et un bonus pour la première victoire du jour).</li>
-          <li>En boutique, l'or achète des <b>paquets de 5 cartes</b> (au moins une rare) et des <b>dos de cartes</b>. Les cartes <b>premium</b> sont holographiques.</li>
+          <li>En boutique, l'or achète des <b>orbes</b> de 5 cartes : l'Orbe du Royaume (au moins une rare), l'Orbe épique (au moins une épique) et l'Orbe légendaire (une légendaire garantie), ainsi que des <b>dos de cartes</b>. Les cartes <b>premium</b> sont holographiques.</li>
           <li>Dans <b>Mes decks</b>, ajoute tes nouvelles cartes : un deck compte 30 cartes, 2 exemplaires maximum.</li>
         </ul>
         <h3>Crédits des illustrations</h3>
-        <p class="small muted">Peintures et gravures anciennes du domaine public, recadrées pour les cartes (sources : Wikimedia Commons). Personnages et objets 3D : Fluent Emoji, © Microsoft Corporation, licence MIT.</p>
+        <p class="small muted">Illustrations composées pour le jeu à partir des personnages et objets 3D Fluent Emoji, © Microsoft Corporation, licence MIT.</p>
         <ul class="small" id="credits"></ul>
         <h3>Sur l'écran</h3>
         <ul>
@@ -769,6 +813,7 @@ h3 { font-size: 21px; color: var(--or-2); }
 
   <section id="s-open" class="screen" hidden>
     <div class="screen-in" style="height:100%">
+      <canvas id="open-sky" aria-hidden="true"></canvas>
       <div class="topbar"><button class="back" id="open-back">← Boutique</button><span class="wallet" data-wallet></span></div>
       <div class="open-stage" id="open-stage"></div>
     </div>
@@ -816,6 +861,7 @@ h3 { font-size: 21px; color: var(--or-2); }
   <div id="modal" hidden></div>
   <div id="toast" hidden></div>
   <div id="hurt"></div>
+  <div id="whiteflash"></div>
 </div>
 <canvas id="fxc" aria-hidden="true"></canvas>
 <div id="fx"></div>
@@ -1671,14 +1717,16 @@ function starterOwned() {
   return o;
 }
 function freshProfile() {
-  return { v: 1, rev: 0, gold: 200, packs: 2, owned: starterOwned(), prem: {}, decks: {}, backs: ['classique'], back: 'classique', wins: 0, games: 0, daily: '' };
+  return { v: 1, rev: 0, gold: 200, orbs: { base: 2, epique: 0, legendaire: 0 }, owned: starterOwned(), prem: {}, decks: {}, backs: ['classique'], back: 'classique', wins: 0, games: 0, daily: '' };
 }
 function cleanProfile(d) {
   const f = freshProfile();
   if (!d || typeof d !== 'object') return f;
   const int = (x, lo, hi, def) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(lo, Math.min(hi, Math.floor(x))) : def);
-  const p = { v: 1, rev: int(d.rev, 0, 1e9, 0), gold: int(d.gold, 0, 1e7, f.gold), packs: int(d.packs, 0, 999, f.packs), owned: {}, prem: {}, decks: {},
+  const o = d.orbs && typeof d.orbs === 'object' ? d.orbs : { base: int(d.packs, 0, 999, f.orbs.base) };
+  const p = { v: 1, rev: int(d.rev, 0, 1e9, 0), gold: int(d.gold, 0, 1e7, f.gold), orbs: {}, owned: {}, prem: {}, decks: {},
     backs: ['classique'], back: 'classique', wins: int(d.wins, 0, 1e6, 0), games: int(d.games, 0, 1e6, 0), daily: typeof d.daily === 'string' ? d.daily.slice(0, 10) : '' };
+  for (const k in ORBS) p.orbs[k] = int(o[k], 0, 999, 0);
   for (const c of COLLECTIBLE) {
     p.owned[c] = Math.max(f.owned[c] || 0, int(d.owned && d.owned[c], 0, maxCopies(c), 0));
     const pr = Math.min(int(d.prem && d.prem[c], 0, maxCopies(c), 0), p.owned[c]);
@@ -1728,19 +1776,28 @@ const Profile = {
 };
 const isPrem = c => (Profile.d.prem[c] || 0) > 0;
 
-function rollPack() {
-  const pool = { C: [], R: [], E: [], L: [] };
+// Orbes : chaque type promet une rareté minimum et de meilleures chances
+const ORBS = {
+  base: { nom: 'Orbe du Royaume', prix: 100, desc: '5 cartes, dont au moins une rare.', min: 'R', odds: { L: 0.025, E: 0.085, R: 0.25 }, cols: ['#d9c8ff', '#8a5cff', '#2a1280'] },
+  epique: { nom: 'Orbe épique', prix: 300, desc: '5 cartes, dont au moins une épique, et deux fois plus de chances de légendaire.', min: 'E', odds: { L: 0.05, E: 0.2, R: 0.35 }, cols: ['#f6d6ff', '#c45cff', '#4a0e7a'] },
+  legendaire: { nom: 'Orbe légendaire', prix: 700, desc: '5 cartes, dont une légendaire garantie.', min: 'L', odds: { L: 0.08, E: 0.22, R: 0.35 }, cols: ['#fff3c4', '#ffa51a', '#7a2c00'] },
+};
+const RORDER = { C: 0, R: 1, E: 2, L: 3 };
+const orbCount = () => Object.values(Profile.d.orbs).reduce((s, n) => s + n, 0);
+
+function rollPack(kind = 'base') {
+  const o = ORBS[kind] || ORBS.base, pool = { C: [], R: [], E: [], L: [] };
   for (const c of COLLECTIBLE) pool[CARDS[c].r].push(c);
-  const r = () => { const x = Math.random(); return x < 0.025 ? 'L' : x < 0.11 ? 'E' : x < 0.36 ? 'R' : 'C'; };
+  const r = () => { const x = Math.random(); return x < o.odds.L ? 'L' : x < o.odds.L + o.odds.E ? 'E' : x < o.odds.L + o.odds.E + o.odds.R ? 'R' : 'C'; };
   const rs = Array.from({ length: 5 }, r);
-  if (rs.every(x => x === 'C')) rs[4] = 'R';
+  if (Math.max(...rs.map(x => RORDER[x])) < RORDER[o.min]) rs[4] = o.min;
   return rs.map(x => ({ c: pool[x][Math.floor(Math.random() * pool[x].length)], prem: Math.random() < 0.07 }));
 }
 
-function applyPack(roll) {
+function applyPack(roll, kind = 'base') {
   const out = [];
   Profile.change(d => {
-    d.packs = Math.max(0, d.packs - 1);
+    d.orbs[kind] = Math.max(0, (d.orbs[kind] || 0) - 1);
     for (const { c, prem } of roll) {
       const had = d.owned[c] || 0, res = { c, prem, isNew: had === 0, refund: 0 };
       if (had < maxCopies(c)) d.owned[c] = had + 1;
@@ -1752,8 +1809,7 @@ function applyPack(roll) {
       out.push(res);
     }
   });
-  const order = { C: 0, R: 1, E: 2, L: 3 };
-  return out.sort((a, b) => order[CARDS[a.c].r] - order[CARDS[b.c].r] || (a.prem ? 1 : 0) - (b.prem ? 1 : 0));
+  return out.sort((a, b) => RORDER[CARDS[a.c].r] - RORDER[CARDS[b.c].r] || (a.prem ? 1 : 0) - (b.prem ? 1 : 0));
 }
 
 // ===================== Interface : outils =====================
@@ -1793,10 +1849,11 @@ function go(name) {
 function refreshWallet() {
   for (const w of document.querySelectorAll('[data-wallet]')) {
     w.title = 'Ton or et tes paquets à ouvrir';
-    w.replaceChildren(el('span', null, el('i', 'coin'), String(Profile.d.gold)), el('span', null, el('i', 'pk'), String(Profile.d.packs)));
+    w.title = 'Ton or et tes orbes à ouvrir';
+    w.replaceChildren(el('span', null, el('i', 'coin'), String(Profile.d.gold)), el('span', null, el('i', 'pk'), String(orbCount())));
   }
   const b = $('pack-badge');
-  if (b) { b.hidden = !Profile.d.packs; b.textContent = String(Profile.d.packs); }
+  if (b) { b.hidden = !orbCount(); b.textContent = String(orbCount()); }
 }
 function refreshScreen() {
   if (screen === 'shop') renderShop();
@@ -2764,24 +2821,33 @@ function inspectCard(c, ...extra) {
     glossary(CARDS[c]), ...extra, btn('Fermer', '', closeModal));
 }
 
-// ===================== Écrans : boutique et paquets =====================
+// ===================== Écrans : boutique et orbes =====================
+
+function orbEl(kind, small) {
+  const o = ORBS[kind];
+  const e = el('div', 'orb' + (small ? ' small' : ''), el('div', 'orb-core'), el('div', 'orb-swirl'), el('div', 'orb-shine'));
+  e.style.setProperty('--o1', o.cols[0]); e.style.setProperty('--o2', o.cols[1]); e.style.setProperty('--o3', o.cols[2]);
+  return e;
+}
 
 function renderShop() {
   const gold = Profile.d.gold;
-  const offer = (pack, title, desc, price, n, tag) => {
-    const b = btn('', 'primary', () => buyPacks(n, price, b));
+  const offer = (kind, n, price, title, desc, tag) => {
+    const b = btn('', 'primary', () => buyOrbs(kind, n, price, b));
     b.append(el('i', 'coin'), `${price}`);
     if (gold < price) b.disabled = true;
-    return el('div', 'offer glass', pack, tag ? el('div', 'tag', tag) : null, el('h3', null, title), el('p', null, desc), b,
-      gold < price ? el('p', null, `Il te manque ${price - gold} or.`) : null);
+    return el('div', 'offer glass', el('div', 'orbwrap', orbEl(kind, true), n > 1 ? el('span', 'orbx', `×${n}`) : null), tag ? el('div', 'tag', tag) : null,
+      el('h3', null, title), el('p', null, desc), b, gold < price ? el('p', null, `Il te manque ${price - gold} or.`) : null);
   };
-  const mine = el('div', 'offer glass', packEl(), el('h3', null, 'Mes paquets'),
-    el('p', null, Profile.d.packs ? `${Profile.d.packs} paquet${Profile.d.packs > 1 ? 's' : ''} à ouvrir.` : 'Aucun paquet pour le moment.'),
-    btn('Ouvrir', 'primary', () => { go('open'); renderOpen(); }));
-  mine.lastChild.disabled = !Profile.d.packs;
+  const mine = el('div', 'offer glass', el('h3', null, 'Mes orbes'),
+    ...Object.entries(ORBS).map(([k, o]) => el('p', null, `${o.nom} : ${Profile.d.orbs[k] || 0}`)),
+    btn('Ouvrir mes orbes', 'primary', () => { opening.res = null; go('open'); renderOpen(); }));
+  mine.lastChild.disabled = !orbCount();
   $('shop-offers').replaceChildren(
-    offer(packEl(), 'Paquet du Royaume', '5 cartes, dont au moins une rare. Chaque carte a 7 % de chances d’être premium.', 100, 1),
-    offer(packEl(true), 'Lot de 5 paquets', '25 cartes, et plus de chances de trouver une légendaire.', 450, 5, '10 % moins cher'),
+    offer('base', 1, ORBS.base.prix, ORBS.base.nom, ORBS.base.desc + ' Chaque carte a 7 % de chances d’être premium.'),
+    offer('base', 5, 450, 'Lot de 5 Orbes du Royaume', '25 cartes pour le prix de 4,5 orbes.', '10 % moins cher'),
+    offer('epique', 1, ORBS.epique.prix, ORBS.epique.nom, ORBS.epique.desc),
+    offer('legendaire', 1, ORBS.legendaire.prix, ORBS.legendaire.nom, ORBS.legendaire.desc, 'Le meilleur'),
     mine);
   $('shop-backs').replaceChildren(...Object.entries(BACKS).map(([id, b]) => {
     const owned = Profile.d.backs.includes(id), on = Profile.d.back === id;
@@ -2793,12 +2859,12 @@ function renderShop() {
   }));
 }
 
-function buyPacks(n, price, b) {
+function buyOrbs(kind, n, price, b) {
   if (Profile.d.gold < price) return toast(`Il te manque ${price - Profile.d.gold} or.`);
-  Profile.change(d => { d.gold -= price; d.packs += n; });
+  Profile.change(d => { d.gold -= price; d.orbs[kind] = (d.orbs[kind] || 0) + n; });
   const p = center(b.getBoundingClientRect());
   FX.burst(p.x, p.y, ELEM.or, 40, { speed: 300 });
-  toast(n > 1 ? `${n} paquets ajoutés !` : 'Paquet ajouté !');
+  toast(n > 1 ? `${n} orbes ajoutés !` : `${ORBS[kind].nom} ajouté !`);
   renderShop();
 }
 
@@ -2810,39 +2876,71 @@ function buyBack(id) {
   renderShop();
 }
 
-const opening = { res: null, open: 0, busy: false };
+// Ciel étoilé avec constellations derrière l'ouverture des orbes
+function drawSky() {
+  const cv = $('open-sky');
+  const W = cv.clientWidth, H = cv.clientHeight, dpr = Math.min(2, devicePixelRatio || 1);
+  if (!W || !H || cv.dataset.done === W + 'x' + H) return;
+  cv.dataset.done = W + 'x' + H;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d');
+  g.scale(dpr, dpr);
+  for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(255,255,255,${0.2 + Math.random() * 0.7})`; const r = Math.random() * 1.4 + 0.3; g.fillRect(Math.random() * W, Math.random() * H, r, r); }
+  g.strokeStyle = 'rgba(200,190,255,.35)'; g.lineWidth = 1;
+  for (let k = 0; k < 4; k++) {
+    let x = Math.random() * W, y = Math.random() * H;
+    g.beginPath(); g.moveTo(x, y);
+    const pts = [];
+    for (let i = 0; i < 4; i++) {
+      x = Math.min(W, Math.max(0, x + (Math.random() - 0.5) * 220)); y = Math.min(H, Math.max(0, y + (Math.random() - 0.5) * 160));
+      g.lineTo(x, y); pts.push([x, y]);
+    }
+    g.stroke();
+    g.save(); g.fillStyle = '#fff'; g.shadowColor = '#b9a6ff'; g.shadowBlur = 8;
+    for (const [px, py] of pts) { g.beginPath(); g.arc(px, py, 2, 0, 7); g.fill(); }
+    g.restore();
+  }
+}
+
+const opening = { res: null, open: 0, busy: false, kind: 'base' };
 
 function renderOpen() {
   const s = $('open-stage');
+  requestAnimationFrame(drawSky);
   if (!opening.res) {
-    if (!Profile.d.packs) {
-      s.replaceChildren(el('p', 'open-hint', 'Aucun paquet à ouvrir'), el('p', 'muted', "Achète des paquets en boutique avec l'or gagné en jouant."),
+    const kinds = Object.keys(ORBS).filter(k => Profile.d.orbs[k] > 0);
+    if (!kinds.length) {
+      s.replaceChildren(el('p', 'open-hint', 'Aucun orbe à ouvrir'), el('p', 'muted', "Achète des orbes en boutique avec l'or gagné en jouant."),
         btn('Aller à la boutique', 'primary', () => { go('shop'); renderShop(); }));
       return;
     }
-    const p = packEl();
-    p.classList.add('big-pack');
-    enableTilt(p, 12);
-    p.onclick = () => tearPack(p);
-    s.replaceChildren(el('p', 'open-hint', "Touche le paquet pour l'ouvrir"), el('div', 'tiltwrap', p),
-      el('p', 'muted', `${Profile.d.packs} paquet${Profile.d.packs > 1 ? 's' : ''} à ouvrir`));
+    if (!kinds.includes(opening.kind)) opening.kind = kinds[kinds.length - 1];
+    const orb = orbEl(opening.kind);
+    orb.onclick = () => burstOrb(orb);
+    orb.setAttribute('role', 'button');
+    orb.setAttribute('aria-label', `Ouvrir : ${ORBS[opening.kind].nom}`);
+    s.replaceChildren(el('p', 'open-title', ORBS[opening.kind].nom), orb, el('p', 'open-hint', "Touche l'orbe pour l'ouvrir"),
+      el('div', 'chips orb-choice', ...kinds.map(k => {
+        const c = el('button', 'chip' + (k === opening.kind ? ' on' : ''), `${ORBS[k].nom} ×${Profile.d.orbs[k]}`);
+        c.onclick = () => { opening.kind = k; renderOpen(); };
+        return c;
+      })));
     return;
   }
   const grid = el('div', 'pack-cards');
   opening.res.forEach((r, i) => grid.append(slotEl(r, i)));
-  s.replaceChildren(el('p', 'open-hint', 'Touche les cartes pour les retourner'), grid, el('div', 'row open-actions'));
+  s.replaceChildren(el('p', 'open-hint', 'Touche les cartes pour les retourner'), grid, el('div', 'open-actions'));
   openActions();
 }
 
 function openActions() {
   const box = document.querySelector('#open-stage .open-actions');
   if (!box) return;
-  const done = opening.open >= opening.res.length;
-  box.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:20px';
+  const done = opening.open >= opening.res.length, left = orbCount();
   box.replaceChildren(...[
     done ? null : btn('Tout retourner', '', revealAll),
-    done && Profile.d.packs ? btn(`Ouvrir un autre paquet (${Profile.d.packs})`, 'primary', () => { opening.res = null; renderOpen(); }) : null,
-    done ? btn('Voir la collection', done && Profile.d.packs ? '' : 'primary', () => { opening.res = null; showCollection(); }) : null,
+    done && left ? btn(`Ouvrir un nouvel orbe (${left})`, 'primary', () => { opening.res = null; renderOpen(); }) : null,
+    done ? btn('Voir la collection', left ? '' : 'primary', () => { opening.res = null; showCollection(); }) : null,
     done ? btn('Boutique', 'ghost', () => { opening.res = null; go('shop'); renderShop(); }) : null].filter(Boolean));
   if (done) document.querySelector('#open-stage .open-hint').textContent = 'Belle prise !';
 }
@@ -2851,9 +2949,11 @@ function slotEl(r, i) {
   const d = CARDS[r.c];
   const slot = el('div', 'slot aura-' + d.r);
   slot.style.animationDelay = i * 110 + 'ms';
-  const tag = (t, c) => el('span', 'tagp ' + c, t);
+  const rar = el('span', 'rar', RARITY[d.r].nom);
+  rar.style.color = RARITY[d.r].col;
   slot.append(el('div', 'flip', backEl(Profile.d.back), el('div', 'flip-front', cardEl(r.c, { foil: r.prem }))),
-    el('div', 'tags', r.isNew ? tag('Nouvelle !', 'new') : null, r.prem ? tag('Premium', 'prem') : null, r.refund ? tag(`Doublon +${r.refund} or`, 'gold') : null));
+    el('div', 'reveal-info', r.isNew ? el('span', 'newcard', 'Nouvelle carte !') : null, rar,
+      r.prem ? el('span', 'tagp prem', 'Premium') : null, r.refund ? el('span', 'tagp gold', `Doublon +${r.refund} or`) : null));
   slot.onclick = () => {
     if (!slot.classList.contains('open')) return flipSlot(slot, r);
     inspectCard(r.c);
@@ -2871,7 +2971,7 @@ function flipSlot(slot, r) {
     const col = RARITY[d.r].col;
     FX.burst(p.x, p.y, [col, '#ffffff', ...(ELEM[d.el] || ELEM.or)], d.r === 'L' ? 90 : d.r === 'E' ? 50 : d.r === 'R' ? 30 : 14, { speed: d.r === 'L' ? 480 : 300, grav: 140 });
     if (d.r !== 'C') FX.ring(p.x, p.y, col, d.r === 'L' ? 320 : 160, 0.7, d.r === 'L' ? 16 : 8);
-    if (d.r === 'L') { FX.confetti(120); shakeNode($('s-open')); }
+    if (d.r === 'L') { FX.confetti(120); shakeNode($('s-open'), true); }
     if (r.prem) FX.rise(p.x, p.y, ['#ff3fb4', '#4fd8ff', '#ffe04f', '#7dff9a'], 30);
   }, 260);
   openActions();
@@ -2881,16 +2981,19 @@ function revealAll() {
   [...document.querySelectorAll('#open-stage .slot:not(.open)')].forEach((s, i) => setTimeout(() => s.click(), i * 260));
 }
 
-async function tearPack(p) {
-  if (opening.busy || Profile.d.packs < 1) return;
+async function burstOrb(orb) {
+  const kind = opening.kind;
+  if (opening.busy || !(Profile.d.orbs[kind] > 0)) return;
   opening.busy = true;
-  const res = applyPack(rollPack());
-  p.classList.add('tear');
-  const c = center(p.getBoundingClientRect());
-  FX.rise(c.x, c.y, ELEM.or, 30);
-  await sleep(REDUCED ? 100 : 700);
-  FX.burst(c.x, c.y, ['#ffffff', ...ELEM.or, '#b07cff'], 90, { speed: 520, grav: 80 });
-  FX.ring(c.x, c.y, '#ffe28a', 300, 0.8, 18);
+  const res = applyPack(rollPack(kind), kind);
+  const c = center(orb.getBoundingClientRect()), cols = ORBS[kind].cols;
+  orb.classList.add('charge');
+  FX.rise(c.x, c.y, [cols[0], cols[1], '#ffffff'], 40);
+  await sleep(REDUCED ? 100 : 850);
+  FX.burst(c.x, c.y, ['#ffffff', cols[0], cols[1], ...ELEM.or], 110, { speed: 560, grav: 60 });
+  FX.ring(c.x, c.y, cols[0], 340, 0.9, 20);
+  const w = $('whiteflash');
+  w.classList.remove('on'); void w.offsetWidth; w.classList.add('on');
   opening.res = res;
   opening.open = 0;
   opening.busy = false;
@@ -2993,9 +3096,9 @@ function renderMenu() {
 }
 
 function welcome() {
-  openModal(el('h3', null, 'Bienvenue dans le Royaume !'), packEl(),
-    el('p', null, 'Voici 2 paquets offerts pour commencer ta collection. Chaque partie te rapporte de l’or pour en acheter d’autres.'),
-    el('div', 'row', btn('Ouvrir mes paquets', 'primary', () => { closeModal(); go('open'); renderOpen(); }), btn('Plus tard', 'ghost', closeModal)));
+  openModal(el('h3', null, 'Bienvenue dans le Royaume !'), orbEl('base'),
+    el('p', null, 'Voici 2 Orbes du Royaume offerts pour commencer ta collection. Chaque partie te rapporte de l’or pour en acheter d’autres, et des orbes plus rares.'),
+    el('div', 'row', btn('Ouvrir mes orbes', 'primary', () => { closeModal(); go('open'); renderOpen(); }), btn('Plus tard', 'ghost', closeModal)));
 }
 
 function boot(data) {
@@ -3014,7 +3117,7 @@ function boot(data) {
   $('b-shop').onclick = () => { go('shop'); renderShop(); };
   $('b-col').onclick = showCollection;
   $('b-decks').onclick = () => { go('decks'); renderDecks(); };
-  $('open-back').onclick = () => { if (opening.res && opening.open < opening.res.length) revealAll(); opening.res = null; go('shop'); renderShop(); };
+  $('open-back').onclick = () => { opening.res = null; go('shop'); renderShop(); };
   $('b-ai').onclick = () => chooseHero('Choisis ton héros', "L'ordinateur prend un des autres héros au hasard.", h => startAI(h));
   $('b-online').onclick = () => chooseHero('Ton héros pour la partie en ligne', 'Ton ami choisira le sien de son côté.', h => {
     online.hero = h;

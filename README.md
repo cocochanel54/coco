@@ -29,9 +29,9 @@ Jeu de cartes à collectionner façon Hearthstone, en français, qui marche sur 
 
 - 4 héros (Mage, Guerrier, Prêtresse, Rôdeuse) avec chacun un pouvoir et un deck de départ, 50 cartes en 4 raretés (commune, rare, épique, légendaire).
 - Contre l'ordinateur, ou en ligne contre un ami avec un code de partie à 4 caractères (sur claude.ai par le salon partagé de la page, ailleurs par PeerJS).
-- Boutique : l'or gagné en jouant achète des paquets de 5 cartes et des dos de cartes ; cartes premium holographiques ; collection et éditeur de decks.
+- Boutique : l'or gagné en jouant achète des orbes de 5 cartes (Orbe du Royaume, Orbe épique, Orbe légendaire avec une légendaire garantie) et des dos de cartes ; cartes premium holographiques ; collection et éditeur de decks.
 - Animations : cartes en 3D qui suivent le doigt, reflets holographiques, attaques avec impact, sorts lancés, entrée des légendaires.
 
 Les sources sont `duel/jeu.html` (aussi la version publiée sur claude.ai) et les images de `duel/art/`. Après modification, lancer `python3 duel/build.py` pour régénérer `duel/index.html`.
 
-Illustrations : peintures et gravures anciennes du domaine public (Wikimedia Commons, liste dans l'écran Règles du jeu) et illustrations composées à partir des Fluent Emoji 3D de Microsoft (© Microsoft Corporation, licence MIT).
+Illustrations : composées pour le jeu par `duel/outils/illustrations.py` (décors peints générés par programme) à partir des Fluent Emoji 3D de Microsoft (© Microsoft Corporation, licence MIT).
