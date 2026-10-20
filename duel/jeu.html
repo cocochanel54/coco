@@ -2151,6 +2151,8 @@ const BG = (function () {
   const UP_COST = [0, 0, 5, 7, 8, 9, 10];
   const COST = { buy: 3, sell: 1, roll: 1 };
   const MAX_BOARD = 7, MAX_HAND = 10, MAX_ROUNDS = 100, COMBAT_STEPS = 400;
+  // Égalités interminables en fin de partie : après ce tour, une égalité coûte des PV aux deux héros.
+  const LATE_ROUND = 30, LATE_DRAW_DMG = 5;
 
   // ------------------------------------------------------------------ Aléatoire
   function seedOf(s) {
@@ -2334,7 +2336,8 @@ const BG = (function () {
         let n = (f.n || 0) * k;
         if (f.per) n *= perCount(ctx, f.per);
         if (n <= 0) return;
-        for (const m of sel(ctx, f)) hit(ctx.cb, m, n, ctx.self, false);
+        const hits = sel(ctx, f);
+        together(ctx.cb, () => { for (const m of hits) hit(ctx.cb, m, n, ctx.self, false); });
         return;
       }
       case 'summon': summon(ctx, f.id, f.n || 1, !!ctx.golden); return;
@@ -2440,14 +2443,31 @@ const BG = (function () {
     return true;
   }
 
+  // Dégâts simultanés (les deux coups d'une attaque, une zone de dégâts) : les déclenchements
+  // (perte de bouclier, blessure) attendent que tous les coups soient portés.
+  function trig(cb, t) {
+    if (t.on === 'shield') {
+      const c = cctx(cb, t.s);
+      for (const o of t.s.board.slice()) if (o.hp > 0) fire(c, o, 'shield', { it: t.m });
+    } else if (t.m.hp > 0 && t.s.board.indexOf(t.m) >= 0) fire(cctx(cb, t.s), t.m, 'hurt', {});
+  }
+  function later(cb, t) { if (cb.q) cb.q.push(t); else trig(cb, t); }
+  function together(cb, fn) {
+    if (cb.q) { fn(); return; }
+    cb.q = [];
+    fn();
+    const q = cb.q;
+    cb.q = null;
+    for (const t of q) trig(cb, t);
+  }
+
   function hit(cb, m, n, src, attackHit) {
     if (n <= 0 || m.hp <= 0) return;
     const s = cb.S[m.sd];
     if (m.divine) {
       m.divine = false;
       cb.ev.push({ k: 'shield', u: m.uid });
-      const c = cctx(cb, s);
-      for (const o of s.board.slice()) if (o.hp > 0) fire(c, o, 'shield', { it: m });
+      later(cb, { on: 'shield', s, m });
       return;
     }
     m.hp -= n;
@@ -2459,7 +2479,7 @@ const BG = (function () {
       if (m.hp > 0) { m.hp = 0; cb.ev.push({ k: 'poison', u: m.uid, by: src.uid }); }
       emitStats(cb, src);
     }
-    if (m.hp > 0) fire(cctx(cb, s), m, 'hurt', {});
+    if (m.hp > 0) later(cb, { on: 'hurt', s, m });
   }
 
   function processDeaths(cb) {
@@ -2516,8 +2536,8 @@ const BG = (function () {
     cb.ev.push({ k: 'atk', a: att.uid, t: t.uid });
     fire(cctx(cb, s), att, 'attack', { it: t });
     const a = att.atk, b = t.atk;
-    hit(cb, t, a, att, true);
-    hit(cb, att, b, t, true);
+    together(cb, () => { hit(cb, t, a, att, true); hit(cb, att, b, t, true); });
+    cb.ord = [s.i, 1 - s.i]; // les râles d'agonie du camp qui attaque se résolvent en premier
     processDeaths(cb);
     return true;
   }
@@ -2532,7 +2552,7 @@ const BG = (function () {
       return { i, key: i === 0 ? 'me' : 'them', board, tier: X.tier || 1, tb: X.tb || {}, hero: X.hero || null, nxt: 0 };
     };
     const S = [mkSide(A, 0), mkSide(B, 1)];
-    const cb = { st, S, ev: [], pend: null, cur: null, ord: [0, 1] };
+    const cb = { st, S, ev: [], pend: null, cur: null, ord: [0, 1], q: null };
     const start = { me: S[0].board.map(snap), them: S[1].board.map(snap) };
     const la = S[0].board.length, lb = S[1].board.length;
     const first = la > lb ? 0 : lb > la ? 1 : ri(st, 2);
@@ -2556,6 +2576,7 @@ const BG = (function () {
         if (!liveCount(S[0]) || !liveCount(S[1])) break;
         cb.ev.push({ k: 'start', u: m.uid, txt: m.name });
         fire(cctx(cb, S[m.sd]), m, 'soc', {});
+        cb.ord = [m.sd, 1 - m.sd];
         processDeaths(cb);
       }
       // Attaques
@@ -2586,7 +2607,7 @@ const BG = (function () {
       const w = winner === 'me' ? S[0] : S[1];
       damage = w.tier + w.board.reduce((t, m) => t + (m.hp > 0 ? m.tier : 0), 0);
       if (st.round <= 8) damage = Math.min(damage, 15);
-    }
+    } else if (st.round > LATE_ROUND) damage = LATE_DRAW_DMG; // subis par les deux héros
     return {
       first: first === 0 ? 'me' : 'them', start, events: cb.ev,
       result: { winner, damage },
@@ -2686,6 +2707,15 @@ const BG = (function () {
   }
 
   // ------------------------------------------------------------------ Actions (joueur p)
+  // Indices et uid peuvent arriver sous forme de texte (attributs data-* du DOM) : on les normalise.
+  function ix(v) {
+    if (typeof v === 'string' && /^\s*\d+\s*$/.test(v)) v = Number(v);
+    return Number.isInteger(v) && v >= 0 ? v : -1;
+  }
+  function uidOf(v) {
+    if (typeof v === 'string' && /^\s*\d+\s*$/.test(v)) return Number(v);
+    return v;
+  }
   function guard(st, p, allowChoice) {
     if (!st || !p) return 'Partie introuvable.';
     if (st.over) return 'La partie est terminée.';
@@ -2705,6 +2735,7 @@ const BG = (function () {
 
   function doBuy(st, p, i) {
     const e = guard(st, p); if (e) return e;
+    i = ix(i);
     const m = p.shop[i];
     if (!m) return 'Serviteur introuvable.';
     if (p.gold < COST.buy) return "Pas assez d'or.";
@@ -2718,6 +2749,7 @@ const BG = (function () {
   }
   function doSell(st, p, i) {
     const e = guard(st, p); if (e) return e;
+    i = ix(i);
     const m = p.board[i];
     if (!m) return 'Serviteur introuvable.';
     p.board.splice(i, 1);
@@ -2730,6 +2762,8 @@ const BG = (function () {
   }
   function doPlay(st, p, hi, pos, targetUid) {
     const e = guard(st, p); if (e) return e;
+    hi = ix(hi);
+    targetUid = uidOf(targetUid);
     const m = p.hand[hi];
     if (!m) return 'Carte introuvable.';
     if (p.board.length >= MAX_BOARD) return 'Votre plateau est plein.';
@@ -2756,6 +2790,7 @@ const BG = (function () {
   }
   function doMove(st, p, from, to) {
     const e = guard(st, p, true); if (e) return e;
+    from = ix(from);
     if (!p.board[from]) return 'Serviteur introuvable.';
     to = Math.max(0, Math.min(p.board.length - 1, Math.floor(to)));
     if (isNaN(to)) return 'Position invalide.';
@@ -2793,18 +2828,24 @@ const BG = (function () {
     if (!pw.target) return null;
     return p.board.filter(m => !pw.tkw || !m[pw.tkw]);
   }
-  function doPower(st, p, targetUid) {
-    const e = guard(st, p); if (e) return e;
+  // Raison pour laquelle le pouvoir héroïque est inutilisable maintenant (hors choix de la cible), ou null.
+  function powerBlock(p) {
     const pw = HEROES[p.hero].power;
     if (pw.type !== 'active') return 'Ce pouvoir héroïque est passif.';
     if (p.powerUsed) return 'Pouvoir héroïque déjà utilisé ce tour-ci.';
     if (p.gold < pw.cost) return "Pas assez d'or.";
     if (pw.hpCost && p.hp <= pw.hpCost) return 'Pas assez de points de vie.';
     if (pw.hand && p.hand.length >= MAX_HAND) return 'Votre main est pleine.';
+    if (pw.target && !powerTargetsP(p).length) return 'Aucune cible valide.';
+    return null;
+  }
+  function doPower(st, p, targetUid) {
+    const e = guard(st, p) || powerBlock(p); if (e) return e;
+    const pw = HEROES[p.hero].power;
+    targetUid = uidOf(targetUid);
     let target = null;
     if (pw.target) {
       const valid = powerTargetsP(p);
-      if (!valid.length) return 'Aucune cible valide.';
       if (targetUid == null) return 'Choisissez une cible.';
       target = valid.find(m => m.uid === targetUid) || null;
       if (!target) return 'Cible invalide.';
@@ -2828,6 +2869,7 @@ const BG = (function () {
     const e = guard(st, p, true); if (e) return e;
     const c = p.choices[0];
     if (!c) return 'Aucun choix en attente.';
+    i = ix(i);
     if (!c.options[i]) return 'Choix invalide.';
     resolveChoice(st, p, i);
     return null;
@@ -2995,25 +3037,33 @@ const BG = (function () {
   }
 
   // ------------------------------------------------------------------ Fin de tour, appariements, éliminations
+  // Appariements : on énumère tous les appariements possibles (105 au plus pour 8 joueurs), on garde
+  // ceux qui minimisent les revanches (même adversaire qu'au tour précédent, fantôme compris) et on en
+  // tire un au hasard. Avec un nombre impair de joueurs, le joueur apparié à -1 affronte le fantôme.
   function pairUp(st) {
-    const alive = st.players.filter(p => p.alive).map(p => p.idx);
-    let best = null, bestScore = Infinity;
-    for (let t = 0; t < 12; t++) {
-      const order = shuffle(st, alive.slice());
-      const pairs = [];
-      let score = 0;
-      for (let i = 0; i + 1 < order.length; i += 2) {
-        pairs.push([order[i], order[i + 1]]);
-        if (st.players[order[i]].lastOpponent === order[i + 1] || st.players[order[i + 1]].lastOpponent === order[i]) score++;
+    const P = st.players, gf = st.ghost ? st.ghost.from : null;
+    const rep = (x, y) => (y < 0 ? gf != null && P[x].lastOpponent === gf
+      : P[x].lastOpponent === y || P[y].lastOpponent === x) ? 1 : 0;
+    let best = [], bestScore = Infinity;
+    const cur = [];
+    const go = (rest, score) => {
+      if (score > bestScore) return;
+      if (!rest.length) {
+        if (score < bestScore) { bestScore = score; best = []; }
+        best.push(cur.slice());
+        return;
       }
-      if (order.length % 2) {
-        const g = order[order.length - 1];
-        pairs.push([g, -1]);
-        if (st.ghost && st.players[g].lastOpponent === st.ghost.from) score++;
+      if (rest.length % 2) {
+        for (const g of rest) { cur.push([g, -1]); go(rest.filter(x => x !== g), score + rep(g, -1)); cur.pop(); }
+        return;
       }
-      if (score < bestScore) { best = pairs; bestScore = score; if (!score) break; }
-    }
-    return best || [];
+      const x = rest[0], others = rest.slice(1);
+      for (const y of others) { cur.push([x, y]); go(others.filter(z => z !== y), score + rep(x, y)); cur.pop(); }
+    };
+    go(shuffle(st, P.filter(p => p.alive).map(p => p.idx)), 0);
+    if (!best.length) return [];
+    const pick = best[ri(st, best.length)];
+    return pick.filter(pr => pr[1] >= 0).concat(pick.filter(pr => pr[1] < 0));
   }
   function sideOf(p) { return { board: p.board, tier: p.tier, tb: p.tb, hero: p.hero }; }
   function hurtHero(p, n) {
@@ -3076,8 +3126,8 @@ const BG = (function () {
       const pb = ghost ? null : st.players[b];
       const L = runCombat(st, sideOf(pa), ghost ? st.ghost : sideOf(pb));
       const w = L.result.winner;
-      // Égalités interminables en fin de partie : les deux héros souffrent.
-      if (w === 'draw' && st.round > 30) { hurtHero(pa, 5); if (pb) hurtHero(pb, 5); }
+      // Égalités interminables en fin de partie : les deux héros subissent result.damage.
+      if (w === 'draw') { hurtHero(pa, L.result.damage); if (pb) hurtHero(pb, L.result.damage); }
       if (w === 'me') { if (pb) hurtHero(pb, L.result.damage); }
       if (w === 'them') hurtHero(pa, L.result.damage);
       const oppIdx = ghost ? st.ghost.from : b;
@@ -3115,7 +3165,7 @@ const BG = (function () {
         alive: p.alive, place: p.place, powerUsed: p.powerUsed, lastOpponent: p.lastOpponent, tb: p.tb, sb: p.sb,
       },
       power: { name: pw.name, txt: pw.txt, type: pw.type, cost: pw.cost || 0, target: !!pw.target,
-        usable: pw.type === 'active' && canAct(st) && !p.powerUsed && p.gold >= (pw.cost || 0) },
+        usable: canAct(st) && !powerBlock(p) },
       choice: p.choices[0] || null,
       players: st.players.map(q => ({
         idx: q.idx, name: q.name, hero: q.hero, img: q.img, hp: q.hp, armor: q.armor, tier: q.tier,
@@ -3860,25 +3910,28 @@ async function bgArena(mc, before, after) {
   res.replaceChildren(el('span', null, draw ? 'Égalité' : won ? 'Victoire !' : 'Défaite'));
   res.hidden = false;
   await bgT(700);
-  if (!draw) {
-    const loser = won ? 'them' : 'me', winSide = won ? 'me' : 'them';
-    const target = $('arh-' + loser);
-    const tc = center(target.getBoundingClientRect());
-    const shooters = [...lane(winSide).children].slice(0, 7);
-    await Promise.all(shooters.map((n, i) => bgT(i * 90).then(() => FX.projectile(center(n.getBoundingClientRect()), tc, won ? ELEM.or : ELEM.feu, 0.38 / bgs.speed, 18))));
-    FX.burst(tc.x, tc.y, ELEM.feu, 70, { speed: 460 });
-    FX.ring(tc.x, tc.y, '#ffffff', 160, 0.5, 12);
-    shakeNode($('bg-arena'), true);
-    if (!won) hurtFlash();
-    const f = el('div', 'float f-dmg f-big', el('span', null, '-' + r.damage));
-    f.style.left = tc.x + 'px'; f.style.top = tc.y + 'px';
-    $('fx').append(f);
-    setTimeout(() => f.remove(), 1300);
-    const p = loser === 'me' ? after.players[0] : ghost ? null : after.players[mc.opponent];
-    if (p) {
-      target.querySelector('.stat.hp b').textContent = String(Math.max(0, p.hp));
-      const ar = target.querySelector('.stat.armor b');
-      if (ar) ar.textContent = String(p.armor);
+  // Dégâts au héros perdant (ou aux deux en cas d'égalité tardive)
+  const losers = draw ? (r.damage > 0 ? ['me', 'them'] : []) : [won ? 'them' : 'me'];
+  if (losers.length) {
+    const winSide = draw ? null : won ? 'me' : 'them';
+    const shooters = winSide ? [...lane(winSide).children].slice(0, 7) : [];
+    for (const loser of losers) {
+      const target = $('arh-' + loser), tc = center(target.getBoundingClientRect());
+      await Promise.all(shooters.map((n, i) => bgT(i * 90).then(() => FX.projectile(center(n.getBoundingClientRect()), tc, won ? ELEM.or : ELEM.feu, 0.38 / bgs.speed, 18))));
+      FX.burst(tc.x, tc.y, ELEM.feu, 70, { speed: 460 });
+      FX.ring(tc.x, tc.y, '#ffffff', 160, 0.5, 12);
+      shakeNode($('bg-arena'), true);
+      if (loser === 'me') hurtFlash();
+      const f = el('div', 'float f-dmg f-big', el('span', null, '-' + r.damage));
+      f.style.left = tc.x + 'px'; f.style.top = tc.y + 'px';
+      $('fx').append(f);
+      setTimeout(() => f.remove(), 1300);
+      const p = loser === 'me' ? after.players[0] : ghost ? null : after.players[mc.opponent];
+      if (p) {
+        target.querySelector('.stat.hp b').textContent = String(Math.max(0, p.hp));
+        const ar = target.querySelector('.stat.armor b');
+        if (ar) ar.textContent = String(p.armor);
+      }
     }
     if (won) FX.confetti(70);
   }
