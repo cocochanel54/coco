@@ -34,4 +34,4 @@ Jeu de cartes à collectionner façon Hearthstone, en français, qui marche sur 
 
 Les sources sont `duel/jeu.html` (aussi la version publiée sur claude.ai) et les images de `duel/art/`. Après modification, lancer `python3 duel/build.py` pour régénérer `duel/index.html`.
 
-Illustrations : composées pour le jeu par `duel/outils/illustrations.py` (décors peints générés par programme) à partir des Fluent Emoji 3D de Microsoft (© Microsoft Corporation, licence MIT).
+Illustrations : portraits peints du projet The Battle for Wesnoth (© leurs auteurs, licence GPL v2 ou ultérieure), posés sur des décors peints par `duel/outils/illustrations.py` et assemblés par `duel/outils/portraits.py` ; icônes des pouvoirs : Fluent Emoji de Microsoft (licence MIT). Détails dans `duel/art/LICENCES.txt`.

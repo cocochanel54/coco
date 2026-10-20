@@ -1,0 +1,14 @@
+{
+ "hero-mage": "humans__mage-red+female", "hero-guerrier": "humans__general", "hero-pretresse": "humans__mage-white+female", "hero-rodeuse": "elves__archer+female",
+ "ecuyer": "humans__spearman", "archere": "elves__archer", "milicien": "humans__pikeman", "sanglier": "goblins__wolf-rider", "loup": "orcs__grunt",
+ "gobelin": "goblins__spearman", "erudit": "humans__mage+female", "fee": "elves__sylph", "sentinelle": "humans__swordsman", "cavalier": "humans__cavalryman",
+ "templier": "humans__royal-guard", "soigneuse": "elves__druid", "sirene": "merfolk__enchantress", "ours": "monsters__yeti", "croco": "trolls__whelp",
+ "pyromancien": "humans__mage-red", "harpie": "monsters__bat", "necro": "humans__necromancer", "licorne": "humans__paladin", "griffon": "monsters__gryphon",
+ "golem": "dwarves__sentinel", "geant": "trolls__troll", "kraken": "monsters__sea-serpent", "dragon": "drakes__inferno", "ancien": "woses__ancient-wose",
+ "liche": "undead__ancient-lich", "givre": "elves__sorceress", "explosion": "humans__mage-arch", "intel": "humans__mage", "boule": "drakes__burner",
+ "elementaire": "merfolk__triton", "wyrm": "drakes__hurricane", "tourbillon": "dwarves__ulfserker", "grace": "humans__assassin", "blocage": "humans__iron-mauler",
+ "berserker": "orcs__warrior", "chef": "orcs__warlord", "gorrak": "orcs__sovereign", "chatiment": "humans__mage-light", "benediction": "elves__shaman",
+ "clerc": "humans__mage-white", "nova": "humans__mage-silver", "ange": "elves__shyde", "fleche": "elves__marksman", "pistage": "humans__ranger",
+ "meute": "goblins__rouser", "tirmultiple": "humans__master-bowman", "dresseuse": "humans__huntsman", "panthere": "humans__footpad", "fenris": "elves__high-lord",
+ "squelette": "undead__skeleton", "louveteau": "goblins__impaler", "piece": "humans__thief"
+}

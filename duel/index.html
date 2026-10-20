@@ -70,6 +70,12 @@ body::before {
 }
 button { font: inherit; color: inherit; }
 button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--or-2); outline-offset: 2px; }
+#scene { position: fixed; inset: 0; z-index: 0; background: var(--nuit) center / cover no-repeat; transition: background-image .4s; }
+body[data-screen="menu"] #scene { background-image: linear-gradient(180deg, rgba(8,6,24,.15), rgba(8,6,24,.5) 50%, rgba(8,6,24,.94)), url(art/fonds/chateau.webp); background-position: center 35%; }
+body[data-screen="heroes"] #scene, body[data-screen="online"] #scene, body[data-screen="rules"] #scene { background-image: linear-gradient(180deg, rgba(8,6,24,.55), rgba(8,6,24,.92)), url(art/fonds/pont.webp); }
+body[data-screen="shop"] #scene { background-image: linear-gradient(180deg, rgba(8,6,24,.55), rgba(8,6,24,.93)), url(art/fonds/bataille.webp); }
+body[data-screen="col"] #scene, body[data-screen="decks"] #scene { background-image: linear-gradient(180deg, rgba(8,6,24,.78), rgba(8,6,24,.94)), url(art/fonds/carte.webp); }
+body[data-screen="game"] #scene { background-image: linear-gradient(180deg, rgba(8,6,24,.55), rgba(8,6,24,.8)), url(art/fonds/cote.webp); }
 #app {
   position: relative; height: 100%; max-width: 1120px; margin: 0 auto;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -162,18 +168,19 @@ h3 { font-size: 21px; color: var(--or-2); }
   --rx: 0deg; --ry: 0deg; --mx: 50%; --my: 50%;
   position: relative; flex: none; width: var(--w); aspect-ratio: 5 / 7;
   font-size: calc(var(--w) * .1);
-  border-radius: .8em; padding: .2em;
-  background: linear-gradient(150deg, color-mix(in srgb, var(--rar) 40%, #fff) 0%, var(--rar) 30%, color-mix(in srgb, var(--rar) 55%, #000) 65%, var(--rar) 100%);
-  background-color: var(--rar);
-  box-shadow: 0 .35em 1.1em rgba(0,0,0,.6), 0 0 0 .05em rgba(0,0,0,.7);
+  border-radius: .8em; padding: .24em;
+  background: linear-gradient(145deg, #fff6d0 0%, #d6a945 18%, #7a5317 40%, #f0cf78 58%, #8f6620 80%, #fbe9a8 100%);
+  background-color: #c99a3a;
+  box-shadow: 0 .35em 1.1em rgba(0,0,0,.6), 0 0 0 .05em rgba(0,0,0,.75), inset 0 0 0 .05em rgba(255,250,220,.6);
   color: var(--texte);
   container-type: inline-size;
 }
-.card.r-E { box-shadow: 0 .35em 1.1em rgba(0,0,0,.6), 0 0 .9em rgba(180,92,255,.5); }
+.card.r-R { box-shadow: 0 .35em 1.1em rgba(0,0,0,.6), 0 0 .7em rgba(61,155,255,.45); }
+.card.r-E { box-shadow: 0 .35em 1.1em rgba(0,0,0,.6), 0 0 1em rgba(180,92,255,.6); }
 .card.r-L { box-shadow: 0 .35em 1.1em rgba(0,0,0,.6), 0 0 1.4em rgba(255,159,26,.6); }
 @keyframes ang { to { --ang: 360deg; } }
-.face { position: absolute; inset: .2em; border-radius: .62em; overflow: hidden; background: #0b0a1c; isolation: isolate; }
-.face::before { content: ''; position: absolute; inset: .16em; z-index: 4; border-radius: .48em; border: .05em solid rgba(255, 238, 200, .45); pointer-events: none; }
+.face { position: absolute; inset: .24em; border-radius: .58em; overflow: hidden; background: #0b0a1c; isolation: isolate; }
+.face::before { content: ''; position: absolute; inset: 0; z-index: 4; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 .06em rgba(40,24,6,.9), inset 0 0 0 .13em rgba(255,226,150,.55), inset 0 0 1em rgba(0,0,0,.45); }
 .art { position: absolute; inset: 0; background: #14112e center 36% / cover no-repeat; }
 /* Reflets : paillettes qui scintillent, prisme arc-en-ciel qui suit le doigt, éclat de lumière qui balaie la carte */
 .holo, .holo2, .prism, .shine { position: absolute; inset: 0; z-index: 1; display: none; pointer-events: none; }
@@ -218,21 +225,21 @@ h3 { font-size: 21px; color: var(--or-2); }
 .top {
   position: absolute; z-index: 3; left: 2.3em; right: .42em; top: .42em; min-height: 1.85em;
   display: flex; align-items: center; gap: .3em; padding: .22em .5em;
-  background: linear-gradient(90deg, rgba(8,6,22,.86), rgba(8,6,22,.55));
-  border: .05em solid rgba(255,255,255,.3); border-radius: .5em;
+  background: linear-gradient(180deg, rgba(48,30,12,.92), rgba(16,10,4,.86));
+  border: .06em solid #d9b25a; border-radius: .45em; box-shadow: 0 .1em .3em rgba(0,0,0,.5), inset 0 .05em 0 rgba(255,236,180,.35);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
 }
 .name {
-  flex: 1; min-width: 0; font: 700 .9em/1.02 var(--f-titre); color: #fff;
+  flex: 1; min-width: 0; font: 700 .9em/1.02 var(--f-titre); color: #fff4d6;
   text-shadow: 0 .06em .15em #000;
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 .kind { flex: none; font: 800 .5em/1 var(--f-texte); letter-spacing: .14em; text-transform: uppercase; padding: .3em .45em; border-radius: .4em; color: #fff; background: color-mix(in srgb, var(--cls) 70%, #000); }
 .panel {
   position: absolute; z-index: 3; left: .45em; right: .45em; bottom: 1.45em;
-  padding: .45em .55em .5em; border-radius: .55em;
-  background: linear-gradient(180deg, rgba(10,8,28,.62), rgba(10,8,28,.78));
-  border: .05em solid rgba(255,255,255,.24);
+  padding: .45em .55em .5em; border-radius: .5em;
+  background: linear-gradient(180deg, rgba(22,14,6,.7), rgba(12,8,4,.86));
+  border: .06em solid rgba(217,178,90,.85); box-shadow: inset 0 .05em 0 rgba(255,236,180,.25);
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
 }
 .notext .panel { display: none; }
@@ -372,8 +379,9 @@ h3 { font-size: 21px; color: var(--or-2); }
   position: relative; display: grid; grid-template-rows: 1fr 1fr; gap: 8px; padding: 10px 6px;
   border-radius: 24px; overflow: hidden;
   background:
-    radial-gradient(ellipse 70% 60% at 50% 50%, rgba(91,130,255,.22), transparent 70%),
-    radial-gradient(ellipse at 50% 50%, #241f5c 0%, #151238 55%, #0d0b24 100%);
+    radial-gradient(ellipse 70% 60% at 50% 50%, rgba(255,214,140,.12), transparent 70%),
+    linear-gradient(180deg, rgba(14,10,30,.45), rgba(14,10,30,.62)),
+    url(art/fonds/cote.webp) center 60% / cover;
   border: 1px solid rgba(244,194,79,.4);
   box-shadow: inset 0 0 50px rgba(0,0,0,.65), 0 0 0 4px rgba(8,6,22,.85), 0 0 40px rgba(124,72,255,.18);
   min-height: calc(var(--mw) * 2.9);
@@ -706,6 +714,7 @@ h3 { font-size: 21px; color: var(--or-2); }
 }
 </style>
 
+<div id="scene" aria-hidden="true"></div>
 </head>
 <body>
 <div id="app">
@@ -788,7 +797,7 @@ h3 { font-size: 21px; color: var(--or-2); }
           <li>Dans <b>Mes decks</b>, ajoute tes nouvelles cartes : un deck compte 30 cartes, 2 exemplaires maximum.</li>
         </ul>
         <h3>Crédits des illustrations</h3>
-        <p class="small muted">Illustrations composées pour le jeu à partir des personnages et objets 3D Fluent Emoji, © Microsoft Corporation, licence MIT.</p>
+        <p class="small muted">Portraits et paysages peints : The Battle for Wesnoth (wesnoth.org), par les artistes de la communauté Wesnoth, licence GNU GPL version 2 ou ultérieure. Décors des cartes générés pour le jeu ; icônes des pouvoirs : Fluent Emoji, © Microsoft Corporation, licence MIT.</p>
         <ul class="small" id="credits"></ul>
         <h3>Sur l'écran</h3>
         <ul>
@@ -923,29 +932,29 @@ const N = 'neutre';
 const CARDS = {
   // Serviteurs neutres
   ecuyer: { n: 'Écuyer zélé', t: 'm', cl: N, r: 'C', cost: 1, a: 2, h: 1, art: '🤺', bg: 'plaine', el: 'physique' },
-  archere: { n: 'Archère elfe', t: 'm', cl: N, r: 'C', cost: 1, a: 1, h: 1, art: '🏹', bg: 'foret', el: 'physique', txt: '**Cri de guerre :** inflige 1 dégât.', bc: { cible: 'any', fx: [{ do: 'dmg', n: 1, to: 'target' }] } },
-  milicien: { n: 'Milicien', t: 'm', cl: N, r: 'C', cost: 1, a: 1, h: 2, art: '🪖', bg: 'pierre', el: 'physique', kw: ['taunt'], txt: '**Provocation**' },
-  sanglier: { n: 'Sanglier furieux', t: 'm', cl: N, r: 'C', cost: 1, a: 1, h: 1, art: '🐗', bg: 'foret', el: 'nature', kw: ['charge'], txt: '**Charge**' },
-  loup: { n: 'Loup gris', t: 'm', cl: N, r: 'C', cost: 2, a: 3, h: 2, art: '🐺', bg: 'foret', el: 'nature' },
-  gobelin: { n: 'Gobelin artificier', t: 'm', cl: N, r: 'R', cost: 2, a: 2, h: 1, art: '👺', bg: 'feu', el: 'feu', txt: "**Râle d'agonie :** inflige 2 dégâts à un ennemi aléatoire.", dr: [{ do: 'dmg', n: 2, to: 'randEnemy' }] },
-  erudit: { n: 'Apprenti érudit', t: 'm', cl: N, r: 'C', cost: 2, a: 1, h: 2, art: '📜', bg: 'arcane', el: 'arcane', txt: '**Cri de guerre :** piochez une carte.', bc: { fx: [{ do: 'draw', n: 1 }] } },
-  fee: { n: 'Fée lumineuse', t: 'm', cl: N, r: 'R', cost: 2, a: 2, h: 2, art: '🧚', bg: 'arcane', el: 'arcane', kw: ['divine'], txt: '**Bouclier divin**' },
+  archere: { n: 'Archer elfe', t: 'm', cl: N, r: 'C', cost: 1, a: 1, h: 1, art: '🏹', bg: 'foret', el: 'physique', txt: '**Cri de guerre :** inflige 1 dégât.', bc: { cible: 'any', fx: [{ do: 'dmg', n: 1, to: 'target' }] } },
+  milicien: { n: 'Piquier', t: 'm', cl: N, r: 'C', cost: 1, a: 1, h: 2, art: '🪖', bg: 'pierre', el: 'physique', kw: ['taunt'], txt: '**Provocation**' },
+  sanglier: { n: 'Chevaucheur de loup', t: 'm', cl: N, r: 'C', cost: 1, a: 1, h: 1, art: '🐗', bg: 'foret', el: 'nature', kw: ['charge'], txt: '**Charge**' },
+  loup: { n: 'Grunt orc', t: 'm', cl: N, r: 'C', cost: 2, a: 3, h: 2, art: '🐺', bg: 'foret', el: 'nature' },
+  gobelin: { n: 'Gobelin lancier', t: 'm', cl: N, r: 'R', cost: 2, a: 2, h: 1, art: '👺', bg: 'feu', el: 'feu', txt: "**Râle d'agonie :** inflige 2 dégâts à un ennemi aléatoire.", dr: [{ do: 'dmg', n: 2, to: 'randEnemy' }] },
+  erudit: { n: 'Apprentie mage', t: 'm', cl: N, r: 'C', cost: 2, a: 1, h: 2, art: '📜', bg: 'arcane', el: 'arcane', txt: '**Cri de guerre :** piochez une carte.', bc: { fx: [{ do: 'draw', n: 1 }] } },
+  fee: { n: 'Sylphe', t: 'm', cl: N, r: 'R', cost: 2, a: 2, h: 2, art: '🧚', bg: 'arcane', el: 'arcane', kw: ['divine'], txt: '**Bouclier divin**' },
   sentinelle: { n: 'Sentinelle du rempart', t: 'm', cl: N, r: 'C', cost: 2, a: 1, h: 4, art: '💂', bg: 'montagne', el: 'physique', kw: ['taunt'], txt: '**Provocation**' },
-  cavalier: { n: 'Destrier des plaines', t: 'm', cl: N, r: 'C', cost: 3, a: 3, h: 1, art: '🐎', bg: 'plaine', el: 'physique', kw: ['charge'], txt: '**Charge**' },
-  templier: { n: "Templier de l'aube", t: 'm', cl: N, r: 'R', cost: 3, a: 2, h: 2, art: '⚜️', bg: 'sacre', el: 'sacre', kw: ['taunt', 'divine'], txt: '**Provocation**. **Bouclier divin**' },
-  soigneuse: { n: 'Soigneuse du village', t: 'm', cl: N, r: 'R', cost: 3, a: 3, h: 3, art: '🌿', bg: 'foret', el: 'nature', txt: '**Cri de guerre :** rend 3 PV.', bc: { cible: 'any', fx: [{ do: 'heal', n: 3, to: 'target' }] } },
-  sirene: { n: 'Dauphin des récifs', t: 'm', cl: N, r: 'R', cost: 3, a: 2, h: 4, art: '🐬', bg: 'ocean', el: 'givre', txt: '**Cri de guerre :** **gèle** un ennemi.', bc: { cible: 'enemy', fx: [{ do: 'freeze', to: 'target' }] } },
-  ours: { n: 'Ours des cavernes', t: 'm', cl: N, r: 'C', cost: 4, a: 4, h: 5, art: '🐻', bg: 'foret', el: 'nature' },
-  croco: { n: 'Croco des marais', t: 'm', cl: N, r: 'C', cost: 4, a: 3, h: 5, art: '🐊', bg: 'ocean', el: 'nature', kw: ['taunt'], txt: '**Provocation**' },
-  pyromancien: { n: 'Élémentaire de feu', t: 'm', cl: N, r: 'R', cost: 4, a: 3, h: 3, art: '🔥', bg: 'feu', el: 'feu', txt: '**Cri de guerre :** inflige 2 dégâts.', bc: { cible: 'any', fx: [{ do: 'dmg', n: 2, to: 'target' }] } },
-  harpie: { n: 'Esprit des tempêtes', t: 'm', cl: N, r: 'R', cost: 4, a: 2, h: 4, art: '🌪️', bg: 'montagne', el: 'arcane', kw: ['wf'], txt: '**Furie des vents**' },
-  necro: { n: 'Nécromancienne', t: 'm', cl: N, r: 'E', cost: 4, a: 2, h: 3, art: '🧛‍♀️', bg: 'nuit', el: 'ombre', txt: "**Râle d'agonie :** invoque deux Squelettes 1/1.", dr: [{ do: 'summon', c: 'squelette', n: 2 }] },
-  licorne: { n: 'Chevalier licorne', t: 'm', cl: N, r: 'E', cost: 4, a: 3, h: 3, art: '🦄', bg: 'sacre', el: 'sacre', kw: ['charge', 'divine'], txt: '**Charge**. **Bouclier divin**' },
+  cavalier: { n: 'Cavalier des plaines', t: 'm', cl: N, r: 'C', cost: 3, a: 3, h: 1, art: '🐎', bg: 'plaine', el: 'physique', kw: ['charge'], txt: '**Charge**' },
+  templier: { n: 'Garde royal', t: 'm', cl: N, r: 'R', cost: 3, a: 2, h: 2, art: '⚜️', bg: 'sacre', el: 'sacre', kw: ['taunt', 'divine'], txt: '**Provocation**. **Bouclier divin**' },
+  soigneuse: { n: 'Druidesse sylvestre', t: 'm', cl: N, r: 'R', cost: 3, a: 3, h: 3, art: '🌿', bg: 'foret', el: 'nature', txt: '**Cri de guerre :** rend 3 PV.', bc: { cible: 'any', fx: [{ do: 'heal', n: 3, to: 'target' }] } },
+  sirene: { n: 'Sirène des récifs', t: 'm', cl: N, r: 'R', cost: 3, a: 2, h: 4, art: '🐬', bg: 'ocean', el: 'givre', txt: '**Cri de guerre :** **gèle** un ennemi.', bc: { cible: 'enemy', fx: [{ do: 'freeze', to: 'target' }] } },
+  ours: { n: 'Yéti des cimes', t: 'm', cl: N, r: 'C', cost: 4, a: 4, h: 5, art: '🐻', bg: 'foret', el: 'nature' },
+  croco: { n: 'Jeune troll', t: 'm', cl: N, r: 'C', cost: 4, a: 3, h: 5, art: '🐊', bg: 'ocean', el: 'nature', kw: ['taunt'], txt: '**Provocation**' },
+  pyromancien: { n: 'Pyromancien', t: 'm', cl: N, r: 'R', cost: 4, a: 3, h: 3, art: '🔥', bg: 'feu', el: 'feu', txt: '**Cri de guerre :** inflige 2 dégâts.', bc: { cible: 'any', fx: [{ do: 'dmg', n: 2, to: 'target' }] } },
+  harpie: { n: 'Chauve-souris géante', t: 'm', cl: N, r: 'R', cost: 4, a: 2, h: 4, art: '🌪️', bg: 'montagne', el: 'arcane', kw: ['wf'], txt: '**Furie des vents**' },
+  necro: { n: 'Nécromancien', t: 'm', cl: N, r: 'E', cost: 4, a: 2, h: 3, art: '🧛‍♀️', bg: 'nuit', el: 'ombre', txt: "**Râle d'agonie :** invoque deux Squelettes 1/1.", dr: [{ do: 'summon', c: 'squelette', n: 2 }] },
+  licorne: { n: 'Paladin', t: 'm', cl: N, r: 'E', cost: 4, a: 3, h: 3, art: '🦄', bg: 'sacre', el: 'sacre', kw: ['charge', 'divine'], txt: '**Charge**. **Bouclier divin**' },
   griffon: { n: 'Griffon royal', t: 'm', cl: N, r: 'E', cost: 5, a: 5, h: 3, art: '🦅', bg: 'or', el: 'or', kw: ['charge'], txt: '**Charge**' },
-  golem: { n: 'Golem de pierre', t: 'm', cl: N, r: 'C', cost: 5, a: 4, h: 5, art: '🗿', bg: 'pierre', el: 'physique', kw: ['taunt'], txt: '**Provocation**' },
+  golem: { n: 'Sentinelle naine', t: 'm', cl: N, r: 'C', cost: 5, a: 4, h: 5, art: '🗿', bg: 'pierre', el: 'physique', kw: ['taunt'], txt: '**Provocation**' },
   geant: { n: 'Troll des collines', t: 'm', cl: N, r: 'C', cost: 6, a: 6, h: 7, art: '🧌', bg: 'montagne', el: 'physique' },
-  kraken: { n: 'Kraken des abysses', t: 'm', cl: N, r: 'E', cost: 6, a: 5, h: 6, art: '🐙', bg: 'ocean', el: 'givre', txt: '**Cri de guerre :** inflige 1 dégât à tous les autres serviteurs.', bc: { fx: [{ do: 'dmg', n: 1, to: 'otherMinions' }] } },
-  dragon: { n: 'Dragon de jade', t: 'm', cl: N, r: 'L', cost: 7, a: 6, h: 6, art: '🐉', bg: 'feu', el: 'feu', txt: '**Cri de guerre :** inflige 2 dégâts à tous les serviteurs ennemis.', bc: { fx: [{ do: 'dmg', n: 2, to: 'enemyMinions' }] } },
+  kraken: { n: 'Serpent de mer', t: 'm', cl: N, r: 'E', cost: 6, a: 5, h: 6, art: '🐙', bg: 'ocean', el: 'givre', txt: '**Cri de guerre :** inflige 1 dégât à tous les autres serviteurs.', bc: { fx: [{ do: 'dmg', n: 1, to: 'otherMinions' }] } },
+  dragon: { n: 'Ignis, drake infernal', t: 'm', cl: N, r: 'L', cost: 7, a: 6, h: 6, art: '🐉', bg: 'feu', el: 'feu', txt: '**Cri de guerre :** inflige 2 dégâts à tous les serviteurs ennemis.', bc: { fx: [{ do: 'dmg', n: 2, to: 'enemyMinions' }] } },
   ancien: { n: 'Ancien sylvestre', t: 'm', cl: N, r: 'E', cost: 7, a: 5, h: 8, art: '🌳', bg: 'foret', el: 'nature', kw: ['taunt'], txt: '**Provocation**' },
   liche: { n: 'Liche millénaire', t: 'm', cl: N, r: 'L', cost: 8, a: 6, h: 6, art: '☠️', bg: 'nuit', el: 'ombre', txt: '**Cri de guerre :** détruit tous les autres serviteurs.', bc: { fx: [{ do: 'destroy', to: 'otherMinions' }] } },
   // Mage
@@ -953,32 +962,32 @@ const CARDS = {
   explosion: { n: 'Explosion des arcanes', t: 's', cl: 'mage', r: 'C', cost: 2, art: '💥', bg: 'arcane', el: 'arcane', txt: 'Inflige 1 dégât à tous les serviteurs ennemis.', sp: { fx: [{ do: 'dmg', n: 1, to: 'enemyMinions' }] } },
   intel: { n: 'Intelligence des arcanes', t: 's', cl: 'mage', r: 'C', cost: 3, art: '🔮', bg: 'arcane', el: 'arcane', txt: 'Piochez 2 cartes.', sp: { fx: [{ do: 'draw', n: 2 }] } },
   boule: { n: 'Boule de feu', t: 's', cl: 'mage', r: 'R', cost: 4, art: '☄️', bg: 'feu', el: 'feu', txt: 'Inflige 6 dégâts.', sp: { cible: 'any', fx: [{ do: 'dmg', n: 6, to: 'target' }] } },
-  elementaire: { n: "Élémentaire d'eau", t: 'm', cl: 'mage', r: 'E', cost: 4, a: 3, h: 6, art: '🌊', bg: 'glace', el: 'givre', kw: ['freezer'], txt: '**Gèle** tout personnage blessé par ce serviteur.' },
-  wyrm: { n: 'Wyrm de givre', t: 'm', cl: 'mage', r: 'L', cost: 7, a: 5, h: 6, art: '🐲', bg: 'glace', el: 'givre', txt: '**Cri de guerre :** **gèle** tous les ennemis.', bc: { fx: [{ do: 'freeze', to: 'enemies' }] } },
+  elementaire: { n: 'Triton des marées', t: 'm', cl: 'mage', r: 'E', cost: 4, a: 3, h: 6, art: '🌊', bg: 'glace', el: 'givre', kw: ['freezer'], txt: '**Gèle** tout personnage blessé par ce serviteur.' },
+  wyrm: { n: 'Azur, drake des tempêtes', t: 'm', cl: 'mage', r: 'L', cost: 7, a: 5, h: 6, art: '🐲', bg: 'glace', el: 'givre', txt: '**Cri de guerre :** **gèle** tous les ennemis.', bc: { fx: [{ do: 'freeze', to: 'enemies' }] } },
   // Guerrier
   tourbillon: { n: 'Tourbillon', t: 's', cl: 'guerrier', r: 'C', cost: 1, art: '🌀', bg: 'sang', el: 'physique', txt: 'Inflige 1 dégât à TOUS les serviteurs.', sp: { fx: [{ do: 'dmg', n: 1, to: 'minions' }] } },
   grace: { n: 'Coup de grâce', t: 's', cl: 'guerrier', r: 'R', cost: 1, art: '🗡️', bg: 'sang', el: 'physique', txt: 'Détruit un serviteur ennemi blessé.', sp: { cible: 'enemyMinionDamaged', fx: [{ do: 'destroy', to: 'target' }] } },
   blocage: { n: 'Blocage au bouclier', t: 's', cl: 'guerrier', r: 'C', cost: 3, art: '🛡️', bg: 'or', el: 'or', txt: "Gagnez 5 points d'armure. Piochez une carte.", sp: { fx: [{ do: 'armor', n: 5 }, { do: 'draw', n: 1 }] } },
-  berserker: { n: 'Berserker', t: 'm', cl: 'guerrier', r: 'R', cost: 3, a: 2, h: 4, art: '🪓', bg: 'sang', el: 'physique', txt: 'Chaque fois que ce serviteur subit des dégâts, il gagne +2 ATQ.', onDmg: [{ do: 'buff', a: 2, to: 'self' }] },
+  berserker: { n: 'Berserker orc', t: 'm', cl: 'guerrier', r: 'R', cost: 3, a: 2, h: 4, art: '🪓', bg: 'sang', el: 'physique', txt: 'Chaque fois que ce serviteur subit des dégâts, il gagne +2 ATQ.', onDmg: [{ do: 'buff', a: 2, to: 'self' }] },
   chef: { n: 'Chef de guerre', t: 'm', cl: 'guerrier', r: 'E', cost: 4, a: 3, h: 3, art: '📯', bg: 'or', el: 'or', txt: '**Cri de guerre :** donne +1/+1 à vos autres serviteurs.', bc: { fx: [{ do: 'buff', a: 1, h: 1, to: 'otherFriendMinions' }] } },
-  gorrak: { n: "Gorrak l'Implacable", t: 'm', cl: 'guerrier', r: 'L', cost: 8, a: 4, h: 9, art: '👹', bg: 'sang', el: 'physique', kw: ['charge'], txt: '**Charge**. Chaque fois que ce serviteur subit des dégâts, il gagne +3 ATQ.', onDmg: [{ do: 'buff', a: 3, to: 'self' }] },
+  gorrak: { n: 'Gorrak, souverain orc', t: 'm', cl: 'guerrier', r: 'L', cost: 8, a: 4, h: 9, art: '👹', bg: 'sang', el: 'physique', kw: ['charge'], txt: '**Charge**. Chaque fois que ce serviteur subit des dégâts, il gagne +3 ATQ.', onDmg: [{ do: 'buff', a: 3, to: 'self' }] },
   // Prêtresse
   chatiment: { n: 'Châtiment', t: 's', cl: 'pretresse', r: 'C', cost: 1, art: '⚡', bg: 'sacre', el: 'sacre', txt: 'Inflige 2 dégâts.', sp: { cible: 'any', fx: [{ do: 'dmg', n: 2, to: 'target' }] } },
   benediction: { n: 'Bénédiction', t: 's', cl: 'pretresse', r: 'C', cost: 1, art: '🙏', bg: 'sacre', el: 'sacre', txt: 'Donne +2 PV à un serviteur. Piochez une carte.', sp: { cible: 'minion', fx: [{ do: 'buff', h: 2, to: 'target' }, { do: 'draw', n: 1 }] } },
   clerc: { n: 'Clerc du temple', t: 'm', cl: 'pretresse', r: 'R', cost: 1, a: 1, h: 3, art: '🕯️', bg: 'sacre', el: 'sacre', txt: "Chaque fois qu'un serviteur est soigné, piochez une carte.", onHeal: true },
   nova: { n: 'Nova sacrée', t: 's', cl: 'pretresse', r: 'E', cost: 6, art: '🌟', bg: 'sacre', el: 'sacre', txt: 'Inflige 2 dégâts à tous les ennemis. Rend 2 PV à tous les personnages alliés.', sp: { fx: [{ do: 'dmg', n: 2, to: 'enemies' }, { do: 'heal', n: 2, to: 'friends' }] } },
-  ange: { n: "Ange de l'aube", t: 'm', cl: 'pretresse', r: 'L', cost: 7, a: 5, h: 7, art: '👼', bg: 'sacre', el: 'sacre', kw: ['taunt'], txt: '**Provocation**. **Cri de guerre :** rend 10 PV à votre héros.', bc: { fx: [{ do: 'heal', n: 10, to: 'myHero' }] } },
+  ange: { n: "Shyde de l'aube", t: 'm', cl: 'pretresse', r: 'L', cost: 7, a: 5, h: 7, art: '👼', bg: 'sacre', el: 'sacre', kw: ['taunt'], txt: '**Provocation**. **Cri de guerre :** rend 10 PV à votre héros.', bc: { fx: [{ do: 'heal', n: 10, to: 'myHero' }] } },
   // Rôdeuse
   fleche: { n: 'Flèche précise', t: 's', cl: 'rodeuse', r: 'C', cost: 1, art: '🎯', bg: 'foret', el: 'physique', txt: 'Inflige 2 dégâts.', sp: { cible: 'any', fx: [{ do: 'dmg', n: 2, to: 'target' }] } },
   pistage: { n: 'Pistage', t: 's', cl: 'rodeuse', r: 'C', cost: 1, art: '👣', bg: 'foret', el: 'nature', txt: 'Piochez 2 cartes.', sp: { fx: [{ do: 'draw', n: 2 }] } },
-  meute: { n: 'Lâchez la meute', t: 's', cl: 'rodeuse', r: 'R', cost: 2, art: '🐾', bg: 'nuit', el: 'nature', txt: 'Pour chaque serviteur ennemi, invoque un Louveteau 1/1 avec **Charge**.', sp: { fx: [{ do: 'summon', c: 'louveteau', per: 'enemyMinion' }] } },
+  meute: { n: 'Appel des gobelins', t: 's', cl: 'rodeuse', r: 'R', cost: 2, art: '🐾', bg: 'nuit', el: 'nature', txt: 'Pour chaque serviteur ennemi, invoque un Gobelin empaleur 1/1 avec **Charge**.', sp: { fx: [{ do: 'summon', c: 'louveteau', per: 'enemyMinion' }] } },
   tirmultiple: { n: 'Tir multiple', t: 's', cl: 'rodeuse', r: 'R', cost: 3, art: '🌠', bg: 'foret', el: 'physique', txt: 'Inflige 3 dégâts à deux serviteurs ennemis aléatoires.', sp: { fx: [{ do: 'dmg', n: 3, to: 'randEnemyMinions', k: 2 }] } },
-  dresseuse: { n: 'Dresseuse de bêtes', t: 'm', cl: 'rodeuse', r: 'R', cost: 3, a: 3, h: 3, art: '🦊', bg: 'foret', el: 'nature', txt: '**Cri de guerre :** donne +2/+2 à un serviteur allié.', bc: { cible: 'friendlyMinion', fx: [{ do: 'buff', a: 2, h: 2, to: 'target' }] } },
-  panthere: { n: 'Panthère des ombres', t: 'm', cl: 'rodeuse', r: 'E', cost: 3, a: 3, h: 3, art: '🐆', bg: 'nuit', el: 'ombre', kw: ['charge'], txt: '**Charge**' },
-  fenris: { n: 'Fenris, roi des loups', t: 'm', cl: 'rodeuse', r: 'L', cost: 6, a: 4, h: 4, art: '🐺', bg: 'glace', el: 'nature', txt: '**Cri de guerre :** invoque deux Loups gris.', bc: { fx: [{ do: 'summon', c: 'loup', n: 2 }] } },
+  dresseuse: { n: 'Maître-chasseur', t: 'm', cl: 'rodeuse', r: 'R', cost: 3, a: 3, h: 3, art: '🦊', bg: 'foret', el: 'nature', txt: '**Cri de guerre :** donne +2/+2 à un serviteur allié.', bc: { cible: 'friendlyMinion', fx: [{ do: 'buff', a: 2, h: 2, to: 'target' }] } },
+  panthere: { n: 'Rôdeur des ombres', t: 'm', cl: 'rodeuse', r: 'E', cost: 3, a: 3, h: 3, art: '🐆', bg: 'nuit', el: 'ombre', kw: ['charge'], txt: '**Charge**' },
+  fenris: { n: 'Haut seigneur elfe', t: 'm', cl: 'rodeuse', r: 'L', cost: 6, a: 4, h: 4, art: '🐺', bg: 'glace', el: 'nature', txt: '**Cri de guerre :** invoque deux Archers elfes.', bc: { fx: [{ do: 'summon', c: 'archere', n: 2 }] } },
   // Cartes créées en cours de partie
   squelette: { n: 'Squelette', t: 'm', cl: N, r: 'C', cost: 1, a: 1, h: 1, art: '🦴', bg: 'nuit', el: 'ombre', tok: 1 },
-  louveteau: { n: 'Louveteau', t: 'm', cl: 'rodeuse', r: 'C', cost: 1, a: 1, h: 1, art: '🐕', bg: 'foret', el: 'nature', kw: ['charge'], txt: '**Charge**', tok: 1 },
+  louveteau: { n: 'Gobelin empaleur', t: 'm', cl: 'rodeuse', r: 'C', cost: 1, a: 1, h: 1, art: '🐕', bg: 'foret', el: 'nature', kw: ['charge'], txt: '**Charge**', tok: 1 },
   piece: { n: 'La Pièce', t: 's', cl: N, r: 'C', cost: 0, art: '🪙', bg: 'or', el: 'or', txt: 'Gagnez 1 cristal de mana pour ce tour.', sp: { fx: [{ do: 'mana', n: 1 }] }, tok: 1 },
 };
 
@@ -1841,6 +1850,7 @@ let screen = 'menu';
 
 function go(name) {
   screen = name;
+  document.body.dataset.screen = name;
   for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== 's-' + name;
   closeModal();
   refreshWallet();
@@ -1914,7 +1924,7 @@ const FX = (() => {
     } else if (p.kind === 'ring') {
       g.globalCompositeOperation = 'lighter'; g.globalAlpha = Math.max(0, 1 - k) * 0.9;
       g.strokeStyle = p.col; g.lineWidth = p.w * (1 - k) + 1;
-      g.beginPath(); g.arc(p.x, p.y, p.r0 + (p.r1 - p.r0) * (1 - (1 - k) ** 3), 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(p.x, p.y, Math.max(0, p.r0 + (p.r1 - p.r0) * (1 - (1 - k) ** 3)), 0, Math.PI * 2); g.stroke();
     } else if (p.kind === 'confetti') {
       g.globalCompositeOperation = 'source-over'; g.globalAlpha = Math.min(1, (1 - k) * 3);
       g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.scale(1, Math.cos(p.t * p.flip));
@@ -1945,7 +1955,7 @@ const FX = (() => {
     g.globalAlpha = 1;
   }
   function tick(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
     last = now;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, W, H);
@@ -3102,6 +3112,7 @@ function welcome() {
 }
 
 function boot(data) {
+  document.body.dataset.screen = 'menu';
   makeGlitter();
   Profile.loadLocal();
   renderMenu();

@@ -1,0 +1,13 @@
+Images du dossier art/
+
+- art/cards/ : chaque illustration combine un portrait peint de « The Battle for Wesnoth »
+  (https://www.wesnoth.org, dépôt https://github.com/wesnoth/wesnoth, data/core/images/portraits/)
+  et un décor généré pour ce jeu (outils/illustrations.py, outils/portraits.py, correspondances dans outils/portraits.json).
+- art/fonds/ : paysages peints de « The Battle for Wesnoth » (data/core/images/story/ et data/core/images/maps/).
+
+Les images de Wesnoth sont l'œuvre des artistes de la communauté Wesnoth et sont distribuées
+sous licence GNU General Public License, version 2 ou ultérieure (https://www.gnu.org/licenses/old-licenses/gpl-2.0.html).
+Les images dérivées de ce dossier sont donc distribuées sous la même licence.
+
+- art/*.webp (icônes des pouvoirs héroïques) : Fluent Emoji 3D, © Microsoft Corporation, licence MIT
+  (https://github.com/microsoft/fluentui-emoji).
