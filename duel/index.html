@@ -486,7 +486,7 @@ h3 { font-size: 21px; color: var(--or-2); }
 #flash .card { --w: min(210px, 50vw); }
 #flash .flip .cb, .slot .cb { position: absolute; inset: 0; }
 #turnban { position: absolute; left: 0; right: 0; top: 40%; text-align: center; pointer-events: none; z-index: 26; }
-#turnban span {
+#turnban span, #bg-ban span {
   position: relative; display: inline-block; padding: 12px 30px; border-radius: 16px; overflow: hidden;
   font: 700 clamp(30px, 7.5vw, 50px)/1 var(--f-titre); color: var(--or-2);
   background: linear-gradient(180deg, rgba(40,30,90,.95), rgba(14,10,36,.95)); border: 1px solid rgba(244,194,79,.8);
@@ -494,7 +494,7 @@ h3 { font-size: 21px; color: var(--or-2); }
   text-shadow: 0 0 20px rgba(244,194,79,.6);
   animation: ban 1.5s ease-in-out forwards;
 }
-#turnban span::after { content: ''; position: absolute; top: 0; bottom: 0; width: 35%; left: -40%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent); animation: sweep 1.2s .15s ease-out forwards; }
+#turnban span::after, #bg-ban span::after { content: ''; position: absolute; top: 0; bottom: 0; width: 35%; left: -40%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent); animation: sweep 1.2s .15s ease-out forwards; }
 @keyframes sweep { to { left: 120%; } }
 @keyframes ban { 0% { opacity: 0; transform: scale(.6) rotateX(60deg); } 18%, 76% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-20px); } }
 #netwarn { position: absolute; left: 50%; top: 6px; transform: translateX(-50%); z-index: 20; font-size: 13px; padding: 4px 12px; border-radius: 999px; background: rgba(140,24,30,.92); border: 1px solid var(--cible); white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
@@ -712,6 +712,173 @@ h3 { font-size: 21px; color: var(--or-2); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
 }
+[hidden] { display: none !important; }
+
+/* ---------- Champs de bataille ---------- */
+:root {
+  --bmw: clamp(40px, min(calc((100vw - 64px) / 7), 10.2vh), 92px);
+  --bcw: clamp(50px, min(calc((100vw - 36px) / 6.6), 12.5vh), 104px);
+}
+body[data-screen="bg"] #scene { background-image: linear-gradient(180deg, rgba(8,6,24,.5), rgba(8,6,24,.86)), url(art/fonds/pont.webp); }
+body[data-screen="bgpick"] #scene { background-image: linear-gradient(180deg, rgba(8,6,24,.55), rgba(8,6,24,.93)), url(art/fonds/bataille.webp); }
+.bgscreen { overflow: hidden; }
+.bgx { position: relative; height: 100%; max-width: 1060px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; overflow: hidden; overflow: clip; }
+.bg-top { display: flex; align-items: center; gap: 6px; }
+.bg-top .iconbtn { width: 36px; height: 36px; font-size: 17px; border-radius: 10px; }
+.bg-lead { flex: 1; min-width: 0; display: flex; gap: clamp(3px, 1.2vw, 8px); justify-content: center; padding: 4px 0 8px; }
+.lead-e { --s: clamp(30px, min(9.2vw, 6.4vh), 52px); position: relative; width: var(--s); flex: none; cursor: pointer; border: 0; padding: 0; background: none; color: inherit; }
+.lead-e .lp { position: relative; width: var(--s); height: var(--s); border-radius: 50%; overflow: hidden; border: 2px solid rgba(244,194,79,.7); box-shadow: 0 2px 8px rgba(0,0,0,.7); background: #14112e; }
+.lead-e .lp .art { background-size: 175% auto; background-position: 50% 26%; }
+.lead-e.me .lp { border-color: #7dffad; box-shadow: 0 0 0 2px rgba(125,255,173,.35), 0 0 14px rgba(125,255,173,.65); }
+.lead-e .lhp { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); font: 900 11px/1 var(--f-texte); padding: 2px 5px; border-radius: 999px; background: linear-gradient(180deg, #ff7272, #b3121b); color: #fff; box-shadow: 0 1px 3px #000; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lead-e .lt { position: absolute; right: -5px; top: -4px; width: 16px; height: 16px; display: grid; place-items: center; font: 900 10px/1 var(--f-texte); font-style: normal; color: #3a2200; background: radial-gradient(circle at 35% 30%, #fff7cc, #ffd34d 50%, #b8770e); clip-path: polygon(50% 0, 63% 33%, 98% 36%, 71% 58%, 80% 94%, 50% 75%, 20% 94%, 29% 58%, 2% 36%, 37% 33%); }
+.lead-e .lar { position: absolute; left: -5px; top: -3px; font: 900 9px/1 var(--f-texte); font-style: normal; padding: 2px 3px; border-radius: 4px; background: linear-gradient(160deg, #eef3f8, #6f7c8c); color: #10161e; }
+.lead-e.dead .lp { filter: grayscale(1) brightness(.4); }
+.lead-e.dead .lhp { background: #3b3560; color: #cfc8f0; }
+.lead-e.hit .lp { animation: hit .5s ease-out; }
+.float.small { font-size: 18px; }
+.float.small::before { width: 44px; height: 44px; }
+
+.tavern {
+  flex: 1.15; min-height: 0; display: flex; flex-direction: column;
+  position: relative; border-radius: 18px; padding: 6px 8px 8px; border: 1px solid rgba(244,194,79,.6);
+  background: linear-gradient(180deg, rgba(52,30,10,.74), rgba(18,9,3,.9)), url(art/fonds/chateau.webp) center 40% / cover;
+  box-shadow: inset 0 0 40px rgba(0,0,0,.6), 0 0 0 3px rgba(8,6,22,.85), 0 8px 26px rgba(0,0,0,.45);
+}
+.tav-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.tav-name { flex: 1; min-width: 0; font: 700 clamp(15px, 4.2vw, 21px)/1 var(--f-titre); color: var(--or-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 6px #000; }
+.tav-name .stars { color: #ffd34d; letter-spacing: 1px; font-size: .82em; text-shadow: 0 0 8px rgba(255,200,60,.9); }
+.tbtn { display: inline-flex; align-items: center; gap: 3px; padding: 7px 10px; border-radius: 999px; cursor: pointer; font: 800 14px/1 var(--f-texte); color: var(--texte); white-space: nowrap; border: 1px solid rgba(255,255,255,.25); background: linear-gradient(180deg, rgba(92,70,160,.95), rgba(38,26,84,.95)); box-shadow: 0 2px 8px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.25); }
+.tbtn:disabled { opacity: .45; cursor: default; }
+.tbtn.up { background: linear-gradient(180deg, #ffe7a0, var(--or) 55%, #c97d14); color: #2b1600; border-color: #fff1c4; }
+.tbtn.on { background: linear-gradient(180deg, #eefaff, #8fd8ff 55%, #2b8fd6); color: #03253d; border-color: #eefaff; }
+.tbtn .coin { width: 14px; height: 14px; }
+.lane.shop, .lane.warband { flex: 1; min-height: 64px; gap: clamp(4px, 1.4vw, 12px); flex-wrap: nowrap; }
+.lane.shop { border-radius: 14px; transition: box-shadow .3s, background .3s; }
+.lane.shop.frozen { background: linear-gradient(180deg, rgba(160,220,255,.22), rgba(90,170,255,.12)); box-shadow: inset 0 0 0 2px rgba(190,235,255,.75), inset 0 0 26px rgba(120,200,255,.55); }
+.lane.shop.frozen .bgm .portrait .art::before { content: ''; position: absolute; inset: 0; z-index: 2; border-radius: inherit; background: linear-gradient(160deg, rgba(220,248,255,.55), rgba(120,200,255,.25)); }
+
+.warband-wrap {
+  flex: 1; min-height: 0; display: flex;
+  position: relative; border-radius: 18px; padding: 8px 6px; border: 1px solid rgba(244,194,79,.45);
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(255,214,140,.12), transparent 70%), linear-gradient(180deg, rgba(14,10,30,.42), rgba(14,10,30,.62)), url(art/fonds/bataille.webp) center 55% / cover;
+  box-shadow: inset 0 0 44px rgba(0,0,0,.65), 0 0 0 3px rgba(8,6,22,.85);
+}
+.warband-wrap .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--texte-doux); font-size: 14px; pointer-events: none; text-align: center; padding: 0 16px; }
+.tavern, .warband-wrap { transition: box-shadow .2s; }
+.dropok { box-shadow: 0 0 0 2px var(--jouable), 0 0 24px rgba(77,255,160,.55), inset 0 0 44px rgba(0,0,0,.6) !important; }
+.dropsell { box-shadow: 0 0 0 2px #ffd34d, 0 0 26px rgba(255,211,77,.6), inset 0 0 44px rgba(0,0,0,.6) !important; }
+.dropsell::after { content: 'Relâche ici pour vendre : +1 or'; position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; text-align: center; font: 700 clamp(17px, 4.6vw, 24px)/1.1 var(--f-titre); color: #ffe9a6; background: rgba(30,18,4,.72); border-radius: inherit; pointer-events: none; }
+
+.bgm { --w: var(--bmw); --tc: var(--neutre); touch-action: none; transition: transform .18s; }
+.bgm .portrait { background: linear-gradient(150deg, color-mix(in srgb, var(--tc) 45%, #fff), var(--tc) 40%, color-mix(in srgb, var(--tc) 50%, #000)); background-color: var(--tc); }
+.bgm.golden .portrait { background: conic-gradient(from var(--ang), #fff8d8, #ffc93a, #fffbe8, #c88a10, #ffe27a, #fff8d8); animation: ang 3s linear infinite; box-shadow: 0 .2em .5em rgba(0,0,0,.7), 0 0 1em rgba(255,200,60,.85); }
+.bgm.golden::after { content: '♛'; position: absolute; left: 50%; top: -.8em; transform: translateX(-50%); z-index: 3; font: 1.05em/1 serif; color: #ffe08a; text-shadow: 0 0 .3em #ff9f1a, 0 .06em 0 #7a4100; }
+.bgm.reborn .portrait::before { content: ''; position: absolute; inset: -.18em; border-radius: inherit; z-index: -1; background: radial-gradient(ellipse, rgba(201,168,255,.0) 55%, rgba(201,168,255,.75) 70%, transparent 76%); animation: pulse 2s ease-in-out infinite; }
+.bgm .tierb { position: absolute; left: -.3em; top: -.32em; z-index: 6; width: 1.4em; height: 1.4em; display: grid; place-items: center; font: 900 .62em/1 var(--f-texte); color: #3a2200; background: radial-gradient(circle at 35% 30%, #fff7cc, #ffd34d 50%, #b8770e); clip-path: polygon(50% 0, 63% 33%, 98% 36%, 71% 58%, 80% 94%, 50% 75%, 20% 94%, 29% 58%, 2% 36%, 37% 33%); }
+.bgm.sel { transform: translateY(-8%) scale(1.08); z-index: 3; }
+.bgm.lifted, .bg-hand .card.lifted { opacity: .3; }
+.bgm.buffpop .stat { animation: statpop .5s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes statpop { 40% { transform: scale(1.5); filter: brightness(1.6); } }
+.bgm.soc .portrait { box-shadow: 0 0 0 .18em #ffe28a, 0 0 1.4em #ffb347 !important; }
+.bgghost { position: fixed; z-index: 70; pointer-events: none; margin: 0; transform: translate(-50%, -50%) scale(1.15) rotate(-4deg); filter: drop-shadow(0 16px 18px rgba(0,0,0,.65)); }
+.ph { width: var(--bmw); height: calc(var(--bmw) * 1.25); flex: none; border-radius: 50% / 44%; border: 2px dashed rgba(125,255,173,.85); background: rgba(125,255,173,.12); }
+
+.bg-mid { display: flex; align-items: center; justify-content: center; gap: clamp(8px, 3vw, 22px); }
+.bg-mid .hero { --w: clamp(50px, min(14vw, 9vh), 82px); }
+.bg-mid .hero .portrait .art { background-size: 150% auto; }
+.roundtag { font: 700 15px var(--f-titre); color: var(--texte-doux); white-space: nowrap; }
+.bgpow { --s: clamp(40px, min(11vw, 7vh), 62px); margin: 0; }
+.bgpow::before { background: radial-gradient(circle at 50% 35%, #fff2c4, #c58bff 55%, #4b1f8f); }
+.bgpow.passive::before { background: radial-gradient(circle at 50% 35%, #e9fbff, #6fc3ff 55%, #154a8f); }
+.bgpow > span { font-size: .9em; color: #fff; text-shadow: 0 0 8px rgba(255,255,255,.8); }
+.bgpow.sel { box-shadow: 0 0 0 3px #fff, 0 0 18px #fff3b0; }
+.gem-gold { position: absolute; right: -.5em; top: -.45em; z-index: 3; width: 1.7em; height: 1.7em; display: grid; place-items: center; font-size: .5em; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff7cc, var(--or) 45%, var(--or-3)); box-shadow: 0 1px 4px rgba(0,0,0,.7); }
+.gem-gold b { font: 900 1.25em/1 var(--f-texte); color: #3a2200; }
+.goldbox { display: flex; align-items: baseline; gap: 6px; font: 900 24px/1 var(--f-texte); color: #ffe9a6; padding: 8px 14px; border-radius: 999px; background: rgba(10,8,26,.78); border: 1px solid rgba(244,194,79,.55); box-shadow: 0 0 18px rgba(244,194,79,.2); font-variant-numeric: tabular-nums; }
+.goldbox .coin { width: 22px; height: 22px; align-self: center; }
+.goldbox small { font-size: 14px; color: var(--texte-doux); }
+
+.bg-hand { height: clamp(92px, 18vh, 176px); flex: none; display: flex; justify-content: center; align-items: center; }
+.bg-hand .card { --w: var(--bcw); cursor: pointer; touch-action: none; transition: transform .18s; }
+.bg-hand .card + .card { margin-left: var(--ov, 4px); }
+.bg-hand .card.sel { transform: translateY(-10%) scale(1.08); z-index: 3; box-shadow: 0 0 0 3px #fff, 0 0 18px #fff3b0; }
+.bg-hand .empty { align-self: center; color: var(--texte-doux); font-size: 13px; }
+.card .gem-tier { position: absolute; left: -.5em; top: -.5em; z-index: 6; width: 2.5em; height: 2.5em; display: grid; place-items: center; filter: drop-shadow(0 .08em .2em rgba(0,0,0,.7)); }
+.card .gem-tier::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 38% 30%, #fffbe0, #ffd34d 42%, #b8770e 80%); clip-path: polygon(50% 0, 63% 33%, 98% 36%, 71% 58%, 80% 94%, 50% 75%, 20% 94%, 29% 58%, 2% 36%, 37% 33%); }
+.card .gem-tier b { position: relative; top: .1em; font: 900 1.05em/1 var(--f-texte); color: #3a2200; }
+.card .tribe { position: absolute; left: 50%; bottom: -.35em; transform: translateX(-50%); z-index: 6; font: 800 .55em/1 var(--f-texte); letter-spacing: .1em; text-transform: uppercase; padding: .38em .8em; border-radius: 999px; color: #fff; white-space: nowrap; background: color-mix(in srgb, var(--tc) 62%, #000); border: .12em solid color-mix(in srgb, var(--tc) 55%, #fff); box-shadow: 0 .1em .3em rgba(0,0,0,.6); }
+.card.bgc .panel { bottom: 1.6em; }
+.card.golden { background-image: var(--glitter, none), conic-gradient(from var(--ang), #fff8d8, #ffc93a, #fffbe8, #c88a10, #ffe27a, #fff8d8); background-size: 120px 120px, auto; animation: ang 3s linear infinite; box-shadow: 0 .35em 1.1em rgba(0,0,0,.6), 0 0 1.4em rgba(255,200,60,.75); }
+.card.golden .prism { opacity: .35; }
+
+.bg-bar { display: flex; align-items: center; gap: 8px; min-height: 54px; padding: 0 2px 6px; }
+.bg-bar .left { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.bg-bar .info { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.2; }
+.bg-bar .info > b { display: block; font: 700 16px/1.1 var(--f-titre); color: var(--or-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bg-bar .info .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bg-bar .info .t b { color: var(--or-2); }
+.bg-bar .info .prompt { color: #ff8a6a; font-weight: 800; }
+.bg-bar .acts { display: flex; gap: 6px; flex: none; }
+.bg-bar .btn { padding: 8px 11px; font-size: 15px; display: inline-flex; gap: 4px; align-items: center; }
+.bg-bar .btn .coin { width: 14px; height: 14px; }
+.fight { flex: none; font: 700 clamp(15px, 4.2vw, 19px)/1 var(--f-titre); padding: 13px 16px; border-radius: 999px; cursor: pointer; color: #fff; border: 1px solid #ffd0b0; background: linear-gradient(180deg, #ff9a5a, #e2402a 55%, #9a1a14); box-shadow: 0 6px 20px rgba(226,64,42,.45), inset 0 1px 0 rgba(255,255,255,.55); text-shadow: 0 1px 2px rgba(0,0,0,.6); white-space: nowrap; }
+.fight:disabled { background: linear-gradient(180deg, #3b3560, #241f45); color: #9890bd; border-color: #4a4378; box-shadow: none; cursor: default; }
+.fight.go { animation: fglow 1.3s ease-in-out infinite; }
+@keyframes fglow { 50% { box-shadow: 0 0 30px #ff7a3d, inset 0 1px 0 rgba(255,255,255,.55); transform: scale(1.04); } }
+
+#bg-ban { position: absolute; left: 0; right: 0; top: 42%; text-align: center; pointer-events: none; z-index: 45; }
+#bg-ban.gold span { color: #fff3c4; border-color: #ffd34d; box-shadow: 0 0 50px rgba(255,200,60,.6), 0 20px 50px rgba(0,0,0,.5); }
+
+#bg-arena { position: absolute; inset: 0; z-index: 30; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; padding: 8px 6px; border-radius: 0; overflow: hidden;
+  background: linear-gradient(180deg, rgba(8,6,24,.45), rgba(8,6,24,.78)), url(art/fonds/cote.webp) center / cover; }
+.ar-hero { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.ar-hero .hero { --w: clamp(56px, min(16vw, 11vh), 92px); }
+.ar-hero .nm { display: flex; flex-direction: column; gap: 3px; font: 700 clamp(16px, 4.4vw, 21px)/1.1 var(--f-titre); color: var(--or-2); text-shadow: 0 2px 6px #000; }
+.ar-hero .nm small { font: 600 13px var(--f-texte); color: var(--texte-doux); }
+.ar-hero.ghost .hero { filter: grayscale(.7) brightness(.8) drop-shadow(0 0 10px #b9a6ff); }
+.ar-board { position: relative; display: grid; grid-template-rows: 1fr 1fr; gap: 10px; padding: 10px 4px; border-radius: 22px; border: 1px solid rgba(244,194,79,.45);
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(255,214,140,.14), transparent 70%), linear-gradient(180deg, rgba(14,10,30,.35), rgba(14,10,30,.6)), url(art/fonds/bataille.webp) center / cover;
+  box-shadow: inset 0 0 50px rgba(0,0,0,.65), 0 0 0 4px rgba(8,6,22,.85), 0 0 40px rgba(255,120,40,.18); }
+.ar-board::after { content: ''; position: absolute; left: 4%; right: 4%; top: 50%; height: 2px; background: linear-gradient(90deg, transparent, rgba(255,140,60,.8), rgba(255,255,255,.95), rgba(255,140,60,.8), transparent); box-shadow: 0 0 14px rgba(255,120,40,.7); pointer-events: none; }
+.ar-board .lane { gap: clamp(3px, 1.2vw, 10px); }
+.ar-ctl { position: absolute; left: 6px; bottom: 8px; z-index: 9; display: flex; flex-direction: column; gap: 5px; }
+.ar-ctl button { padding: 5px 9px; border-radius: 999px; cursor: pointer; font: 800 13px var(--f-texte); color: var(--texte); border: 1px solid rgba(255,255,255,.25); background: rgba(14,10,36,.8); }
+#ar-res { position: absolute; left: 0; right: 0; top: 44%; z-index: 9; text-align: center; pointer-events: none; transform: translateY(-50%); }
+#ar-res span { display: inline-block; font: 700 clamp(44px, 12vw, 76px)/1 var(--f-titre); padding: 4px 20px; animation: respop .7s cubic-bezier(.2, 1.5, .4, 1); background: linear-gradient(180deg, #fffbe8, var(--or) 60%, #c27a12); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 22px rgba(244,194,79,.7)) drop-shadow(0 4px 0 rgba(0,0,0,.6)); }
+#ar-res.lose span { background: linear-gradient(180deg, #ffe0e0, #ff5a4a 60%, #8a1010); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 0 22px rgba(255,60,40,.6)) drop-shadow(0 4px 0 rgba(0,0,0,.6)); }
+#ar-res.draw span { background: linear-gradient(180deg, #ffffff, #b9b0da); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 4px 0 rgba(0,0,0,.6)); }
+@keyframes respop { from { transform: scale(2.4); opacity: 0; } }
+.vs { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; gap: 3vw; pointer-events: none; background: radial-gradient(circle, rgba(255,110,40,.3), rgba(5,4,14,.9) 70%); animation: vsbg 1.5s ease forwards; }
+.vs .vh { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; max-width: 36vw; }
+.vs .vh b { font: 700 clamp(16px, 4.6vw, 26px)/1.1 var(--f-titre); color: var(--or-2); text-shadow: 0 2px 8px #000; }
+.vs .vh .hero { --w: clamp(84px, 27vw, 170px); }
+.vs .vh.l { animation: vsl 1.5s cubic-bezier(.2, .9, .3, 1) forwards; }
+.vs .vh.r { animation: vsr 1.5s cubic-bezier(.2, .9, .3, 1) forwards; }
+.vs .vx { font: 700 clamp(48px, 13vw, 96px)/1 var(--f-titre); color: #fff3c4; text-shadow: 0 0 20px #ff7a2f, 0 0 46px #ff2d55, 0 4px 0 #6a1a00; animation: vsx 1.5s ease forwards; }
+@keyframes vsbg { 0% { opacity: 0; } 12%, 80% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes vsl { 0% { transform: translateX(-70vw) rotate(-12deg); opacity: 0; } 26%, 82% { transform: none; opacity: 1; } 100% { transform: translateX(-12vw); opacity: 0; } }
+@keyframes vsr { 0% { transform: translateX(70vw) rotate(12deg); opacity: 0; } 26%, 82% { transform: none; opacity: 1; } 100% { transform: translateX(12vw); opacity: 0; } }
+@keyframes vsx { 0%, 18% { transform: scale(4); opacity: 0; } 30% { transform: scale(.9); opacity: 1; } 38%, 82% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+#bg-over { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; padding: 10px; background: rgba(5,4,14,.8); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); overflow-y: auto; }
+.box.wide { width: min(720px, 100%); }
+.disc { display: flex; gap: clamp(8px, 2.5vw, 18px); justify-content: center; flex-wrap: wrap; perspective: 900px; }
+.disc .card { --w: clamp(96px, 28vw, 190px); cursor: pointer; transition: transform .2s; animation: enter .5s cubic-bezier(.2, 1.4, .4, 1) both; }
+.disc .card:nth-child(2) { animation-delay: .1s; }
+.disc .card:nth-child(3) { animation-delay: .2s; }
+@media (hover: hover) and (pointer: fine) { .disc .card:hover { transform: translateY(-6px) scale(1.04); } }
+.endboard { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+.endboard .bgm { --w: clamp(36px, 10vw, 58px); }
+.bgbtn { position: relative; background: linear-gradient(180deg, #ffb27a, #e2402a 55%, #8f1610) !important; border-color: #ffd0b0 !important; color: #fff !important; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.bgbtn .new { position: absolute; right: -6px; top: -9px; font: 800 10px/1 var(--f-texte); letter-spacing: .12em; text-transform: uppercase; padding: 4px 7px; border-radius: 999px; background: linear-gradient(90deg, #ff3fb4, #4fd8ff, #ffe04f); color: #1a0830; text-shadow: none; }
+@media (min-width: 760px) and (min-height: 640px) {
+  .bgx { gap: 8px; }
+  .bg-bar { min-height: 60px; }
+}
+@media (max-height: 640px) {
+  .bg-lead { padding-bottom: 6px; }
+}
+.hero-tile .pw b { font: inherit; font-weight: 800; color: var(--or-2); }
 </style>
 
 <div id="scene" aria-hidden="true"></div>
@@ -726,6 +893,8 @@ h3 { font-size: 21px; color: var(--or-2); }
       <p class="lede">Choisis un héros, pose tes serviteurs, lance tes sorts et réduis le héros adverse à zéro.</p>
       <div class="fan" id="menu-fan"></div>
       <div class="menu-btns">
+        <button class="btn primary bgbtn" id="b-bg">Champs de bataille <span class="new">Nouveau</span></button>
+        <button class="btn primary" id="b-bgres" hidden>Reprendre ma partie</button>
         <button class="btn primary" id="b-ai">Jouer contre l'ordinateur</button>
         <button class="btn" id="b-online">Jouer en ligne avec un ami</button>
         <div class="menu-grid">
@@ -786,6 +955,15 @@ h3 { font-size: 21px; color: var(--or-2); }
           <li>Ton <b>pouvoir héroïque</b> coûte 2 mana et s'utilise une fois par tour.</li>
           <li>Celui qui joue en second reçoit <b>La Pièce</b> : 1 mana en plus, une seule fois.</li>
           <li>Si ta pioche est vide, tu subis de la <b>fatigue</b> : 1 dégât, puis 2, puis 3…</li>
+        </ul>
+        <h3>Champs de bataille</h3>
+        <ul>
+          <li>Huit héros s'affrontent. Chaque tour, tu <b>recrutes</b> à la taverne avec ton or (3 or par serviteur, revente +1 or, actualisation 1 or), puis ta troupe <b>combat automatiquement</b> un adversaire.</li>
+          <li>Les serviteurs attaquent de gauche à droite, chacun sur une cible au hasard (les <b>Provocations</b> d'abord). Le perdant subit des dégâts égaux au rang de taverne du gagnant plus le rang de ses serviteurs survivants.</li>
+          <li><b>Améliore ta taverne</b> pour trouver des serviteurs plus forts ; son prix baisse de 1 à chaque tour. <b>Geler</b> garde les mêmes serviteurs pour le tour suivant.</li>
+          <li>Trois exemplaires du même serviteur forment un <b>serviteur doré</b> (statistiques et effet doublés) ; en le jouant, tu découvres un serviteur du rang supérieur.</li>
+          <li>Cinq familles ont leurs synergies : <b>Dragons</b> (début du combat), <b>Morts-vivants</b> (réincarnation), <b>Orcs</b> (renforts), <b>Elfes</b> (croissance), <b>Chevaliers</b> (bouclier divin).</li>
+          <li>Le dernier héros debout gagne : 120 or et un orbe pour la 1re place, 80 pour la 2e, 50 dans le top 4, 20 sinon.</li>
         </ul>
         <h3>Mots-clés</h3>
         <ul id="rules-kw"></ul>
@@ -850,6 +1028,50 @@ h3 { font-size: 21px; color: var(--or-2); }
           <div class="cgrid" id="deck-pool"></div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section id="s-bgpick" class="screen" hidden>
+    <div class="screen-in">
+      <div class="topbar"><button class="back" data-go="menu">← Retour</button><span class="wallet" data-wallet></span></div>
+      <h2>Champs de bataille</h2>
+      <p class="muted">Huit héros, une seule couronne. Choisis ton héros, recrute ta troupe, combine les familles et sois le dernier debout.</p>
+      <div class="hero-grid" id="bgpick-grid"></div>
+    </div>
+  </section>
+
+  <section id="s-bg" class="screen bgscreen" hidden>
+    <div class="bgx">
+      <div class="bg-top">
+        <button class="iconbtn" id="bg-quit" aria-label="Menu de la partie">☰</button>
+        <div class="bg-lead" id="bg-lead"></div>
+        <button class="iconbtn" id="bg-help" aria-label="Comment jouer">?</button>
+      </div>
+      <div class="tavern" id="bg-tavern">
+        <div class="tav-head">
+          <div class="tav-name" id="bg-tier"></div>
+          <button class="tbtn up" id="bg-up"></button>
+          <button class="tbtn" id="bg-roll" aria-label="Actualiser la taverne"></button>
+          <button class="tbtn" id="bg-freeze"></button>
+        </div>
+        <div class="lane shop" id="bg-shop"></div>
+      </div>
+      <div class="bg-mid" id="bg-mid"></div>
+      <div class="warband-wrap" id="bg-warband">
+        <div class="lane warband" id="bg-board"></div>
+        <div class="empty" id="bg-band-empty">Ta troupe est vide : pose ici les serviteurs de ta main.</div>
+      </div>
+      <div class="bg-hand" id="bg-hand"></div>
+      <div class="bg-bar" id="bg-bar"></div>
+      <div id="bg-arena" hidden>
+        <div class="ar-hero" id="ar-them"></div>
+        <div class="ar-board"><div class="lane" id="ar-lane-them"></div><div class="lane" id="ar-lane-me"></div></div>
+        <div class="ar-hero" id="ar-me"></div>
+        <div class="ar-ctl"><button id="ar-speed">×1</button><button id="ar-skip">Passer ▶▶</button></div>
+        <div id="ar-res" hidden></div>
+      </div>
+      <div id="bg-ban" hidden></div>
+      <div id="bg-over" hidden></div>
     </div>
   </section>
 
@@ -1700,6 +1922,2208 @@ function guestTable(net, gid, hello) {
 }
 
 
+// ===================== Champs de bataille : moteur de règles =====================
+// Un seul identifiant global : BG. État 100 % JSON, aléatoire déterministe (graine).
+const BG = (function () {
+  'use strict';
+
+  // ------------------------------------------------------------------ Données
+  const TRIBES = {
+    bete: { id: 'bete', name: 'Orc', plural: 'Orcs', sym: '🪓', col: '#8fd14f' },
+    elem: { id: 'elem', name: 'Elfe', plural: 'Elfes', sym: '🍃', col: '#3fd0b0' },
+    mort: { id: 'mort', name: 'Mort-vivant', plural: 'Morts-vivants', sym: '💀', col: '#b08cff' },
+    chev: { id: 'chev', name: 'Chevalier', plural: 'Chevaliers', sym: '🛡️', col: '#ffd34d' },
+    drag: { id: 'drag', name: 'Dragon', plural: 'Dragons', sym: '🐉', col: '#ff7a3d' },
+    neutre: { id: 'neutre', name: 'Neutre', plural: 'Neutres', sym: '◆', col: '#c9d1db' },
+  };
+
+  const KEYWORDS = {
+    taunt: 'Provocation', divine: 'Bouclier divin', reborn: 'Réincarnation', wf: 'Furie des vents', venom: 'Toxique',
+  };
+
+  // Effets décrits par des données : { on: déclencheur, do: action, to: cible, ... }
+  //  déclencheurs : bc (cri de guerre), dr (râle d'agonie), soc (début du combat), eot (fin de tour),
+  //   sot (début de tour), sell (vente), play (après avoir joué un autre serviteur), summon (invocation d'un
+  //   autre serviteur), shield (perte d'un bouclier divin allié), death (mort d'un autre allié),
+  //   attack (ce serviteur attaque), hurt (ce serviteur subit des dégâts), aura (bonus d'ATQ passif)
+  //  « #n » dans les textes : valeur doublée pour la version dorée.
+  const MINION_LIST = [
+    // ---------------- Orcs ----------------
+    { id: 'sanglier', name: 'Pillard gobelin', tier: 1, tribe: 'bete', atk: 2, hp: 1, img: 'pillard', v: 2,
+      fx: [{ on: 'dr', do: 'summon', id: 'marcassin', n: 1 }],
+      txt: "**Râle d'agonie :** invoque un Gobelin #1/#1." },
+    { id: 'louveteau', name: 'Agitateur gobelin', tier: 1, tribe: 'bete', atk: 1, hp: 1, img: 'agitateur', v: 3,
+      fx: [{ on: 'bc', do: 'summon', id: 'chiot', n: 1 }],
+      txt: '**Cri de guerre :** invoque un Jeune gobelin #1/#1.' },
+    { id: 'renarde', name: 'Arbalétrier orc', tier: 2, tribe: 'bete', atk: 3, hp: 3, img: 'arbaletrier', v: 4,
+      fx: [{ on: 'summon', when: 'bete', do: 'buff', to: 'it', atk: 1, hp: 1 }],
+      txt: 'Chaque fois que vous invoquez un autre Orc, donne-lui +#1/+#1.' },
+    { id: 'loup', name: 'Archer orc', tier: 2, tribe: 'bete', atk: 2, hp: 3, img: 'archer_orc', v: 4,
+      fx: [{ on: 'aura', to: 'adj', atk: 2 }],
+      txt: 'Les serviteurs adjacents ont +#2 ATQ.' },
+    { id: 'ourse', name: 'Troll des collines', tier: 3, tribe: 'bete', atk: 4, hp: 4, img: 'troll', v: 6,
+      fx: [{ on: 'dr', do: 'summon', id: 'ourson', n: 2 }],
+      txt: "**Râle d'agonie :** invoque deux Jeunes trolls #2/#2." },
+    { id: 'griffon', name: 'Tueur orc', tier: 4, tribe: 'bete', atk: 4, hp: 5, img: 'tueur', kw: ['wf'], v: 5,
+      fx: [{ on: 'bc', do: 'buff', to: 'all', t: 'bete', ex: true, atk: 1, hp: 1 }],
+      txt: '**Furie des vents**. **Cri de guerre :** donne +#1/+#1 à vos autres Orcs.' },
+    { id: 'meute', name: 'Seigneur de guerre orc', tier: 5, tribe: 'bete', atk: 4, hp: 5, img: 'seigneur_guerre', v: 8,
+      fx: [{ on: 'summon', when: 'bete', do: 'buff', to: 'it', atk: 3, hp: 3 }],
+      txt: 'Chaque fois que vous invoquez un autre Orc, donne-lui +#3/+#3.' },
+    { id: 'fenris', name: 'Assassin de la horde', tier: 6, tribe: 'bete', atk: 6, hp: 6, img: 'assassin', v: 10,
+      fx: [{ on: 'dr', do: 'buff', to: 'all', t: 'bete', atk: 4, hp: 4 }],
+      txt: "**Râle d'agonie :** donne +#4/+#4 à vos Orcs." },
+
+    // ---------------- Elfes ----------------
+    { id: 'vague', name: 'Éclaireur elfe', tier: 1, tribe: 'elem', atk: 2, hp: 3, img: 'eclaireur', v: 2,
+      fx: [{ on: 'sell', do: 'addCard', id: 'goutte', n: 1 }],
+      txt: 'Quand vous vendez ce serviteur, ajoute une Pousse sylvestre #2/#2 à votre main.' },
+    { id: 'flamme', name: 'Chamane elfe', tier: 1, tribe: 'elem', atk: 1, hp: 2, img: 'chamane', v: 3,
+      fx: [{ on: 'bc', do: 'shopBuff', t: 'elem', atk: 1, hp: 1 }],
+      txt: '**Cri de guerre :** les Elfes de la taverne ont +#1/+#1 pour le reste de la partie.' },
+    { id: 'flocon', name: 'Combattant elfe', tier: 2, tribe: 'elem', atk: 3, hp: 2, img: 'combattant_elfe', v: 4,
+      fx: [{ on: 'play', when: 'elem', do: 'buff', to: 'rand', t: 'elem', ex: true, atk: 1, hp: 1 }],
+      txt: 'Après avoir joué un Elfe, donne +#1/+#1 à un autre Elfe allié aléatoire.' },
+    { id: 'cyclone', name: 'Capitaine elfe', tier: 2, tribe: 'elem', atk: 3, hp: 2, img: 'capitaine_elfe', v: 4,
+      fx: [{ on: 'bc', do: 'addCard', id: 'goutte', n: 1 }],
+      txt: '**Cri de guerre :** ajoute une Pousse sylvestre #2/#2 à votre main.' },
+    { id: 'tornade', name: 'Rôdeur elfe', tier: 3, tribe: 'elem', atk: 3, hp: 4, img: 'rodeur', kw: ['wf'], v: 5,
+      fx: [{ on: 'play', when: 'elem', do: 'buff', to: 'self', atk: 1, hp: 1 }],
+      txt: '**Furie des vents**. Après avoir joué un Elfe, gagne +#1/+#1.' },
+    { id: 'comete', name: 'Héros elfe', tier: 4, tribe: 'elem', atk: 4, hp: 4, img: 'heros_elfe', v: 5,
+      fx: [{ on: 'bc', do: 'buff', to: 'all', t: 'elem', ex: true, atk: 2, hp: 2 }],
+      txt: '**Cri de guerre :** donne +#2/+#2 à vos autres Elfes.' },
+    { id: 'titan', name: 'Wose ancestral', tier: 5, tribe: 'elem', atk: 4, hp: 7, img: 'wose', kw: ['taunt'], v: 8,
+      fx: [{ on: 'eot', do: 'buff', to: 'all', t: 'elem', ex: true, atk: 1, hp: 2 }],
+      txt: '**Provocation**. **À la fin de votre tour :** donne +#1/+#2 à vos autres Elfes.' },
+    { id: 'nova', name: 'Seigneur elfe', tier: 6, tribe: 'elem', atk: 6, hp: 6, img: 'seigneur_elfe', v: 10,
+      fx: [{ on: 'play', when: 'elem', do: 'buff', to: 'all', t: 'elem', ex: true, atk: 2, hp: 2 }],
+      txt: 'Après avoir joué un Elfe, donne +#2/+#2 à vos autres Elfes.' },
+
+    // ---------------- Morts-vivants ----------------
+    { id: 'squelette', name: 'Cadavre ambulant', tier: 1, tribe: 'mort', atk: 2, hp: 1, img: 'cadavre', kw: ['reborn'], v: 2,
+      txt: '**Réincarnation**' },
+    { id: 'veilleur', name: "Tireur d'os", tier: 1, tribe: 'mort', atk: 1, hp: 2, img: 'veilleur', v: 3,
+      fx: [{ on: 'bc', do: 'tribeBuff', t: 'mort', atk: 1, hp: 0 }],
+      txt: "**Cri de guerre :** vos Morts-vivants ont +#1 ATQ pour le reste de la partie, où qu'ils soient." },
+    { id: 'goule', name: 'Goule', tier: 2, tribe: 'mort', atk: 2, hp: 3, img: 'goule', v: 4,
+      fx: [{ on: 'death', do: 'buff', to: 'self', atk: 1, hp: 1 }],
+      txt: "Chaque fois qu'un autre serviteur allié meurt, gagne +#1/+#1." },
+    { id: 'vampire', name: 'Revenant', tier: 3, tribe: 'mort', atk: 3, hp: 3, img: 'revenant', kw: ['reborn'], v: 5,
+      fx: [{ on: 'attack', do: 'buff', to: 'self', atk: 1, hp: 1 }],
+      txt: "**Réincarnation**. Chaque fois qu'il attaque, gagne +#1/+#1." },
+    { id: 'capitaine', name: 'Ombre sépulcrale', tier: 3, tribe: 'mort', atk: 3, hp: 2, img: 'ombre', v: 5,
+      fx: [{ on: 'dr', do: 'summon', id: 'osselet', n: 2 }],
+      txt: "**Râle d'agonie :** invoque deux Squelettes errants #1/#1." },
+    { id: 'lame', name: 'Lame-de-mort', tier: 4, tribe: 'mort', atk: 4, hp: 2, img: 'lame', kw: ['venom', 'reborn'], v: 7,
+      txt: '**Toxique**. **Réincarnation**' },
+    { id: 'kraken', name: 'Spectre', tier: 5, tribe: 'mort', atk: 5, hp: 6, img: 'spectre', kw: ['reborn'], v: 8,
+      fx: [{ on: 'eot', do: 'tribeBuff', t: 'mort', atk: 1, hp: 0 }],
+      txt: '**Réincarnation**. **À la fin de votre tour :** vos Morts-vivants ont +#1 ATQ pour le reste de la partie.' },
+    { id: 'roi', name: 'Chevalier de la mort', tier: 6, tribe: 'mort', atk: 6, hp: 6, img: 'roi', v: 10,
+      fx: [{ on: 'soc', do: 'buff', to: 'all', t: 'mort', ex: true, atk: 2, hp: 0 },
+        { on: 'soc', do: 'kw', kw: 'reborn', to: 'all', t: 'mort', ex: true }],
+      txt: '**Au début du combat :** donne +#2 ATQ et **Réincarnation** à vos autres Morts-vivants.' },
+
+    // ---------------- Chevaliers ----------------
+    { id: 'ecuyer', name: 'Écuyer zélé', tier: 1, tribe: 'chev', atk: 2, hp: 1, img: 'ecuyer', kw: ['divine'], v: 2,
+      txt: '**Bouclier divin**' },
+    { id: 'cavalier', name: 'Cavalier dévoué', tier: 2, tribe: 'chev', atk: 2, hp: 2, img: 'cavalier', v: 4,
+      fx: [{ on: 'dr', do: 'kw', kw: 'divine', to: 'rand', rep: true }],
+      txt: "**Râle d'agonie :** donne **Bouclier divin** à un serviteur allié aléatoire.",
+      txtG: "**Râle d'agonie :** donne **Bouclier divin** à deux serviteurs alliés aléatoires." },
+    { id: 'templiere', name: 'Lancier ardent', tier: 2, tribe: 'chev', atk: 2, hp: 3, img: 'templiere', v: 4,
+      fx: [{ on: 'shield', do: 'buff', to: 'self', atk: 2, hp: 0 }],
+      txt: "Chaque fois qu'un serviteur allié perd son **Bouclier divin**, gagne +#2 ATQ." },
+    { id: 'licorne', name: 'Chevalier du royaume', tier: 3, tribe: 'chev', atk: 3, hp: 3, img: 'licorne', v: 5, target: {},
+      fx: [{ on: 'bc', do: 'buff', to: 'target', atk: 1, hp: 1 }, { on: 'bc', do: 'kw', kw: 'divine', to: 'target' }],
+      txt: '**Cri de guerre :** donne +#1/+#1 et **Bouclier divin** à un autre serviteur allié.' },
+    { id: 'gardien', name: 'Hallebardier', tier: 3, tribe: 'chev', atk: 2, hp: 4, img: 'gardien', kw: ['taunt', 'divine'], v: 4,
+      txt: '**Provocation**. **Bouclier divin**' },
+    { id: 'prieuse', name: 'Lieutenant', tier: 4, tribe: 'chev', atk: 3, hp: 5, img: 'prieuse', v: 7,
+      fx: [{ on: 'eot', do: 'buff', to: 'all', t: 'chev', ex: true, atk: 1, hp: 1 }],
+      txt: '**À la fin de votre tour :** donne +#1/+#1 à vos autres Chevaliers.' },
+    { id: 'foudre', name: 'Grand chevalier', tier: 5, tribe: 'chev', atk: 5, hp: 5, img: 'foudre', kw: ['divine'], v: 8,
+      fx: [{ on: 'shield', do: 'dmg', to: 'enemyRand', n: 2 }],
+      txt: "**Bouclier divin**. Chaque fois qu'un serviteur allié perd son **Bouclier divin**, inflige #2 dégât à un serviteur ennemi aléatoire." },
+    { id: 'cherubin', name: 'Grand maréchal', tier: 6, tribe: 'chev', atk: 5, hp: 7, img: 'cherubin', kw: ['divine'], v: 10,
+      fx: [{ on: 'soc', do: 'buff', to: 'all', t: 'chev', ex: true, atk: 1, hp: 1 },
+        { on: 'soc', do: 'kw', kw: 'divine', to: 'all', t: 'chev', ex: true }],
+      txt: '**Bouclier divin**. **Au début du combat :** donne +#1/+#1 et **Bouclier divin** à vos autres Chevaliers.' },
+
+    // ---------------- Dragons ----------------
+    { id: 'jade', name: 'Dragonnet planeur', tier: 1, tribe: 'drag', atk: 1, hp: 3, img: 'dragonnet', v: 3,
+      fx: [{ on: 'soc', do: 'dmg', to: 'enemyRand', n: 1, per: { t: 'drag' } }],
+      txt: '**Au début du combat :** inflige #1 dégât par Dragon allié à un serviteur ennemi aléatoire.' },
+    { id: 'couveuse', name: 'Gardien drake', tier: 2, tribe: 'drag', atk: 2, hp: 3, img: 'couveuse', v: 4,
+      fx: [{ on: 'bc', do: 'buff', to: 'all', t: 'drag', ex: true, atk: 1, hp: 1 }],
+      txt: '**Cri de guerre :** donne +#1/+#1 à vos autres Dragons.' },
+    { id: 'volatil', name: 'Drake volatil', tier: 2, tribe: 'drag', atk: 2, hp: 2, img: 'volatil', v: 4,
+      fx: [{ on: 'dr', do: 'dmg', to: 'enemyRand', n: 3 }],
+      txt: "**Râle d'agonie :** inflige #3 dégât à un serviteur ennemi aléatoire." },
+    { id: 'etoile', name: 'Drake cogneur', tier: 3, tribe: 'drag', atk: 3, hp: 4, img: 'etoile', v: 5,
+      fx: [{ on: 'soc', do: 'buff', to: 'self', atk: 1, hp: 1, per: { t: 'drag', ex: true } }],
+      txt: '**Au début du combat :** gagne +#1/+#1 pour chaque autre Dragon allié.' },
+    { id: 'gardienne', name: 'Drake exécuteur', tier: 4, tribe: 'drag', atk: 3, hp: 6, img: 'gardienne', kw: ['taunt'], v: 7,
+      fx: [{ on: 'eot', do: 'buff', to: 'all', t: 'drag', ex: true, atk: 1, hp: 1 }],
+      txt: '**Provocation**. **À la fin de votre tour :** donne +#1/+#1 à vos autres Dragons.' },
+    { id: 'givre', name: 'Maître-lame drake', tier: 5, tribe: 'drag', atk: 5, hp: 6, img: 'givre', v: 8,
+      fx: [{ on: 'soc', do: 'buff', to: 'all', t: 'drag', ex: true, atk: 2, hp: 2 }],
+      txt: '**Au début du combat :** donne +#2/+#2 à vos autres Dragons.' },
+    { id: 'ancestral', name: 'Cœur-de-flamme', tier: 6, tribe: 'drag', atk: 6, hp: 8, img: 'ancestral', v: 10,
+      fx: [{ on: 'soc', do: 'dmg', to: 'enemyAll', n: 2 }],
+      txt: '**Au début du combat :** inflige #2 dégât à tous les serviteurs ennemis.' },
+
+    // ---------------- Neutres ----------------
+    { id: 'fee', name: 'Augure saurien', tier: 1, tribe: 'neutre', atk: 1, hp: 2, img: 'fee', v: 2, target: {},
+      fx: [{ on: 'bc', do: 'buff', to: 'target', atk: 1, hp: 1 }],
+      txt: '**Cri de guerre :** donne +#1/+#1 à un autre serviteur allié.' },
+    { id: 'tresorier', name: 'Prospecteur nain', tier: 2, tribe: 'neutre', atk: 2, hp: 2, img: 'tresorier', v: 4,
+      fx: [{ on: 'sot', do: 'gold', n: 1 }],
+      txt: 'Au début de votre tour, gagnez #1 or.' },
+    { id: 'erudit', name: 'Maître des runes', tier: 3, tribe: 'neutre', atk: 2, hp: 3, img: 'erudit', v: 5,
+      fx: [{ on: 'bc', do: 'discover' }],
+      txt: '**Cri de guerre :** découvrez un serviteur de votre rang de taverne.',
+      txtG: '**Cri de guerre :** découvrez deux serviteurs de votre rang de taverne.' },
+    { id: 'berserker', name: 'Bagarreur des récifs', tier: 4, tribe: 'neutre', atk: 3, hp: 6, img: 'berserker', v: 5,
+      fx: [{ on: 'hurt', do: 'buff', to: 'self', atk: 2, hp: 0 }],
+      txt: 'Chaque fois que ce serviteur subit des dégâts, gagne +#2 ATQ.' },
+    { id: 'cor', name: 'Seigneur nain', tier: 5, tribe: 'neutre', atk: 4, hp: 6, img: 'cor', v: 9,
+      fx: [{ on: 'aura', to: 'others', atk: 2 }],
+      txt: 'Vos autres serviteurs ont +#2 ATQ.' },
+    { id: 'oracle', name: 'Oracle des marées', tier: 6, tribe: 'neutre', atk: 4, hp: 7, img: 'oracle', v: 9, brann: true,
+      txt: 'Vos **Cris de guerre** se déclenchent deux fois.',
+      txtG: 'Vos **Cris de guerre** se déclenchent trois fois.' },
+
+    { id: 'tonnerrier', name: 'Tonnerrier nain', tier: 2, tribe: 'neutre', atk: 2, hp: 3, img: 'tonnerrier', v: 4,
+      fx: [{ on: 'soc', do: 'dmg', to: 'enemyRand', n: 2 }],
+      txt: '**Au début du combat :** inflige #2 dégât à un serviteur ennemi aléatoire.' },
+    { id: 'araignee', name: 'Araignée géante', tier: 3, tribe: 'neutre', atk: 2, hp: 2, img: 'araignee', kw: ['venom'], v: 5,
+      txt: '**Toxique**' },
+    { id: 'griffon_nain', name: 'Chevaucheur de griffon', tier: 4, tribe: 'neutre', atk: 4, hp: 4, img: 'griffon_nain', kw: ['wf'], v: 6,
+      txt: '**Furie des vents**' },
+
+    // ---------------- Jetons (hors réserve) ----------------
+    { id: 'marcassin', name: 'Gobelin', tier: 1, tribe: 'bete', atk: 1, hp: 1, img: 'gobelin', tok: true, txt: '' },
+    { id: 'chiot', name: 'Jeune gobelin', tier: 1, tribe: 'bete', atk: 1, hp: 1, img: 'gobelin', tok: true, txt: '' },
+    { id: 'ourson', name: 'Jeune troll', tier: 1, tribe: 'bete', atk: 2, hp: 2, img: 'jeune_troll', tok: true, txt: '' },
+    { id: 'goutte', name: 'Pousse sylvestre', tier: 1, tribe: 'elem', atk: 2, hp: 2, img: 'pousse', tok: true, txt: '' },
+    { id: 'osselet', name: 'Squelette errant', tier: 1, tribe: 'mort', atk: 1, hp: 1, img: 'osselet', tok: true, txt: '' },
+  ];
+
+  const HERO_LIST = [
+    { id: 'elara', name: 'Élara', title: "l'archimage", img: 'hero-mage', hp: 30, armor: 0, aff: 'elem',
+      power: { name: 'Prescience', type: 'active', cost: 2, target: false, hand: true,
+        txt: 'Découvrez un serviteur de deux rangs inférieur à celui de votre taverne (rang 1 au minimum).', fx: [{ do: 'discover', down: 2 }] } },
+    { id: 'bram', name: 'Bram', title: 'le seigneur de guerre', img: 'hero-guerrier', hp: 30, armor: 0, aff: 'drag',
+      power: { name: 'Affûtage', type: 'active', cost: 1, target: true,
+        txt: 'Donne +2/+2 à un serviteur allié.', fx: [{ do: 'buff', to: 'target', atk: 2, hp: 2 }] } },
+    { id: 'ysolde', name: 'Ysolde', title: 'la grande prêtresse', img: 'hero-pretresse', hp: 30, armor: 0, aff: 'chev',
+      power: { name: 'Égide sacrée', type: 'passive',
+        txt: "**Au début du combat :** donne **Bouclier divin** à vos deux serviteurs les plus à gauche qui n'en ont pas.",
+        fx: [{ on: 'soc', do: 'kw', kw: 'divine', to: 'left', n: 2 }] } },
+    { id: 'kaia', name: 'Gorrak', title: 'le souverain orc', img: 'gorrak', hp: 30, armor: 0, aff: 'bete',
+      power: { name: 'Appel de la horde', type: 'active', cost: 2, target: false, hand: true,
+        txt: "Ajoute à votre main un Orc aléatoire de votre rang de taverne ou du rang juste en dessous.", fx: [{ do: 'addRandom', t: 'bete', span: 1 }] } },
+    { id: 'morgane', name: 'Malakar', title: 'le nécromancien', img: 'necro', hp: 30, armor: 0, aff: 'mort',
+      power: { name: 'Rituel impie', type: 'active', cost: 2, target: true, tkw: 'reborn',
+        txt: 'Donne **Réincarnation** à un serviteur allié.', fx: [{ do: 'kw', kw: 'reborn', to: 'target' }] } },
+    { id: 'gorrak', name: 'Kaïa', title: 'la rôdeuse', img: 'hero-rodeuse', hp: 30, armor: 0, aff: 'elem',
+      power: { name: 'Instinct du chasseur', type: 'passive',
+        txt: '**À la fin de votre tour :** donne +1/+1 à un serviteur allié aléatoire.',
+        fx: [{ on: 'eot', do: 'buff', to: 'rand', atk: 1, hp: 1 }] } },
+    { id: 'seraphine', name: 'Séraphine', title: "la fée de l'aube", img: 'ange', hp: 30, armor: 0, aff: 'chev',
+      power: { name: 'Grâce céleste', type: 'active', cost: 1, target: false,
+        txt: 'Donne +1 PV à tous vos serviteurs.', fx: [{ do: 'buff', to: 'all', atk: 0, hp: 1 }] } },
+    { id: 'liche', name: 'La Liche', title: 'millénaire', img: 'liche', hp: 36, armor: 0, aff: 'drag',
+      power: { name: "Pacte d'outre-tombe", type: 'active', cost: 0, target: false, hpCost: 1,
+        txt: 'Commence avec 36 PV. Perdez 1 PV et gagnez 1 or.', fx: [{ do: 'selfDmg', n: 1 }, { do: 'gold', n: 1 }] } },
+  ];
+
+  // txt / txtGold : textes prêts à afficher ; tpl / tplG : gabarits avec « #n ».
+  const MINIONS = {};
+  for (const d of MINION_LIST) {
+    d.kw = d.kw || []; d.fx = d.fx || []; d.tok = !!d.tok;
+    d.tpl = d.txt; d.tplG = d.txtG || null;
+    d.txt = fmtTxt(d, false); d.txtGold = fmtTxt(d, true);
+    delete d.txtG;
+    MINIONS[d.id] = d;
+  }
+  const POOL_IDS = MINION_LIST.filter(d => !d.tok).map(d => d.id);
+  const HEROES = {};
+  for (const h of HERO_LIST) { h.full = h.name + ' ' + h.title; HEROES[h.id] = h; }
+  const HERO_IDS = HERO_LIST.map(h => h.id);
+
+  const COPIES = [0, 16, 15, 13, 11, 9, 7];
+  const SHOP_SIZE = [0, 3, 4, 4, 5, 5, 6];
+  const UP_COST = [0, 0, 5, 7, 8, 9, 10];
+  const COST = { buy: 3, sell: 1, roll: 1 };
+  const MAX_BOARD = 7, MAX_HAND = 10, MAX_ROUNDS = 100, COMBAT_STEPS = 400;
+
+  // ------------------------------------------------------------------ Aléatoire
+  function seedOf(s) {
+    if (typeof s === 'number' && isFinite(s)) return (Math.floor(Math.abs(s)) >>> 0) ^ 0x9e3779b9;
+    let h = 2166136261;
+    const str = String(s);
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function rnd(st) { // mulberry32, état entier dans st.rng
+    st.rng = (st.rng + 0x6D2B79F5) >>> 0;
+    let t = st.rng;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  function ri(st, n) { return Math.floor(rnd(st) * n); }
+  function shuffle(st, a) {
+    for (let i = a.length - 1; i > 0; i--) { const j = ri(st, i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  function clone(o) { return o == null ? o : JSON.parse(JSON.stringify(o)); }
+
+  // ------------------------------------------------------------------ Serviteurs
+  function fmtTxt(d, golden) {
+    let t = golden && d.tplG ? d.tplG : d.tpl;
+    const k = golden ? 2 : 1;
+    t = t.replace(/#(\d+)/g, (_, n) => String(Number(n) * k));
+    return t.replace(/(\d+) dégât(?!s)/g, (s, n) => (Number(n) > 1 ? n + ' dégâts' : s));
+  }
+  function mk(st, id, owner, golden) {
+    const d = MINIONS[id];
+    const g = !!golden, k = g ? 2 : 1;
+    const m = {
+      uid: st.uid++, id, name: d.name, img: d.img, tier: d.tier, tribe: d.tribe,
+      atk: d.atk * k, hp: d.hp * k, golden: g,
+      taunt: d.kw.includes('taunt'), divine: d.kw.includes('divine'), reborn: d.kw.includes('reborn'),
+      wf: d.kw.includes('wf'), venom: d.kw.includes('venom'),
+      txt: g ? d.txtGold : d.txt, ab: 0, pc: d.tok ? 0 : 1, tri: false,
+    };
+    const b = owner && owner.tb && owner.tb[d.tribe];
+    if (b) { m.atk += b[0]; m.hp += b[1]; }
+    return m;
+  }
+  function snap(m) {
+    return {
+      uid: m.uid, id: m.id, name: m.name, img: m.img, tier: m.tier, tribe: m.tribe, atk: m.atk, hp: m.hp,
+      golden: m.golden, taunt: m.taunt, divine: m.divine, reborn: m.reborn, wf: m.wf, venom: m.venom, txt: m.txt,
+    };
+  }
+  function tribeCounts(board) {
+    const c = {};
+    for (const m of board || []) c[m.tribe] = (c[m.tribe] || 0) + 1;
+    return c;
+  }
+
+  // ------------------------------------------------------------------ Réserve commune
+  function poolOk(d, maxTier, exact, tribe, ex, minTier) {
+    return d.tier <= maxTier && (!exact || d.tier === exact) && (!minTier || d.tier >= minTier) &&
+      (!tribe || d.tribe === tribe) && !(ex && ex.indexOf(d.id) >= 0);
+  }
+  // Tire un serviteur dans la réserve, au prorata des copies restantes.
+  function drawFromPool(st, maxTier, exact, tribe, ex, minTier) {
+    let total = 0;
+    for (const id of POOL_IDS) if (poolOk(MINIONS[id], maxTier, exact, tribe, ex, minTier)) total += st.pool[id];
+    if (total <= 0) return null;
+    let r = ri(st, total);
+    for (const id of POOL_IDS) {
+      if (!poolOk(MINIONS[id], maxTier, exact, tribe, ex, minTier)) continue;
+      r -= st.pool[id];
+      if (r < 0) { st.pool[id]--; return id; }
+    }
+    return null;
+  }
+  function poolReturn(st, m) {
+    if (m && m.pc > 0 && st.pool[m.id] != null) st.pool[m.id] += m.pc;
+  }
+  function clearShop(st, p) { for (const m of p.shop) poolReturn(st, m); p.shop = []; }
+  function fillShop(st, p) {
+    const n = SHOP_SIZE[p.tier];
+    while (p.shop.length < n) {
+      const id = drawFromPool(st, p.tier);
+      if (!id) break;
+      const m = mk(st, id, p, false);
+      const b = p.sb[m.tribe];
+      if (b) { m.atk += b[0]; m.hp += b[1]; }
+      p.shop.push(m);
+    }
+  }
+  function rollShop(st, p) { clearShop(st, p); fillShop(st, p); }
+
+  function makeDiscover(st, p, tier, tribe) {
+    const opts = [], ex = [];
+    for (let k = 0; k < 3; k++) {
+      let id = null;
+      for (let t = tier; t >= 1 && !id; t--) id = drawFromPool(st, t, t, tribe, ex);
+      if (!id) break;
+      ex.push(id);
+      opts.push(mk(st, id, p, false));
+    }
+    if (opts.length) p.choices.push({ kind: 'discover', tier, options: opts });
+  }
+
+  // ------------------------------------------------------------------ Auras
+  function auraCalc(board) {
+    const res = board.map(() => 0);
+    for (let j = 0; j < board.length; j++) {
+      const s = board[j];
+      for (const f of MINIONS[s.id].fx) {
+        if (f.on !== 'aura') continue;
+        const a = f.atk * (s.golden ? 2 : 1);
+        if (f.to === 'adj') {
+          if (j > 0) res[j - 1] += a;
+          if (j < board.length - 1) res[j + 1] += a;
+        } else if (f.to === 'others') {
+          for (let q = 0; q < board.length; q++) if (q !== j && (!f.t || board[q].tribe === f.t)) res[q] += a;
+        }
+      }
+    }
+    return res;
+  }
+  function applyAuras(board, cb) {
+    const res = auraCalc(board);
+    board.forEach((m, j) => {
+      const ab = m.ab || 0;
+      if (res[j] !== ab) { m.atk += res[j] - ab; m.ab = res[j]; if (cb) emitStats(cb, m); }
+    });
+  }
+
+  // ------------------------------------------------------------------ Interpréteur d'effets
+  function friends(ctx) { return ctx.mode === 'c' ? ctx.side.board : ctx.p.board; }
+  function isAlive(ctx, m) { return ctx.mode !== 'c' || m.hp > 0; }
+
+  function sel(ctx, f, flt) {
+    const B = friends(ctx), self = ctx.self;
+    const ok = m => isAlive(ctx, m) && (!f.t || m.tribe === f.t) && !(f.ex && m === self) && (!flt || flt(m));
+    switch (f.to) {
+      case 'self': return self && B.indexOf(self) >= 0 && ok(self) ? [self] : [];
+      case 'target': return ctx.target && B.indexOf(ctx.target) >= 0 && ok(ctx.target) ? [ctx.target] : [];
+      case 'it': return ctx.it && B.indexOf(ctx.it) >= 0 && ok(ctx.it) ? [ctx.it] : [];
+      case 'all': return B.filter(ok);
+      case 'rand': { const a = B.filter(ok); return a.length ? [a[ri(ctx.st, a.length)]] : []; }
+      case 'left': return B.filter(ok).slice(0, f.n || 1);
+      case 'adj': { const i = B.indexOf(self); return i < 0 ? [] : [B[i - 1], B[i + 1]].filter(m => m && ok(m)); }
+      case 'enemyRand': { const a = ctx.foe.board.filter(m => m.hp > 0); return a.length ? [a[ri(ctx.st, a.length)]] : []; }
+      case 'enemyAll': return ctx.foe.board.filter(m => m.hp > 0);
+    }
+    return [];
+  }
+  function perCount(ctx, per) {
+    return friends(ctx).filter(m => isAlive(ctx, m) && m.tribe === per.t && !(per.ex && m === ctx.self)).length;
+  }
+  function emitStats(cb, m) {
+    cb.ev.push({ k: 'stats', u: m.uid, atk: m.atk, hp: m.hp, divine: m.divine, reborn: m.reborn, taunt: m.taunt, venom: m.venom, wf: m.wf });
+  }
+  function buffM(ctx, m, a, h) {
+    m.atk += a; m.hp += h;
+    if (ctx.mode === 'c') emitStats(ctx.cb, m);
+  }
+  function addToHand(p, m) { if (p.hand.length < MAX_HAND) { p.hand.push(m); return true; } return false; }
+
+  function exec(ctx, f) {
+    const st = ctx.st, k = ctx.mult || 1, p = ctx.p;
+    switch (f.do) {
+      case 'buff': {
+        let a = (f.atk || 0) * k, h = (f.hp || 0) * k;
+        if (f.per) { const n = perCount(ctx, f.per); a *= n; h *= n; }
+        if (!a && !h) return;
+        for (const m of sel(ctx, f)) buffM(ctx, m, a, h);
+        return;
+      }
+      case 'kw': {
+        const reps = f.rep ? k : 1;
+        for (let r = 0; r < reps; r++) {
+          for (const m of sel(ctx, f, x => !x[f.kw])) { m[f.kw] = true; if (ctx.mode === 'c') emitStats(ctx.cb, m); }
+        }
+        return;
+      }
+      case 'dmg': {
+        if (ctx.mode !== 'c') return;
+        let n = (f.n || 0) * k;
+        if (f.per) n *= perCount(ctx, f.per);
+        if (n <= 0) return;
+        for (const m of sel(ctx, f)) hit(ctx.cb, m, n, ctx.self, false);
+        return;
+      }
+      case 'summon': summon(ctx, f.id, f.n || 1, !!ctx.golden); return;
+      case 'addCard':
+        if (!p) return;
+        for (let i = 0; i < (f.n || 1); i++) addToHand(p, mk(st, f.id, p, !!ctx.golden));
+        return;
+      case 'addRandom': {
+        if (!p) return;
+        let id = null;
+        const top = Math.max(1, p.tier - (f.down || 0));
+        if (f.span) id = drawFromPool(st, top, 0, f.t, null, Math.max(1, top - f.span));
+        for (let t = top; t >= 1 && !id; t--) id = drawFromPool(st, t, t, f.t);
+        if (id) { const m = mk(st, id, p, false); if (!addToHand(p, m)) poolReturn(st, m); }
+        return;
+      }
+      case 'shopBuff': {
+        if (!p) return;
+        const a = (f.atk || 0) * k, h = (f.hp || 0) * k, cur = p.sb[f.t] || [0, 0];
+        p.sb[f.t] = [cur[0] + a, cur[1] + h];
+        for (const m of p.shop) if (m.tribe === f.t) { m.atk += a; m.hp += h; }
+        return;
+      }
+      case 'tribeBuff': {
+        if (!p) return;
+        const a = (f.atk || 0) * k, h = (f.hp || 0) * k, cur = p.tb[f.t] || [0, 0];
+        p.tb[f.t] = [cur[0] + a, cur[1] + h];
+        const all = p.shop.concat(p.hand, p.board);
+        for (const c of p.choices) for (const m of c.options) all.push(m);
+        for (const m of all) if (m.tribe === f.t) { m.atk += a; m.hp += h; }
+        return;
+      }
+      case 'gold': if (p) p.gold += (f.n || 0) * k; return;
+      case 'selfDmg': if (p) p.hp -= f.n || 0; return;
+      case 'discover': if (p) for (let r = 0; r < k; r++) makeDiscover(st, p, Math.max(1, p.tier - (f.down || 0)), f.t); return;
+    }
+  }
+
+  // ctx de base
+  function rctx(st, p) { return { st, mode: 'r', p }; }
+  function cctx(cb, s) { return { st: cb.st, mode: 'c', cb, side: s, foe: cb.S[1 - s.i] }; }
+
+  function fire(ctx, m, on, ex) {
+    const fx = MINIONS[m.id].fx;
+    if (!fx.length) return;
+    for (const f of fx) {
+      if (f.on !== on) continue;
+      if (f.when && (!ex.it || ex.it.tribe !== f.when)) continue;
+      exec(Object.assign({}, ctx, {
+        self: m, it: ex.it || null, target: ex.target || null, mult: m.golden ? 2 : 1, golden: m.golden,
+      }), f);
+    }
+  }
+  function heroFx(ctx, heroId, on) {
+    const h = heroId && HEROES[heroId];
+    if (!h || h.power.type !== 'passive') return false;
+    let any = false;
+    for (const f of h.power.fx) if (f.on === on) { exec(Object.assign({}, ctx, { self: null, mult: 1 }), f); any = true; }
+    return any;
+  }
+
+  function summon(ctx, id, n, golden) {
+    const st = ctx.st;
+    if (ctx.mode !== 'c') {
+      const p = ctx.p;
+      let at = ctx.self ? p.board.indexOf(ctx.self) + 1 : p.board.length;
+      if (at <= 0) at = p.board.length;
+      for (let i = 0; i < n && p.board.length < MAX_BOARD; i++) {
+        const m = mk(st, id, p, golden);
+        p.board.splice(at, 0, m);
+        at++;
+        summonedR(st, p, m);
+      }
+      return;
+    }
+    const s = ctx.side;
+    for (let i = 0; i < n; i++) {
+      let at;
+      if (ctx.dd) at = ctx.dd.pos + ctx.dd.n;
+      else { const j = s.board.indexOf(ctx.self); at = j >= 0 ? j + 1 : s.board.length; }
+      const m = mk(st, id, { tb: s.tb }, golden);
+      if (!insertC(ctx.cb, s, at, m, 'summon')) break;
+      if (ctx.dd) ctx.dd.n++;
+    }
+  }
+  function summonedR(st, p, m) {
+    const ctx = rctx(st, p);
+    for (const o of p.board.slice()) if (o !== m) fire(ctx, o, 'summon', { it: m });
+  }
+
+  // ------------------------------------------------------------------ Combat
+  function insertC(cb, s, at, m, kind) {
+    if (s.board.length >= MAX_BOARD) return false;
+    if (at > s.board.length) at = s.board.length;
+    if (at < 0) at = 0;
+    m.sd = s.i;
+    s.board.splice(at, 0, m);
+    if (at < s.nxt) s.nxt++;
+    if (cb.pend) for (const pd of cb.pend) if (pd.s === s && pd !== cb.cur && pd.pos >= at) pd.pos++;
+    cb.ev.push({ k: kind, side: s.key, at, m: snap(m) });
+    const c = cctx(cb, s);
+    for (const o of s.board.slice()) if (o !== m && o.hp > 0) fire(c, o, 'summon', { it: m });
+    return true;
+  }
+
+  function hit(cb, m, n, src, attackHit) {
+    if (n <= 0 || m.hp <= 0) return;
+    const s = cb.S[m.sd];
+    if (m.divine) {
+      m.divine = false;
+      cb.ev.push({ k: 'shield', u: m.uid });
+      const c = cctx(cb, s);
+      for (const o of s.board.slice()) if (o.hp > 0) fire(c, o, 'shield', { it: m });
+      return;
+    }
+    m.hp -= n;
+    const e = { k: 'dmg', u: m.uid, n };
+    if (src) e.src = src.uid;
+    cb.ev.push(e);
+    if (attackHit && src && src.venom) {
+      src.venom = false;
+      if (m.hp > 0) { m.hp = 0; cb.ev.push({ k: 'poison', u: m.uid, by: src.uid }); }
+      emitStats(cb, src);
+    }
+    if (m.hp > 0) fire(cctx(cb, s), m, 'hurt', {});
+  }
+
+  function processDeaths(cb) {
+    for (let loop = 0; loop < 200; loop++) {
+      const batch = [];
+      for (const i of cb.ord) for (const m of cb.S[i].board) if (m.hp <= 0) batch.push({ s: cb.S[i], m, pos: 0, n: 0 });
+      if (!batch.length) return;
+      for (const d of batch) {
+        const i = d.s.board.indexOf(d.m);
+        d.pos = i;
+        d.s.board.splice(i, 1);
+        if (i < d.s.nxt) d.s.nxt--;
+        cb.ev.push({ k: 'die', u: d.m.uid });
+      }
+      cb.pend = batch;
+      for (const d of batch) {
+        const c = cctx(cb, d.s);
+        for (const o of d.s.board.slice()) if (o.hp > 0) fire(c, o, 'death', { it: d.m });
+      }
+      for (const d of batch) {
+        cb.cur = d;
+        const c = cctx(cb, d.s);
+        c.dd = d;
+        fire(c, d.m, 'dr', {});
+        if (d.m.reborn) {
+          const r = mk(cb.st, d.m.id, { tb: d.s.tb }, d.m.golden);
+          r.hp = 1; r.reborn = false;
+          if (insertC(cb, d.s, d.pos + d.n, r, 'reborn')) d.n++;
+        }
+      }
+      cb.pend = null; cb.cur = null;
+      applyAuras(cb.S[0].board, cb);
+      applyAuras(cb.S[1].board, cb);
+    }
+  }
+
+  function pickAttacker(s) {
+    const n = s.board.length;
+    if (!n) return null;
+    if (s.nxt >= n || s.nxt < 0) s.nxt = 0;
+    for (let k = 0; k < n; k++) {
+      const i = (s.nxt + k) % n, m = s.board[i];
+      if (m.hp > 0 && m.atk > 0) { s.nxt = i; return m; }
+    }
+    return null;
+  }
+  function doAttack(cb, s, att) {
+    const o = cb.S[1 - s.i];
+    const live = o.board.filter(m => m.hp > 0);
+    if (!live.length) return false;
+    const taunts = live.filter(m => m.taunt);
+    const cand = taunts.length ? taunts : live;
+    const t = cand[ri(cb.st, cand.length)];
+    cb.ev.push({ k: 'atk', a: att.uid, t: t.uid });
+    fire(cctx(cb, s), att, 'attack', { it: t });
+    const a = att.atk, b = t.atk;
+    hit(cb, t, a, att, true);
+    hit(cb, att, b, t, true);
+    processDeaths(cb);
+    return true;
+  }
+  function liveCount(s) { return s.board.filter(m => m.hp > 0).length; }
+
+  // A, B : { board, tier, tb, hero } — les plateaux sont copiés.
+  function runCombat(st, A, B) {
+    const mkSide = (X, i) => {
+      const board = clone(X.board || []);
+      for (const m of board) m.sd = i;
+      applyAuras(board, null);
+      return { i, key: i === 0 ? 'me' : 'them', board, tier: X.tier || 1, tb: X.tb || {}, hero: X.hero || null, nxt: 0 };
+    };
+    const S = [mkSide(A, 0), mkSide(B, 1)];
+    const cb = { st, S, ev: [], pend: null, cur: null, ord: [0, 1] };
+    const start = { me: S[0].board.map(snap), them: S[1].board.map(snap) };
+    const la = S[0].board.length, lb = S[1].board.length;
+    const first = la > lb ? 0 : lb > la ? 1 : ri(st, 2);
+    cb.ord = [first, 1 - first];
+    let draw = false;
+
+    if (la && lb) {
+      // Au début du combat : pouvoirs passifs des héros, puis serviteurs (en alternance, de gauche à droite)
+      for (const i of cb.ord) {
+        const s = S[i], h = s.hero && HEROES[s.hero];
+        if (!h || h.power.type !== 'passive' || !h.power.fx.some(f => f.on === 'soc')) continue;
+        if (!s.board.some(m => m.hp > 0 && !m.divine)) continue;
+        cb.ev.push({ k: 'start', u: null, side: s.key, txt: h.power.name });
+        heroFx(cctx(cb, s), s.hero, 'soc');
+      }
+      const order = [];
+      for (let j = 0; j < MAX_BOARD; j++) for (const i of cb.ord) if (S[i].board[j]) order.push(S[i].board[j]);
+      for (const m of order) {
+        if (m.hp <= 0 || S[m.sd].board.indexOf(m) < 0) continue;
+        if (!MINIONS[m.id].fx.some(f => f.on === 'soc')) continue;
+        if (!liveCount(S[0]) || !liveCount(S[1])) break;
+        cb.ev.push({ k: 'start', u: m.uid, txt: m.name });
+        fire(cctx(cb, S[m.sd]), m, 'soc', {});
+        processDeaths(cb);
+      }
+      // Attaques
+      let cur = first, steps = 0;
+      while (liveCount(S[0]) && liveCount(S[1])) {
+        if (++steps > COMBAT_STEPS) { draw = true; break; }
+        const s = S[cur], att = pickAttacker(s);
+        if (!att) {
+          if (!pickAttacker(S[1 - cur])) { draw = true; break; }
+          cur = 1 - cur;
+          continue;
+        }
+        const swings = att.wf ? 2 : 1;
+        for (let w = 0; w < swings; w++) {
+          if (att.hp <= 0 || s.board.indexOf(att) < 0) break;
+          if (!doAttack(cb, s, att)) break;
+        }
+        const idx = s.board.indexOf(att);
+        if (idx >= 0) s.nxt = idx + 1;
+        cur = 1 - cur;
+      }
+    }
+    const a = liveCount(S[0]), b = liveCount(S[1]);
+    let winner = 'draw';
+    if (!draw) { if (a && !b) winner = 'me'; else if (b && !a) winner = 'them'; }
+    let damage = 0;
+    if (winner !== 'draw') {
+      const w = winner === 'me' ? S[0] : S[1];
+      damage = w.tier + w.board.reduce((t, m) => t + (m.hp > 0 ? m.tier : 0), 0);
+      if (st.round <= 8) damage = Math.min(damage, 15);
+    }
+    return {
+      first: first === 0 ? 'me' : 'them', start, events: cb.ev,
+      result: { winner, damage },
+      end: { me: S[0].board.map(snap), them: S[1].board.map(snap) },
+    };
+  }
+
+  // ------------------------------------------------------------------ Joueurs et partie
+  function newPlayer(st, i, hid) {
+    const h = HEROES[hid];
+    const tribes = ['bete', 'elem', 'mort', 'chev', 'drag'];
+    const fav = h.aff && rnd(st) < 0.55 ? h.aff : tribes[ri(st, tribes.length)];
+    return {
+      idx: i, name: i === 0 ? 'Vous' : h.full, hero: hid, img: h.img, hp: h.hp, armor: h.armor,
+      tier: 1, gold: 0, maxGold: 0, upCost: UP_COST[2], shop: [], frozen: false, hand: [], board: [],
+      alive: true, place: null, powerUsed: false, lastOpponent: null, human: i === 0,
+      choices: [], tb: {}, sb: {}, upgraded: false, rolls: 0, lostLast: false, finalBoard: null,
+      stats: { wins: 0, losses: 0, draws: 0, triples: 0, bought: 0 },
+      ai: { fav, tempo: [-1, 0, 0, 0, 1][ri(st, 5)] },
+    };
+  }
+
+  function offerHeroes(seed) {
+    const tmp = { rng: (seedOf(seed) ^ 0x5bd1e995) >>> 0 };
+    return shuffle(tmp, HERO_IDS.slice()).slice(0, 3);
+  }
+
+  function newLobby(seed, humanHeroId) {
+    const st = {
+      v: 1, seed: String(seed), rng: seedOf(seed), uid: 1, round: 1, over: false,
+      pool: {}, players: [], ghost: null, winner: null, history: [],
+    };
+    for (const id of POOL_IDS) st.pool[id] = COPIES[MINIONS[id].tier];
+    const hh = HEROES[humanHeroId] ? humanHeroId : offerHeroes(seed)[0];
+    const rest = shuffle(st, HERO_IDS.filter(h => h !== hh));
+    const heroes = [hh].concat(rest.slice(0, 7));
+    for (let i = 0; i < 8; i++) st.players.push(newPlayer(st, i, heroes[i]));
+    startRound(st);
+    return st;
+  }
+
+  function startRound(st) {
+    for (const p of st.players) {
+      if (!p.alive) continue;
+      p.maxGold = Math.min(10, st.round + 2);
+      p.gold = p.maxGold;
+      p.powerUsed = false; p.upgraded = false; p.rolls = 0;
+      if (p.frozen) { p.frozen = false; fillShop(st, p); } else rollShop(st, p);
+      const ctx = rctx(st, p);
+      for (const m of p.board.slice()) fire(ctx, m, 'sot', {});
+      heroFx(ctx, p.hero, 'sot');
+      applyAuras(p.board);
+    }
+  }
+
+  function endOfTurn(st, p) {
+    const ctx = rctx(st, p);
+    for (const m of p.board.slice()) fire(ctx, m, 'eot', {});
+    heroFx(ctx, p.hero, 'eot');
+    applyAuras(p.board);
+    if (!p.upgraded && p.tier < 6) p.upCost = Math.max(0, p.upCost - 1);
+  }
+
+  // ------------------------------------------------------------------ Triples
+  function checkTriples(st, p) {
+    for (let guard = 0; guard < 20; guard++) {
+      const counts = {};
+      for (const m of p.hand.concat(p.board)) if (!m.golden && !MINIONS[m.id].tok) counts[m.id] = (counts[m.id] || 0) + 1;
+      const id = POOL_IDS.find(x => counts[x] >= 3);
+      if (!id) return;
+      makeGolden(st, p, id);
+    }
+  }
+  function makeGolden(st, p, id) {
+    const d = MINIONS[id];
+    const tb = p.tb[d.tribe] || [0, 0];
+    const parts = [];
+    for (let i = 0; i < p.hand.length && parts.length < 3; i++) if (p.hand[i].id === id && !p.hand[i].golden) parts.push(p.hand[i]);
+    for (let i = 0; i < p.board.length && parts.length < 3; i++) if (p.board[i].id === id && !p.board[i].golden) parts.push(p.board[i]);
+    p.hand = p.hand.filter(m => parts.indexOf(m) < 0);
+    p.board = p.board.filter(m => parts.indexOf(m) < 0);
+    const g = mk(st, id, null, true);
+    g.atk += tb[0]; g.hp += tb[1];
+    g.pc = 0;
+    for (const c of parts) {
+      g.atk += Math.max(0, c.atk - (c.ab || 0) - d.atk - tb[0]);
+      g.hp += Math.max(0, c.hp - d.hp - tb[1]);
+      for (const k of ['taunt', 'divine', 'reborn', 'wf', 'venom']) if (c[k]) g[k] = true;
+      g.pc += c.pc;
+    }
+    g.tri = true;
+    if (p.hand.length < MAX_HAND) p.hand.push(g);
+    else if (p.board.length < MAX_BOARD) p.board.push(g);
+    else p.hand.push(g); // impossible en pratique (une copie vient toujours de la main)
+    p.stats.triples++;
+    applyAuras(p.board);
+  }
+
+  // ------------------------------------------------------------------ Actions (joueur p)
+  function guard(st, p, allowChoice) {
+    if (!st || !p) return 'Partie introuvable.';
+    if (st.over) return 'La partie est terminée.';
+    if (!p.alive) return 'Vous avez été éliminé.';
+    if (!allowChoice && p.choices.length) return "Choisissez d'abord une carte à découvrir.";
+    return null;
+  }
+  function validTargets(p, d, played) {
+    if (!d.target) return [];
+    return p.board.filter(x => x !== played && (!d.target.t || x.tribe === d.target.t));
+  }
+  function bcTimes(p, m) {
+    let t = 1;
+    for (const o of p.board) if (o !== m && MINIONS[o.id].brann) t = Math.max(t, o.golden ? 3 : 2);
+    return t;
+  }
+
+  function doBuy(st, p, i) {
+    const e = guard(st, p); if (e) return e;
+    const m = p.shop[i];
+    if (!m) return 'Serviteur introuvable.';
+    if (p.gold < COST.buy) return "Pas assez d'or.";
+    if (p.hand.length >= MAX_HAND) return 'Votre main est pleine.';
+    p.gold -= COST.buy;
+    p.shop.splice(i, 1);
+    p.hand.push(m);
+    p.stats.bought++;
+    checkTriples(st, p);
+    return null;
+  }
+  function doSell(st, p, i) {
+    const e = guard(st, p); if (e) return e;
+    const m = p.board[i];
+    if (!m) return 'Serviteur introuvable.';
+    p.board.splice(i, 1);
+    p.gold += COST.sell;
+    poolReturn(st, m);
+    fire(rctx(st, p), m, 'sell', {});
+    applyAuras(p.board);
+    checkTriples(st, p);
+    return null;
+  }
+  function doPlay(st, p, hi, pos, targetUid) {
+    const e = guard(st, p); if (e) return e;
+    const m = p.hand[hi];
+    if (!m) return 'Carte introuvable.';
+    if (p.board.length >= MAX_BOARD) return 'Votre plateau est plein.';
+    const d = MINIONS[m.id];
+    let target = null;
+    const valid = validTargets(p, d, m);
+    if (valid.length) {
+      if (targetUid == null) return 'Choisissez une cible pour le Cri de guerre.';
+      target = valid.find(x => x.uid === targetUid) || null;
+      if (!target) return 'Cible invalide.';
+    }
+    p.hand.splice(hi, 1);
+    let at = pos == null || isNaN(pos) ? p.board.length : Math.max(0, Math.min(p.board.length, Math.floor(pos)));
+    p.board.splice(at, 0, m);
+    const ctx = rctx(st, p);
+    const times = bcTimes(p, m);
+    for (let t = 0; t < times; t++) fire(ctx, m, 'bc', { target });
+    summonedR(st, p, m);
+    for (const o of p.board.slice()) if (o !== m) fire(ctx, o, 'play', { it: m });
+    if (m.golden && m.tri) { m.tri = false; makeDiscover(st, p, Math.min(6, p.tier + 1)); }
+    applyAuras(p.board);
+    checkTriples(st, p);
+    return null;
+  }
+  function doMove(st, p, from, to) {
+    const e = guard(st, p, true); if (e) return e;
+    if (!p.board[from]) return 'Serviteur introuvable.';
+    to = Math.max(0, Math.min(p.board.length - 1, Math.floor(to)));
+    if (isNaN(to)) return 'Position invalide.';
+    const m = p.board.splice(from, 1)[0];
+    p.board.splice(to, 0, m);
+    applyAuras(p.board);
+    return null;
+  }
+  function doRefresh(st, p) {
+    const e = guard(st, p); if (e) return e;
+    if (p.gold < COST.roll) return "Pas assez d'or.";
+    p.gold -= COST.roll;
+    p.frozen = false;
+    p.rolls++;
+    rollShop(st, p);
+    return null;
+  }
+  function doFreeze(st, p) {
+    const e = guard(st, p, true); if (e) return e;
+    p.frozen = !p.frozen;
+    return null;
+  }
+  function doUpgrade(st, p) {
+    const e = guard(st, p); if (e) return e;
+    if (p.tier >= 6) return 'Votre taverne est déjà au rang maximum.';
+    if (p.gold < p.upCost) return "Pas assez d'or.";
+    p.gold -= p.upCost;
+    p.tier++;
+    p.upCost = p.tier < 6 ? UP_COST[p.tier + 1] : null;
+    p.upgraded = true;
+    return null;
+  }
+  function powerTargetsP(p) {
+    const pw = HEROES[p.hero].power;
+    if (!pw.target) return null;
+    return p.board.filter(m => !pw.tkw || !m[pw.tkw]);
+  }
+  function doPower(st, p, targetUid) {
+    const e = guard(st, p); if (e) return e;
+    const pw = HEROES[p.hero].power;
+    if (pw.type !== 'active') return 'Ce pouvoir héroïque est passif.';
+    if (p.powerUsed) return 'Pouvoir héroïque déjà utilisé ce tour-ci.';
+    if (p.gold < pw.cost) return "Pas assez d'or.";
+    if (pw.hpCost && p.hp <= pw.hpCost) return 'Pas assez de points de vie.';
+    if (pw.hand && p.hand.length >= MAX_HAND) return 'Votre main est pleine.';
+    let target = null;
+    if (pw.target) {
+      const valid = powerTargetsP(p);
+      if (!valid.length) return 'Aucune cible valide.';
+      if (targetUid == null) return 'Choisissez une cible.';
+      target = valid.find(m => m.uid === targetUid) || null;
+      if (!target) return 'Cible invalide.';
+    }
+    p.gold -= pw.cost;
+    p.powerUsed = true;
+    const ctx = Object.assign(rctx(st, p), { self: null, target, mult: 1 });
+    for (const f of pw.fx) exec(ctx, f);
+    applyAuras(p.board);
+    checkTriples(st, p);
+    return null;
+  }
+  function resolveChoice(st, p, i) {
+    const c = p.choices.shift();
+    c.options.forEach((m, j) => { if (j !== i) poolReturn(st, m); });
+    const m = c.options[i];
+    if (!addToHand(p, m)) poolReturn(st, m);
+    checkTriples(st, p);
+  }
+  function doPick(st, p, i) {
+    const e = guard(st, p, true); if (e) return e;
+    const c = p.choices[0];
+    if (!c) return 'Aucun choix en attente.';
+    if (!c.options[i]) return 'Choix invalide.';
+    resolveChoice(st, p, i);
+    return null;
+  }
+
+  // ------------------------------------------------------------------ IA
+  const CURVE = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5, 6];
+  function aiVal(p, m) {
+    const d = MINIONS[m.id];
+    let v = m.atk + m.hp + (d.v || 0) * (m.golden ? 2 : 1) + m.tier;
+    if (m.divine) v += 2 + m.atk * 0.5;
+    if (m.taunt) v += 1;
+    if (m.reborn) v += 1 + m.atk * 0.3;
+    if (m.wf) v += m.atk * 0.6;
+    if (m.venom) v += 5;
+    if (m.tribe !== 'neutre') {
+      let c = 0;
+      for (const x of p.board) if (x !== m && x.tribe === m.tribe) c++;
+      v += Math.min(c, 5) * 1.3;
+      if (m.tribe === p.ai.fav) v += 3;
+    }
+    if (m.golden && m.tri) v += 6;
+    return v;
+  }
+  function tripleBonus(p, id) {
+    if (MINIONS[id].tok) return 0;
+    let c = 0;
+    for (const m of p.hand) if (m.id === id && !m.golden) c++;
+    for (const m of p.board) if (m.id === id && !m.golden) c++;
+    return c >= 2 ? 30 : c === 1 ? 4 : 0;
+  }
+  function weakest(p) {
+    let wi = -1, wv = Infinity;
+    p.board.forEach((m, i) => { const v = aiVal(p, m); if (v < wv) { wv = v; wi = i; } });
+    return { i: wi, v: wi < 0 ? -Infinity : wv };
+  }
+  function bestBy(arr, f) {
+    let bi = -1, bv = -Infinity;
+    arr.forEach((x, i) => { const v = f(x); if (v > bv) { bv = v; bi = i; } });
+    return { i: bi, v: bv };
+  }
+  function aiUpdateFav(p) {
+    const c = tribeCounts(p.board);
+    let best = null, n = 2;
+    for (const t in c) if (t !== 'neutre' && c[t] > n) { n = c[t]; best = t; }
+    if (best) p.ai.fav = best;
+  }
+  function aiWantTier(st, p) {
+    const r = Math.max(1, Math.min(CURVE.length - 1, st.round + p.ai.tempo));
+    let w = CURVE[r];
+    if (p.hp + p.armor <= 10 && p.tier >= 3) w = Math.min(w, p.tier);
+    return w;
+  }
+  function aiPlay(st, p) {
+    if (!p.hand.length) return false;
+    const b = bestBy(p.hand, m => aiVal(p, m));
+    if (p.board.length >= MAX_BOARD) {
+      const w = weakest(p);
+      if (w.i >= 0 && w.v + 2 < b.v) return !doSell(st, p, w.i);
+      return false;
+    }
+    const m = p.hand[b.i];
+    const d = MINIONS[m.id];
+    let t = null;
+    const valid = validTargets(p, d, m);
+    if (valid.length) {
+      const isKw = d.fx.some(f => f.do === 'kw' && f.to === 'target');
+      t = valid[bestBy(valid, x => aiVal(p, x) + (isKw && !x.divine ? 6 : 0)).i].uid;
+    }
+    return !doPlay(st, p, b.i, p.board.length, t);
+  }
+  function aiUpgrade(st, p) {
+    if (p.tier >= 6 || p.upCost == null || p.gold < p.upCost) return false;
+    const want = aiWantTier(st, p);
+    const cheap = p.upCost <= 1 && st.round >= 3;
+    if (p.tier < want || cheap) return !doUpgrade(st, p);
+    return false;
+  }
+  function aiBuy(st, p) {
+    if (p.gold < COST.buy || p.hand.length >= MAX_HAND || !p.shop.length) return false;
+    const b = bestBy(p.shop, m => aiVal(p, m) + tripleBonus(p, m.id));
+    const m = p.shop[b.i];
+    const room = p.board.length + p.hand.length < MAX_BOARD;
+    const trip = tripleBonus(p, m.id) >= 30;
+    const w = weakest(p);
+    // Plus tard dans la partie, une taverne médiocre mérite d'être rafraîchie avant d'acheter.
+    if (!trip && room && st.round >= 5 && p.board.length >= 4 && aiVal(p, m) < w.v && p.gold >= COST.buy + COST.roll && p.rolls < 3) {
+      return !doRefresh(st, p);
+    }
+    if (room || trip || aiVal(p, m) > w.v + 3) return !doBuy(st, p, b.i);
+    return false;
+  }
+  function aiPower(st, p) {
+    const pw = HEROES[p.hero].power;
+    if (pw.type !== 'active' || p.powerUsed || p.gold < pw.cost) return false;
+    let t = null;
+    switch (p.hero) {
+      case 'elara': case 'kaia':
+        if (p.hand.length >= MAX_HAND - 1) return false;
+        break;
+      case 'bram': case 'morgane': {
+        const valid = powerTargetsP(p);
+        if (!valid.length) return false;
+        t = valid[bestBy(valid, m => aiVal(p, m)).i].uid;
+        break;
+      }
+      case 'seraphine':
+        if (p.board.length < 2) return false;
+        break;
+      case 'liche': {
+        if (p.hp <= 8) return false;
+        const forUp = p.tier < 6 && p.upCost != null && p.gold + 1 === p.upCost && p.tier < aiWantTier(st, p);
+        if ((p.gold + 1) % 3 !== 0 && !forUp) return false;
+        break;
+      }
+    }
+    return !doPower(st, p, t);
+  }
+  function aiRoll(st, p) {
+    if (p.gold < COST.roll + COST.buy || p.rolls >= 6 || p.hand.length >= MAX_HAND) return false;
+    return !doRefresh(st, p);
+  }
+  function aiFreeze(st, p) {
+    if (p.frozen || !p.shop.length) return;
+    const b = bestBy(p.shop, m => aiVal(p, m) + tripleBonus(p, m.id));
+    const w = weakest(p);
+    if (tripleBonus(p, p.shop[b.i].id) >= 30 || (p.board.length >= 4 && b.v > w.v + 8)) p.frozen = true;
+  }
+  function aiArrange(p) {
+    const key = m => {
+      const d = MINIONS[m.id];
+      let k = 0;
+      if (d.fx.some(f => f.on === 'dr' && f.do === 'summon')) k += 3;
+      if (m.divine) k += 1;
+      if (m.reborn) k += 1;
+      if (d.fx.some(f => f.on === 'aura' && f.to === 'adj')) k -= 1;
+      if (d.fx.some(f => f.on === 'shield' || f.on === 'death' || f.on === 'summon')) k -= 2;
+      return k;
+    };
+    const order = p.board.map((m, i) => ({ m, i, k: key(m) }));
+    order.sort((a, b) => b.k - a.k || a.i - b.i);
+    p.board = order.map(o => o.m);
+    applyAuras(p.board);
+  }
+  function aiTurn(st, pi) {
+    const p = st.players[pi];
+    if (!p || !p.alive || st.over) return;
+    aiUpdateFav(p);
+    for (let g = 0; g < 80; g++) {
+      if (p.choices.length) {
+        const c = p.choices[0];
+        resolveChoice(st, p, bestBy(c.options, m => aiVal(p, m) + tripleBonus(p, m.id)).i);
+        continue;
+      }
+      if (aiPlay(st, p)) continue;
+      if (aiUpgrade(st, p)) continue;
+      if (aiBuy(st, p)) continue;
+      if (aiPower(st, p)) continue;
+      if (aiRoll(st, p)) continue;
+      break;
+    }
+    while (p.choices.length) resolveChoice(st, p, 0);
+    aiFreeze(st, p);
+    aiArrange(p);
+  }
+
+  // ------------------------------------------------------------------ Fin de tour, appariements, éliminations
+  function pairUp(st) {
+    const alive = st.players.filter(p => p.alive).map(p => p.idx);
+    let best = null, bestScore = Infinity;
+    for (let t = 0; t < 12; t++) {
+      const order = shuffle(st, alive.slice());
+      const pairs = [];
+      let score = 0;
+      for (let i = 0; i + 1 < order.length; i += 2) {
+        pairs.push([order[i], order[i + 1]]);
+        if (st.players[order[i]].lastOpponent === order[i + 1] || st.players[order[i + 1]].lastOpponent === order[i]) score++;
+      }
+      if (order.length % 2) {
+        const g = order[order.length - 1];
+        pairs.push([g, -1]);
+        if (st.ghost && st.players[g].lastOpponent === st.ghost.from) score++;
+      }
+      if (score < bestScore) { best = pairs; bestScore = score; if (!score) break; }
+    }
+    return best || [];
+  }
+  function sideOf(p) { return { board: p.board, tier: p.tier, tb: p.tb, hero: p.hero }; }
+  function hurtHero(p, n) {
+    if (n <= 0) return;
+    const a = Math.min(p.armor, n);
+    p.armor -= a;
+    p.hp -= n - a;
+  }
+  function eliminate(st) {
+    const dying = st.players.filter(p => p.alive && p.hp <= 0);
+    if (!dying.length) return;
+    const aliveCount = st.players.filter(p => p.alive).length;
+    const tie = {};
+    for (const p of dying) tie[p.idx] = rnd(st);
+    dying.sort((a, b) => a.hp - b.hp || tie[a.idx] - tie[b.idx]);
+    let place = aliveCount;
+    for (const p of dying) {
+      p.alive = false;
+      p.place = place--;
+      p.finalBoard = p.board.map(snap);
+      st.ghost = { from: p.idx, name: p.name, hero: null, board: clone(p.board), tier: p.tier, tb: clone(p.tb) };
+      for (const m of p.shop.concat(p.hand, p.board)) poolReturn(st, m);
+      for (const c of p.choices) for (const m of c.options) poolReturn(st, m);
+      p.shop = []; p.hand = []; p.board = []; p.choices = []; p.frozen = false; p.gold = 0;
+    }
+  }
+  function finishIfOver(st) {
+    const alive = st.players.filter(p => p.alive);
+    if (alive.length <= 1 || st.round >= MAX_ROUNDS) {
+      alive.sort((a, b) => (b.hp + b.armor) - (a.hp + a.armor) || a.idx - b.idx);
+      let place = 1;
+      for (const p of alive) { p.place = place++; p.finalBoard = p.board.map(snap); }
+      st.winner = alive.length ? alive[0].idx : st.players.find(p => p.place === 1).idx;
+      st.over = true;
+      return true;
+    }
+    return false;
+  }
+
+  function endTurn(st, opts) {
+    opts = opts || {};
+    if (!st || st.over) return { combats: [], myCombat: null };
+    const H = st.players[0];
+    if (H.alive) while (H.choices.length) resolveChoice(st, H, 0);
+    for (let i = 1; i < st.players.length; i++) {
+      if (!st.players[i].alive) continue;
+      aiTurn(st, i);
+      if (opts.afterAi) opts.afterAi(st, i);
+    }
+    for (const p of st.players) if (p.alive) endOfTurn(st, p);
+
+    const combats = [];
+    let myCombat = null;
+    for (const pr of pairUp(st)) {
+      let a = pr[0], b = pr[1];
+      if (b === 0) { b = a; a = 0; }
+      const pa = st.players[a];
+      const ghost = b < 0;
+      if (ghost && !st.ghost) { combats.push({ a, b: -1, ghost: true, ghostOf: null, winner: 'draw', damage: 0, bye: true }); continue; }
+      const pb = ghost ? null : st.players[b];
+      const L = runCombat(st, sideOf(pa), ghost ? st.ghost : sideOf(pb));
+      const w = L.result.winner;
+      // Égalités interminables en fin de partie : les deux héros souffrent.
+      if (w === 'draw' && st.round > 30) { hurtHero(pa, 5); if (pb) hurtHero(pb, 5); }
+      if (w === 'me') { if (pb) hurtHero(pb, L.result.damage); }
+      if (w === 'them') hurtHero(pa, L.result.damage);
+      const oppIdx = ghost ? st.ghost.from : b;
+      pa.lastOpponent = oppIdx;
+      if (pb) pb.lastOpponent = a;
+      const rec = (p, won) => { if (!p) return; if (w === 'draw') p.stats.draws++; else if (won) p.stats.wins++; else p.stats.losses++; p.lostLast = w !== 'draw' && !won; };
+      rec(pa, w === 'me'); rec(pb, w === 'them');
+      const entry = { a, b: ghost ? -1 : b, ghost, ghostOf: ghost ? st.ghost.from : null, winner: w === 'me' ? 'a' : w === 'them' ? 'b' : 'draw', damage: L.result.damage };
+      if (opts.logs) entry.log = L;
+      combats.push(entry);
+      if (a === 0) {
+        myCombat = { opponent: oppIdx, ghost, first: L.first, start: L.start, events: L.events, result: L.result, end: L.end };
+      }
+    }
+    eliminate(st);
+    st.history.push({ round: st.round, hp: st.players.map(p => p.hp) });
+    if (!finishIfOver(st)) { st.round++; startRound(st); }
+    return { combats, myCombat };
+  }
+
+  // ------------------------------------------------------------------ API publique (joueur humain = 0)
+  const H0 = st => st && st.players && st.players[0];
+  function canAct(st) {
+    const p = H0(st);
+    return !!(p && !st.over && p.alive && !p.choices.length);
+  }
+  function view(st) {
+    const p = H0(st);
+    const pw = HEROES[p.hero].power;
+    return clone({
+      round: st.round, over: st.over, winner: st.winner,
+      me: {
+        name: p.name, hero: p.hero, img: p.img, hp: p.hp, armor: p.armor, tier: p.tier, gold: p.gold, maxGold: p.maxGold,
+        upCost: p.upCost, shop: p.shop.map(snap), frozen: p.frozen, hand: p.hand.map(snap), board: p.board.map(snap),
+        alive: p.alive, place: p.place, powerUsed: p.powerUsed, lastOpponent: p.lastOpponent, tb: p.tb, sb: p.sb,
+      },
+      power: { name: pw.name, txt: pw.txt, type: pw.type, cost: pw.cost || 0, target: !!pw.target,
+        usable: pw.type === 'active' && canAct(st) && !p.powerUsed && p.gold >= (pw.cost || 0) },
+      choice: p.choices[0] || null,
+      players: st.players.map(q => ({
+        idx: q.idx, name: q.name, hero: q.hero, img: q.img, hp: q.hp, armor: q.armor, tier: q.tier,
+        alive: q.alive, place: q.place, lastOpponent: q.lastOpponent, boardSize: q.board.length,
+        tribes: tribeCounts(q.board),
+      })),
+      ghost: st.ghost ? { from: st.ghost.from, name: st.ghost.name } : null,
+      canAct: canAct(st),
+    });
+  }
+  function targets(st, handIndex) {
+    const p = H0(st), m = p && p.hand[handIndex];
+    if (!m) return [];
+    return validTargets(p, MINIONS[m.id], m).map(x => x.uid);
+  }
+  function powerTargets(st) {
+    const p = H0(st);
+    const v = powerTargetsP(p);
+    return v ? v.map(m => m.uid) : null;
+  }
+  function finish(st) {
+    const out = [];
+    for (let g = 0; g < MAX_ROUNDS + 5 && !st.over; g++) {
+      if (st.players[0].alive) aiTurn(st, 0);
+      out.push(endTurn(st));
+    }
+    return out;
+  }
+  // Outils de test / mise au point
+  function grant(st, pi, id, golden) {
+    const p = st.players[pi];
+    const d = MINIONS[id];
+    if (!d || !p) return null;
+    if (!d.tok) { if (st.pool[id] < (golden ? 3 : 1)) return null; st.pool[id] -= golden ? 3 : 1; }
+    const m = mk(st, id, p, golden);
+    if (golden) m.pc = d.tok ? 0 : 3;
+    p.hand.push(m);
+    checkTriples(st, p);
+    return m;
+  }
+  function makeMinion(st, id, golden) {
+    const m = mk(st, id, null, golden);
+    m.pc = 0;
+    return m;
+  }
+  function simulateCombat(st, boardA, boardB, o) {
+    o = o || {};
+    return runCombat(st,
+      { board: boardA, tier: o.tierA || 1, tb: o.tbA || {}, hero: o.heroA || null },
+      { board: boardB, tier: o.tierB || 1, tb: o.tbB || {}, hero: o.heroB || null });
+  }
+
+  return {
+    version: 1,
+    TRIBES, KEYWORDS, HEROES, HERO_IDS, MINIONS, POOL_IDS, COPIES, SHOP_SIZE, UP_COST, COST, MAX_BOARD, MAX_HAND,
+    offerHeroes, newLobby,
+    buy: (st, i) => doBuy(st, H0(st), i),
+    sell: (st, i) => doSell(st, H0(st), i),
+    play: (st, hi, pos, t) => doPlay(st, H0(st), hi, pos, t),
+    move: (st, from, to) => doMove(st, H0(st), from, to),
+    refresh: st => doRefresh(st, H0(st)),
+    freeze: st => doFreeze(st, H0(st)),
+    upgrade: st => doUpgrade(st, H0(st)),
+    power: (st, t) => doPower(st, H0(st), t),
+    pick: (st, i) => doPick(st, H0(st), i),
+    endTurn, canAct, view, tribeCounts, targets, powerTargets, finish, aiTurn,
+    upgradeCost: st => H0(st).upCost,
+    heroName: id => (HEROES[id] ? HEROES[id].full : ''),
+    snap, grant, makeMinion, simulateCombat,
+  };
+})();
+
+
+// ===================== Champs de bataille : interface =====================
+
+const bgs = { st: null, v: null, sel: null, aim: null, busy: false, speed: 1, skip: false, drag: null };
+const BG_SAVE = 'duel-royaumes-champs-v1';
+const BG_RAR = [null, 'C', 'C', 'R', 'R', 'E', 'L'];
+const BG_ELEM = { drag: ELEM.feu, mort: ELEM.ombre, bete: ELEM.physique, elem: ELEM.nature, chev: ELEM.sacre, neutre: ELEM.arcane };
+const bgGain = place => (place === 1 ? 120 : place === 2 ? 80 : place <= 4 ? 50 : 20);
+
+function bgArt(img) {
+  const a = el('div', 'art');
+  a.style.backgroundImage = `url(art/bg/${img}.webp)`;
+  return a;
+}
+const trCol = t => (BG.TRIBES[t] || BG.TRIBES.neutre).col;
+const bgHeroName = id => BG.HEROES[id].name;
+
+function bgStat(kind, val, base) {
+  const s = el('div', 'stat ' + kind, el('b', null, String(val)));
+  if (val > base) s.classList.add('buffed');
+  return s;
+}
+
+// Petits symboles sous le serviteur : râle d'agonie, toxique, furie, début du combat, fin de tour
+function bgIcons(m) {
+  const on = new Set(BG.MINIONS[m.id].fx.map(f => f.on));
+  return (on.has('dr') ? '💀' : '') + (m.venom ? '🧪' : '') + (m.wf ? '🌪️' : '') + (on.has('soc') ? '⚔️' : '') + (on.has('eot') || on.has('sot') ? '⏳' : '')
+    + (on.has('aura') || BG.MINIONS[m.id].brann ? '✨' : '') + (['play', 'summon', 'shield', 'death', 'attack', 'hurt', 'sell'].some(k => on.has(k)) ? '⚡' : '');
+}
+
+function bgMinionEl(m, zone, i) {
+  const d = BG.MINIONS[m.id], k = m.golden ? 2 : 1;
+  const e = el('div', `minion bgm${m.golden ? ' golden foil' : ''}`, el('div', 'portrait', bgArt(m.img)), bgStat('atk', m.atk, d.atk * k), bgStat('hp', m.hp, d.hp * k));
+  e.style.setProperty('--tc', trCol(m.tribe));
+  e.dataset.u = m.uid;
+  e.setAttribute('aria-label', `${m.name}, ${m.atk} attaque, ${m.hp} vie`);
+  for (const kw of ['taunt', 'divine', 'reborn']) if (m[kw]) e.classList.add(kw);
+  const ic = bgIcons(m);
+  if (ic) e.append(el('div', 'icons', ic));
+  if (zone === 'shop') e.append(el('div', 'tierb', String(m.tier)));
+  return e;
+}
+
+function bgCardEl(m) {
+  const tr = BG.TRIBES[m.tribe] || BG.TRIBES.neutre, d = BG.MINIONS[m.id], k = m.golden ? 2 : 1;
+  const e = el('div', `card t-m bgc r-${BG_RAR[m.tier]}${m.golden ? ' foil golden' : ''}${m.txt ? '' : ' notext'}`,
+    el('div', 'face', bgArt(m.img), el('div', 'holo'), el('div', 'holo2'), el('div', 'prism'), el('div', 'shine'),
+      el('div', 'top', el('span', 'name', m.name)), el('div', 'panel', el('div', 'text', richText(m.txt))), el('div', 'glare')),
+    el('div', 'gem-tier', el('b', null, String(m.tier))), bgStat('atk', m.atk, d.atk * k), bgStat('hp', m.hp, d.hp * k),
+    m.tribe !== 'neutre' ? el('div', 'tribe', tr.name) : null);
+  e.style.setProperty('--tc', tr.col);
+  e.setAttribute('aria-label', `${m.name}, rang ${m.tier}, ${m.atk} attaque, ${m.hp} vie. ${(m.txt || '').replace(/\*\*/g, '')}`);
+  return e;
+}
+
+function bgBigCard(m) {
+  const k = bgCardEl(m);
+  k.classList.add('idle');
+  enableTilt(k, 16);
+  return el('div', 'tiltwrap', k);
+}
+
+function bgGloss(m) {
+  const out = [];
+  const add = (k, t) => out.push(el('div', null, el('b', null, k + ' : '), t));
+  if (m.taunt) add('Provocation', 'les ennemis doivent attaquer ce serviteur en premier.');
+  if (m.divine) add('Bouclier divin', 'annule les premiers dégâts subis.');
+  if (m.reborn) add('Réincarnation', 'revient avec 1 PV la première fois qu’il meurt.');
+  if (m.wf) add('Furie des vents', 'attaque deux fois.');
+  if (m.venom) add('Toxique', 'détruit le premier serviteur qu’il blesse.');
+  const t = m.txt || '';
+  if (t.includes('Cri de guerre')) add('Cri de guerre', 's’active quand tu le joues depuis ta main.');
+  if (t.includes("Râle d'agonie")) add("Râle d'agonie", 's’active quand il meurt en combat.');
+  if (t.includes('début du combat')) add('Début du combat', 's’active avant la première attaque.');
+  if (m.golden) add('Doré', 'trois exemplaires réunis : statistiques et effet doublés.');
+  return out.length ? el('div', 'gloss', ...out) : null;
+}
+
+// ---------- Sauvegarde de la partie (dans ce navigateur) ----------
+function bgSave() {
+  try {
+    if (bgs.st && !bgs.st.over && bgs.st.players[0].alive) localStorage.setItem(BG_SAVE, JSON.stringify(bgs.st));
+    else localStorage.removeItem(BG_SAVE);
+  } catch (e) { /* stockage indisponible */ }
+}
+function bgSaved() {
+  try { const s = JSON.parse(localStorage.getItem(BG_SAVE) || 'null'); return s && s.players && !s.over ? s : null; } catch (e) { return null; }
+}
+
+// ---------- Choix du héros ----------
+function bgPickHero() {
+  const seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
+  const ids = BG.offerHeroes(seed);
+  $('bgpick-grid').replaceChildren(...ids.map(id => {
+    const h = BG.HEROES[id], pw = h.power;
+    const t = el('button', 'hero-tile glass', el('div', 'hero', el('div', 'portrait', artEl(h.img))),
+      el('b', null, h.name), el('div', 'ttl', h.title),
+      el('div', 'pw', el('strong', null, pw.name), pw.type === 'active' ? ` (${pw.cost} or) : ` : ' (passif) : ', richText(pw.txt)),
+      h.armor ? el('div', 'style', `Commence avec ${h.armor} points d’armure.`) : null,
+      el('div', 'dk', h.aff ? `Aime les ${BG.TRIBES[h.aff].plural}` : 'Polyvalent'));
+    t.style.setProperty('--cls', h.aff ? trCol(h.aff) : 'var(--or)');
+    t.onclick = () => bgStart(seed, id);
+    return t;
+  }));
+  go('bgpick');
+}
+
+function bgStart(seed, hero) {
+  bgs.st = BG.newLobby(seed, hero);
+  bgEnter();
+  if (!Profile.d.bgGames) bgHowTo();
+}
+
+function bgEnter() {
+  bgs.v = BG.view(bgs.st);
+  bgs.sel = bgs.aim = null;
+  bgs.busy = false;
+  $('bg-arena').hidden = true;
+  $('bg-over').hidden = true;
+  go('bg');
+  bgRender();
+  bgSave();
+  bgBanner(`Tour ${bgs.v.round}`);
+}
+
+function bgHowTo() {
+  openModal(el('h3', null, 'Champs de bataille'),
+    el('div', 'gloss',
+      el('div', null, el('b', null, 'Recrute : '), 'achète des serviteurs à la taverne (3 or), pose-les dans ta troupe, revends-les (+1 or).'),
+      el('div', null, el('b', null, 'Synergies : '), 'Dragons, Morts-vivants, Orcs, Elfes et Chevaliers se renforcent entre eux.'),
+      el('div', null, el('b', null, 'Triple : '), '3 exemplaires du même serviteur fusionnent en version dorée, puis tu découvres une carte du rang supérieur.'),
+      el('div', null, el('b', null, 'Taverne : '), 'améliore-la pour trouver des serviteurs plus puissants. Son prix baisse chaque tour.'),
+      el('div', null, el('b', null, 'Combat : '), 'automatique, de gauche à droite. Le perdant perd des PV. Sois le dernier héros debout parmi 8 !'),
+      el('div', null, el('b', null, 'Astuce : '), 'touche un serviteur pour voir les actions, ou fais-le glisser.')),
+    btn('C’est parti !', 'primary', closeModal));
+}
+
+// ---------- Rendu de l'écran de recrutement ----------
+function bgRender() {
+  const v = bgs.v = BG.view(bgs.st), me = v.me;
+  if (bgs.drag) return;
+  // Classement
+  const order = v.players.slice().sort((a, b) => (b.alive - a.alive) || (a.alive ? (b.hp + b.armor) - (a.hp + a.armor) : a.place - b.place) || a.idx - b.idx);
+  $('bg-lead').replaceChildren(...order.map(p => {
+    const e = el('button', `lead-e${p.idx === 0 ? ' me' : ''}${p.alive ? '' : ' dead'}`, el('div', 'lp', artEl(p.img)),
+      el('b', 'lhp', p.alive ? String(p.hp) : `${p.place}e`), p.alive ? el('i', 'lt', String(p.tier)) : null, p.armor ? el('i', 'lar', String(p.armor)) : null);
+    e.dataset.p = p.idx;
+    e.setAttribute('aria-label', `${p.idx === 0 ? 'Toi' : p.name} : ${p.alive ? p.hp + ' PV, taverne rang ' + p.tier : 'éliminé, ' + p.place + 'e place'}`);
+    e.onclick = () => bgPlayerInfo(p.idx);
+    return e;
+  }));
+  // Taverne
+  $('bg-tier').replaceChildren('Taverne ', el('span', 'stars', '★'.repeat(me.tier)));
+  const up = $('bg-up');
+  up.replaceChildren(...(me.tier >= 6 ? ['Rang max'] : ['▲ ', el('i', 'coin'), String(me.upCost)]));
+  up.disabled = me.tier >= 6 || me.gold < me.upCost || !v.canAct;
+  up.title = me.tier >= 6 ? 'Taverne au rang maximum' : `Améliorer la taverne au rang ${me.tier + 1}`;
+  const roll = $('bg-roll');
+  roll.replaceChildren('↻ ', el('i', 'coin'), String(BG.COST.roll));
+  roll.disabled = me.gold < BG.COST.roll || !v.canAct;
+  const fr = $('bg-freeze');
+  fr.classList.toggle('on', me.frozen);
+  fr.textContent = me.frozen ? '❄ Gelée' : '❄ Geler';
+  fr.disabled = !v.canAct;
+  const shop = $('bg-shop');
+  shop.classList.toggle('frozen', me.frozen);
+  shop.replaceChildren(...me.shop.map((m, i) => bgItem(bgMinionEl(m, 'shop', i), 'shop', i)));
+  // Héros, pouvoir, or
+  const h = BG.HEROES[me.hero];
+  const hero = el('div', 'hero', el('div', 'portrait', artEl(h.img)), el('div', 'stat hp', el('b', null, String(me.hp))), me.armor ? el('div', 'stat armor', el('b', null, String(me.armor))) : null);
+  hero.style.setProperty('--cls', h.aff ? trCol(h.aff) : 'var(--or)');
+  hero.onclick = () => bgPlayerInfo(0);
+  hero.dataset.p = 0;
+  const pw = v.power;
+  const pb = el('button', 'power bgpow' + (pw.type === 'passive' ? ' passive' : pw.usable ? ' playable' : ' used'), el('span', null, pw.type === 'passive' ? '✦' : '⚡'),
+    pw.type === 'active' ? el('div', 'gem-gold', el('b', null, String(pw.cost))) : null);
+  if (bgs.aim && bgs.aim.kind === 'power') pb.classList.add('sel');
+  pb.setAttribute('aria-label', `Pouvoir : ${pw.name}. ${pw.txt.replace(/\*\*/g, '')}`);
+  pb.onclick = bgPower;
+  $('bg-mid').replaceChildren(
+    el('div', 'roundtag', `Tour ${v.round}`),
+    hero, pb,
+    el('div', 'goldbox', el('i', 'coin'), el('span', null, String(me.gold)), el('small', null, `/${me.maxGold}`)));
+  // Troupe
+  const board = $('bg-board');
+  board.replaceChildren(...me.board.map((m, i) => {
+    const n = bgItem(bgMinionEl(m, 'board', i), 'board', i);
+    if (bgs.aim && bgs.aim.valid.includes(m.uid)) n.classList.add('target');
+    return n;
+  }));
+  $('bg-band-empty').hidden = me.board.length > 0;
+  // Main
+  const hand = $('bg-hand');
+  bgFit(shop, Math.max(me.shop.length, 4));
+  bgFit(board, Math.max(me.board.length + (me.hand.length ? 1 : 0), 5));
+  bgFitHand(hand, me.hand.length);
+  hand.replaceChildren(...(me.hand.length ? me.hand.map((m, i) => bgItem(bgCardEl(m), 'hand', i)) : [el('span', 'empty', 'Ta main est vide')]));
+  bgBar();
+  bgChoice();
+}
+
+// Taille des serviteurs : la plus grande qui tienne dans la rangée (n places au moins)
+function bgFit(lane, n) {
+  const r = lane.getBoundingClientRect(), gap = parseFloat(getComputedStyle(lane).columnGap) || 6;
+  const w = Math.max(36, Math.min(116, (r.width - 10 - (n - 1) * gap) / n, (r.height - 18) / 1.3));
+  lane.style.setProperty('--bmw', Math.floor(w) + 'px');
+}
+function bgFitHand(hand, n) {
+  const H = hand.clientHeight, W = hand.clientWidth;
+  const w = Math.max(50, Math.min(120, (H - 10) / 1.4, n ? (W - 12) / Math.max(n, 3.4) * 1.25 : 120));
+  hand.style.setProperty('--bcw', Math.floor(w) + 'px');
+  hand.style.setProperty('--ov', n > 1 ? Math.min(6, (W - 12 - n * w) / (n - 1)) + 'px' : '0px');
+}
+
+function bgItem(n, z, i) {
+  n.dataset.z = z;
+  n.dataset.i = i;
+  if (bgs.sel && bgs.sel.z === z && bgs.sel.i === i) n.classList.add('sel');
+  bgGrab(n, z, i);
+  return n;
+}
+
+function bgSelected() {
+  const s = bgs.sel, me = bgs.v.me;
+  if (!s) return null;
+  const list = s.z === 'shop' ? me.shop : s.z === 'hand' ? me.hand : me.board;
+  return list[s.i] || null;
+}
+
+function bgBar() {
+  const v = bgs.v, me = v.me, bar = $('bg-bar');
+  const fight = btn('⚔ Combattre !', 'fight', bgFight);
+  fight.disabled = bgs.busy || !v.canAct;
+  if (v.canAct && !bgs.aim && me.gold < BG.COST.buy && !v.power.usable && (!me.hand.length || me.board.length >= BG.MAX_BOARD)) fight.classList.add('go');
+  let info, acts = [];
+  if (bgs.aim) {
+    info = el('div', 'info', el('b', null, bgs.aim.kind === 'power' ? v.power.name : 'Cri de guerre'), el('span', 'prompt', 'Touche un serviteur de ta troupe.'));
+    acts = [btn('Annuler', 'ghost', () => { bgs.aim = null; bgRender(); })];
+  } else {
+    const m = bgSelected(), s = bgs.sel;
+    if (m) {
+      info = el('div', 'info', el('b', null, m.name), el('span', 't', richText(m.txt || (m.golden ? 'Serviteur doré.' : 'Aucun effet.'))));
+      const more = btn('ⓘ', 'ghost', () => bgInspect(m, s.z, s.i));
+      more.setAttribute('aria-label', 'Détails');
+      if (s.z === 'shop') {
+        const b = btn('', 'primary', () => bgBuy(s.i));
+        b.append('Acheter ', el('i', 'coin'), String(BG.COST.buy));
+        b.disabled = me.gold < BG.COST.buy || me.hand.length >= BG.MAX_HAND;
+        acts = [b, more];
+      } else if (s.z === 'hand') {
+        const b = btn('Jouer', 'primary', () => bgPlay(s.i, me.board.length));
+        b.disabled = me.board.length >= BG.MAX_BOARD;
+        acts = [b, more];
+      } else {
+        const l = btn('◀', '', () => bgMove(s.i, s.i - 1)), r = btn('▶', '', () => bgMove(s.i, s.i + 1));
+        l.disabled = s.i === 0; r.disabled = s.i >= me.board.length - 1;
+        l.setAttribute('aria-label', 'Déplacer à gauche'); r.setAttribute('aria-label', 'Déplacer à droite');
+        const sell = btn('', '', () => bgSell(s.i));
+        sell.append('Vendre +', el('i', 'coin'), String(BG.COST.sell));
+        acts = [l, r, sell, more];
+      }
+    } else {
+      info = el('div', 'info', el('span', 't muted', me.board.length ? 'Touche ou fais glisser un serviteur.' : 'Achète des serviteurs, puis pose-les dans ta troupe.'));
+    }
+  }
+  bar.replaceChildren(el('div', 'left', info, acts.length ? el('div', 'acts', ...acts) : null), fight);
+}
+
+function bgChoice() {
+  const v = bgs.v, o = $('bg-over');
+  if (!v.choice || bgs.busy) { if (o.dataset.kind === 'choice') { o.hidden = true; o.replaceChildren(); o.dataset.kind = ''; } return; }
+  const c = v.choice;
+  o.dataset.kind = 'choice';
+  o.hidden = false;
+  o.replaceChildren(el('div', 'box glass wide', el('h3', null, 'Découverte'), el('p', 'muted', `Choisis un serviteur de rang ${c.tier} à ajouter à ta main.`),
+    el('div', 'disc', ...c.options.map((m, i) => {
+      const k = bgCardEl(m);
+      k.onclick = () => bgAct(() => BG.pick(bgs.st, i), { pick: true });
+      if (FINE) enableTilt(k, 12);
+      return k;
+    }))));
+}
+
+// ---------- Glisser-déposer ----------
+function bgGrab(node, z, i) {
+  node.addEventListener('pointerdown', e => {
+    if (bgs.busy || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    bgs.drag = { z, i, node, x0: e.clientX, y0: e.clientY, on: false, ghost: null, pos: null };
+    try { node.setPointerCapture(e.pointerId); } catch (er) { /* rien */ }
+  });
+  node.addEventListener('pointermove', e => {
+    const d = bgs.drag;
+    if (!d || d.node !== node) return;
+    if (!d.on && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 10 && !bgs.aim) bgDragStart(d);
+    if (d.on) bgDragMove(d, e.clientX, e.clientY);
+  });
+  node.addEventListener('pointerup', e => {
+    const d = bgs.drag;
+    if (!d || d.node !== node) return;
+    bgs.drag = null;
+    if (d.on) bgDrop(d, e.clientX, e.clientY);
+    else bgTap(z, i);
+  });
+  node.addEventListener('pointercancel', () => {
+    const d = bgs.drag;
+    if (d && d.node === node) { bgs.drag = null; bgDragEnd(d); bgRender(); }
+  });
+}
+
+function bgDragStart(d) {
+  d.on = true;
+  bgs.sel = null;
+  const r = d.node.getBoundingClientRect();
+  const g = d.node.cloneNode(true);
+  g.classList.add('bgghost');
+  g.classList.remove('sel');
+  Object.assign(g.style, { width: r.width + 'px', height: r.height + 'px' });
+  document.body.append(g);
+  d.ghost = g;
+  d.node.classList.add('lifted');
+  if (d.z === 'board') d.node.style.display = 'none';
+  $(d.z === 'board' ? 'bg-tavern' : 'bg-warband').classList.add(d.z === 'board' ? 'dropsell' : 'dropok');
+  if (d.z === 'board') $('bg-warband').classList.add('dropok');
+}
+
+function bgZone(x, y) {
+  const inR = (id, pad = 0) => { const r = $(id).getBoundingClientRect(); return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad; };
+  if (inR('bg-warband', 6)) return 'board';
+  if (inR('bg-tavern', 4)) return 'shop';
+  if (inR('bg-hand', 10)) return 'hand';
+  return null;
+}
+
+function bgSlot(x) {
+  let n = 0;
+  for (const k of $('bg-board').children) {
+    if (k.classList.contains('ph') || k.style.display === 'none') continue;
+    const r = k.getBoundingClientRect();
+    if (x > r.left + r.width / 2) n++;
+  }
+  return n;
+}
+
+function bgDragMove(d, x, y) {
+  d.ghost.style.left = x + 'px';
+  d.ghost.style.top = y + 'px';
+  const z = bgZone(x, y), lane = $('bg-board');
+  const want = (z === 'board' && (d.z !== 'shop' || bgs.v.me.board.length < BG.MAX_BOARD) && (d.z !== 'hand' || bgs.v.me.board.length < BG.MAX_BOARD)) ? bgSlot(x) : null;
+  if (want === d.pos) return;
+  d.pos = want;
+  lane.querySelector('.ph')?.remove();
+  if (want == null) return;
+  const real = [...lane.children].filter(k => k.style.display !== 'none');
+  const ph = el('div', 'ph');
+  if (real[want]) lane.insertBefore(ph, real[want]); else lane.append(ph);
+}
+
+function bgDragEnd(d) {
+  d.ghost?.remove();
+  d.node.classList.remove('lifted');
+  d.node.style.display = '';
+  $('bg-board').querySelector('.ph')?.remove();
+  for (const id of ['bg-tavern', 'bg-warband']) $(id).classList.remove('dropok', 'dropsell');
+}
+
+function bgDrop(d, x, y) {
+  const z = bgZone(x, y), pos = d.pos;
+  bgDragEnd(d);
+  if (d.z === 'shop' && (z === 'board' || z === 'hand')) return bgBuy(d.i, z === 'board' ? (pos ?? bgs.v.me.board.length) : null);
+  if (d.z === 'hand' && z === 'board') return bgPlay(d.i, pos ?? bgs.v.me.board.length);
+  if (d.z === 'board' && z === 'shop') return bgSell(d.i);
+  if (d.z === 'board' && z === 'board' && pos != null) return bgMove(d.i, pos);
+  bgRender();
+}
+
+function bgTap(z, i) {
+  if (bgs.busy) return;
+  const v = bgs.v;
+  if (bgs.aim) {
+    const m = z === 'board' && v.me.board[i];
+    if (m && bgs.aim.valid.includes(m.uid)) return bgAimDone(m.uid);
+    toast(z === 'board' ? 'Cette cible n’est pas valide.' : 'Choisis un serviteur de ta troupe.');
+    return;
+  }
+  bgs.sel = bgs.sel && bgs.sel.z === z && bgs.sel.i === i ? null : { z, i };
+  bgRender();
+}
+
+// ---------- Actions ----------
+const bgRect = u => { const n = document.querySelector(`#s-bg [data-u="${u}"]`); return n ? n.getBoundingClientRect() : null; };
+
+function bgAct(fn, o = {}) {
+  if (bgs.busy) return false;
+  const before = BG.view(bgs.st);
+  const rects = new Map();
+  for (const n of document.querySelectorAll('#s-bg [data-u]')) rects.set(Number(n.dataset.u), n.getBoundingClientRect());
+  const err = fn();
+  if (err) { toast(err); bgRender(); return false; }
+  bgs.sel = null;
+  bgRender();
+  bgSave();
+  bgDiff(before, bgs.v, rects, o);
+  return true;
+}
+
+// Effets visuels déduits de la différence entre deux vues
+function bgDiff(a, b, rects, o) {
+  const was = new Map();
+  for (const z of ['shop', 'hand', 'board']) for (const m of a.me[z]) was.set(m.uid, { z, m });
+  let k = 0;
+  for (const z of ['shop', 'hand', 'board']) {
+    for (const m of b.me[z]) {
+      const n = document.querySelector(`#s-bg [data-u="${m.uid}"]`);
+      if (!n) continue;
+      const w = was.get(m.uid);
+      if (!w || w.z !== z) {
+        n.classList.add('enter');
+        n.style.animationDelay = (z === 'shop' ? k++ * 70 : 0) + 'ms';
+        if (w && rects.get(m.uid)) {
+          const p = center(rects.get(m.uid));
+          FX.burst(p.x, p.y, z === 'hand' ? ELEM.or : BG_ELEM[m.tribe] || ELEM.or, 18, { speed: 220 });
+        }
+        if (z === 'board') setTimeout(() => {
+          const r = n.getBoundingClientRect(), c = center(r);
+          FX.ring(c.x, c.y + r.height * 0.3, m.golden ? '#ffd34d' : 'rgba(255,255,255,.75)', m.golden ? 140 : 64, 0.5);
+          if (m.golden || m.tier >= 5) FX.burst(c.x, c.y, BG_ELEM[m.tribe] || ELEM.or, m.golden ? 60 : 30, { speed: 320 });
+        }, 220);
+      } else if (z !== 'shop' && (m.atk > w.m.atk || m.hp > w.m.hp)) {
+        const c = center(n.getBoundingClientRect());
+        FX.rise(c.x, c.y, BG_ELEM[m.tribe] || ELEM.or, 12);
+        n.classList.add('buffpop');
+        bgFloat(n, `+${Math.max(0, m.atk - w.m.atk)}/+${Math.max(0, m.hp - w.m.hp)}`, 'f-heal');
+      }
+    }
+  }
+  // Ventes : pièces qui jaillissent
+  for (const [u, w] of was) {
+    if (w.z !== 'board' || b.me.board.some(m => m.uid === u) || b.me.hand.some(m => m.uid === u)) continue;
+    const r = rects.get(u);
+    if (!r) continue;
+    const c = center(r);
+    FX.burst(c.x, c.y, ELEM.or, 30, { speed: 260, up: 120 });
+    const f = el('div', 'float f-heal', el('span', null, `+${b.me.gold - a.me.gold} or`));
+    f.style.left = c.x + 'px'; f.style.top = c.y + 'px';
+    $('fx').append(f);
+    setTimeout(() => f.remove(), 1300);
+  }
+  // Triple : une version dorée vient d'apparaître
+  const gold = v => v.me.hand.concat(v.me.board).filter(m => m.golden).length;
+  if (gold(b) > gold(a)) {
+    const g = b.me.hand.concat(b.me.board).find(m => m.golden && !was.has(m.uid));
+    bgBanner('Triple !', 'gold');
+    FX.confetti(90);
+    if (g) setTimeout(() => toast(`${g.name} doré : statistiques et effet doublés !`), 500);
+  }
+  if (b.me.tier > a.me.tier) {
+    bgBanner(`Taverne rang ${b.me.tier} !`, 'gold');
+    const c = center($('bg-tier').getBoundingClientRect());
+    FX.ring(c.x, c.y, '#ffd34d', 160, 0.7, 12);
+    FX.burst(c.x, c.y, ELEM.or, 60, { speed: 380 });
+  }
+  if (b.me.frozen !== a.me.frozen && b.me.frozen) {
+    const c = center($('bg-shop').getBoundingClientRect());
+    FX.burst(c.x, c.y, ELEM.givre, 50, { speed: 360, grav: 40 });
+  }
+  if (o.power) {
+    const c = center($('bg-mid').querySelector('.bgpow').getBoundingClientRect());
+    FX.ring(c.x, c.y, '#ffe28a', 90, 0.5);
+    FX.burst(c.x, c.y, ELEM.arcane, 30, { speed: 280 });
+  }
+}
+
+function bgFloat(n, text, cls) {
+  const r = n.getBoundingClientRect(), c = center(r);
+  const f = el('div', 'float ' + cls, el('span', null, text));
+  f.style.left = c.x + 'px'; f.style.top = c.y + 'px';
+  $('fx').append(f);
+  setTimeout(() => f.remove(), 1300);
+}
+
+function bgBuy(i, playAt) {
+  const uid = bgs.v.me.shop[i] && bgs.v.me.shop[i].uid;
+  if (!bgAct(() => BG.buy(bgs.st, i))) return;
+  // Déposé sur la troupe : on le joue tout de suite (sauf s'il vient de former un triple)
+  const me = bgs.v.me, hi = me.hand.findIndex(m => m.uid === uid);
+  if (playAt != null && hi >= 0 && me.board.length < BG.MAX_BOARD && !bgs.v.choice) bgPlay(hi, Math.min(playAt, me.board.length));
+}
+
+function bgPlay(hi, pos) {
+  const t = BG.targets(bgs.st, hi);
+  if (t.length) {
+    bgs.aim = { kind: 'play', hi, pos, valid: t };
+    bgs.sel = null;
+    bgRender();
+    return;
+  }
+  bgAct(() => BG.play(bgs.st, hi, pos));
+}
+
+function bgAimDone(uid) {
+  const a = bgs.aim;
+  bgs.aim = null;
+  if (a.kind === 'play') bgAct(() => BG.play(bgs.st, a.hi, a.pos, uid));
+  else bgAct(() => BG.power(bgs.st, uid), { power: true });
+}
+
+function bgSell(i) { bgAct(() => BG.sell(bgs.st, i)); }
+function bgMove(from, to) {
+  if (to < 0 || to >= bgs.v.me.board.length || from === to) return;
+  if (bgAct(() => BG.move(bgs.st, from, to))) { bgs.sel = { z: 'board', i: to }; bgRender(); }
+}
+
+function bgPower() {
+  const v = bgs.v, pw = v.power;
+  if (bgs.busy) return;
+  const info = () => openModal(el('h3', null, pw.name), el('p', null, richText(pw.txt)),
+    el('p', 'muted', pw.type === 'passive' ? 'Pouvoir passif : il agit tout seul.' : `Coûte ${pw.cost} or, une fois par tour.`), btn('Fermer', '', closeModal));
+  if (pw.type === 'passive') return info();
+  if (bgs.aim && bgs.aim.kind === 'power') { bgs.aim = null; return bgRender(); }
+  if (!pw.usable) return toast(v.me.gold < pw.cost ? `Il te faut ${pw.cost} or.` : 'Pouvoir déjà utilisé ce tour-ci.');
+  const t = BG.powerTargets(bgs.st);
+  if (t) {
+    if (!t.length) return toast('Aucune cible valide dans ta troupe.');
+    bgs.aim = { kind: 'power', valid: t };
+    bgs.sel = null;
+    return bgRender();
+  }
+  bgAct(() => BG.power(bgs.st), { power: true });
+}
+
+function bgInspect(m, z, i) {
+  const me = bgs.v.me, acts = [];
+  if (z === 'shop') acts.push(btn(`Acheter (3 or)`, 'primary', () => { closeModal(); bgBuy(i); }));
+  if (z === 'hand') acts.push(btn('Jouer', 'primary', () => { closeModal(); bgPlay(i, me.board.length); }));
+  if (z === 'board') acts.push(btn('Vendre (+1 or)', '', () => { closeModal(); bgSell(i); }));
+  const tr = BG.TRIBES[m.tribe];
+  const line = el('div', 'rarline', `Rang ${m.tier}${m.tribe !== 'neutre' ? ' · ' + tr.name : ''}${m.golden ? ' · Doré' : ''}`);
+  line.style.color = tr.col;
+  openModal(bgBigCard(m), line, bgGloss(m), el('div', 'row', ...acts, btn('Fermer', 'ghost', closeModal)));
+}
+
+function bgPlayerInfo(idx) {
+  const v = bgs.v, p = v.players[idx], h = BG.HEROES[p.hero], pw = h.power;
+  const tribes = Object.entries(p.tribes || {}).filter(([t]) => t !== 'neutre').sort((a, b) => b[1] - a[1]);
+  const hero = el('div', 'hero', el('div', 'portrait', artEl(h.img)));
+  openModal(hero, el('h3', null, idx === 0 ? `${h.name} (toi)` : h.name), el('p', 'muted', h.title),
+    el('p', null, el('b', null, pw.name), pw.type === 'active' ? ` (${pw.cost} or) : ` : ' (passif) : ', richText(pw.txt)),
+    el('p', null, p.alive ? `${p.hp} PV${p.armor ? ` + ${p.armor} armure` : ''} · Taverne rang ${p.tier} · ${p.boardSize} serviteur${p.boardSize > 1 ? 's' : ''}` : `Éliminé · ${p.place}e place`),
+    tribes.length ? el('p', 'muted', 'Troupe : ' + tribes.map(([t, n]) => `${n} ${n > 1 ? BG.TRIBES[t].plural : BG.TRIBES[t].name}`).join(', ')) : null,
+    btn('Fermer', '', closeModal));
+}
+
+function bgQuit() {
+  openModal(el('h3', null, 'Quitter la partie ?'), el('p', null, 'Ta partie est sauvegardée : tu pourras la reprendre depuis le menu.'),
+    el('div', 'row', btn('Continuer', 'primary', closeModal), btn('Menu', '', () => { closeModal(); bgSave(); bgs.st = null; go('menu'); renderMenu(); })));
+}
+
+function bgBanner(text, cls) {
+  const b = $('bg-ban');
+  b.className = cls || '';
+  b.replaceChildren(el('span', null, text));
+  b.hidden = false;
+  clearTimeout(bgBanner.t);
+  bgBanner.t = setTimeout(() => { b.hidden = true; }, 1500);
+}
+
+// ---------- Combat ----------
+const bgT = ms => (bgs.skip || REDUCED ? Promise.resolve() : sleep(ms / bgs.speed));
+
+async function bgFight() {
+  if (bgs.busy || !bgs.v.canAct) return;
+  bgs.busy = true;
+  bgs.sel = bgs.aim = null;
+  closeModal();
+  const before = BG.view(bgs.st);
+  const res = BG.endTurn(bgs.st);
+  bgSave();
+  const after = BG.view(bgs.st);
+  try {
+    if (res.myCombat) await bgArena(res.myCombat, before, after);
+  } catch (e) { console.error(e); }
+  $('bg-arena').hidden = true;
+  bgs.busy = false;
+  bgs.skip = false;
+  if (after.over || !after.me.alive) return bgEnd(after);
+  bgRender();
+  bgLeadHits(before, after);
+  bgBanner(`Tour ${after.round}`);
+  // Effets de fin de tour visibles au retour (statistiques gagnées)
+  bgDiffBoard(before, after);
+}
+
+function bgDiffBoard(a, b) {
+  for (const m of b.me.board) {
+    const w = a.me.board.find(x => x.uid === m.uid), n = document.querySelector(`#bg-board [data-u="${m.uid}"]`);
+    if (!w || !n || (m.atk <= w.atk && m.hp <= w.hp)) continue;
+    const c = center(n.getBoundingClientRect());
+    FX.rise(c.x, c.y, BG_ELEM[m.tribe] || ELEM.or, 12);
+    n.classList.add('buffpop');
+  }
+}
+
+function bgLeadHits(a, b) {
+  for (const p of b.players) {
+    const q = a.players[p.idx], n = document.querySelector(`#bg-lead [data-p="${p.idx}"]`);
+    if (!n) continue;
+    const lost = (q.hp + q.armor) - (p.hp + p.armor);
+    if (lost > 0) {
+      n.classList.add('hit');
+      const c = center(n.getBoundingClientRect());
+      const f = el('div', 'float f-dmg small', el('span', null, '-' + lost));
+      f.style.left = c.x + 'px'; f.style.top = c.y + 30 + 'px';
+      $('fx').append(f);
+      setTimeout(() => f.remove(), 1300);
+    }
+    if (q.alive && !p.alive) {
+      const c = center(n.getBoundingClientRect());
+      FX.burst(c.x, c.y, ELEM.ombre, 30, { speed: 200 });
+      if (p.idx) setTimeout(() => toast(`${bgHeroName(p.hero)} est éliminé (${p.place}e place).`), 300);
+    }
+  }
+}
+
+function arHero(p, side, name) {
+  const h = BG.HEROES[p.hero];
+  const hero = el('div', 'hero', el('div', 'portrait', artEl(h.img)), el('div', 'stat hp', el('b', null, String(p.hp))), p.armor ? el('div', 'stat armor', el('b', null, String(p.armor))) : null);
+  hero.id = 'arh-' + side;
+  return [hero, el('div', 'nm', name, el('small', null, `Taverne rang ${p.tier}`))];
+}
+
+async function bgArena(mc, before, after) {
+  const A = $('bg-arena');
+  const me = before.players[0];
+  const ghost = mc.ghost;
+  const opp = before.players[mc.opponent];
+  const oppName = ghost ? `Fantôme de ${bgHeroName(opp.hero)}` : bgHeroName(opp.hero);
+  bgs.skip = false;
+  $('ar-them').replaceChildren(...arHero(opp, 'them', oppName));
+  $('ar-me').replaceChildren(...arHero(me, 'me', `${bgHeroName(me.hero)} (toi)`));
+  $('ar-them').classList.toggle('ghost', !!ghost);
+  const B = { me: mc.start.me.map(m => ({ ...m })), them: mc.start.them.map(m => ({ ...m })), atk: null, anim: Promise.resolve(), gone: new Map() };
+  const lane = s => $(s === 'me' ? 'ar-lane-me' : 'ar-lane-them');
+  for (const s of ['me', 'them']) lane(s).replaceChildren(...B[s].map(m => bgMinionEl(m)));
+  $('ar-res').hidden = true;
+  A.hidden = false;
+  const most = Math.min(7, Math.max(4, B.me.length + 1, B.them.length + 1));
+  for (const s of ['me', 'them']) bgFit(lane(s), most);
+  $('ar-speed').textContent = bgs.speed > 1 ? '×2' : '×1';
+  // Face-à-face
+  const vs = el('div', 'vs',
+    el('div', 'vh l', el('div', 'hero', el('div', 'portrait', artEl(BG.HEROES[me.hero].img))), el('b', null, bgHeroName(me.hero))),
+    el('div', 'vx', 'VS'),
+    el('div', 'vh r', el('div', 'hero', el('div', 'portrait', artEl(BG.HEROES[opp.hero].img))), el('b', null, oppName)));
+  A.append(vs);
+  setTimeout(() => { const c = center(vs.querySelector('.vx').getBoundingClientRect()); FX.burst(c.x, c.y, ELEM.feu, 70, { speed: 460, grav: 60 }); FX.ring(c.x, c.y, '#ffb347', 200, 0.6, 14); }, 380 / bgs.speed);
+  await bgT(1500);
+  vs.remove();
+  if (!B.me.length || !B.them.length) await bgT(400);
+  for (const e of mc.events) {
+    if (bgs.skip) break;
+    await arStep(e, B, lane);
+  }
+  await B.anim;
+  if (bgs.skip) for (const s of ['me', 'them']) lane(s).replaceChildren(...mc.end[s].filter(m => m.hp > 0).map(m => bgMinionEl(m)));
+  bgs.skip = false;
+  // Résultat
+  const r = mc.result, won = r.winner === 'me', draw = r.winner === 'draw';
+  const res = $('ar-res');
+  res.className = won ? 'win' : draw ? 'draw' : 'lose';
+  res.replaceChildren(el('span', null, draw ? 'Égalité' : won ? 'Victoire !' : 'Défaite'));
+  res.hidden = false;
+  await bgT(700);
+  if (!draw) {
+    const loser = won ? 'them' : 'me', winSide = won ? 'me' : 'them';
+    const target = $('arh-' + loser);
+    const tc = center(target.getBoundingClientRect());
+    const shooters = [...lane(winSide).children].slice(0, 7);
+    await Promise.all(shooters.map((n, i) => bgT(i * 90).then(() => FX.projectile(center(n.getBoundingClientRect()), tc, won ? ELEM.or : ELEM.feu, 0.38 / bgs.speed, 18))));
+    FX.burst(tc.x, tc.y, ELEM.feu, 70, { speed: 460 });
+    FX.ring(tc.x, tc.y, '#ffffff', 160, 0.5, 12);
+    shakeNode($('bg-arena'), true);
+    if (!won) hurtFlash();
+    const f = el('div', 'float f-dmg f-big', el('span', null, '-' + r.damage));
+    f.style.left = tc.x + 'px'; f.style.top = tc.y + 'px';
+    $('fx').append(f);
+    setTimeout(() => f.remove(), 1300);
+    const p = loser === 'me' ? after.players[0] : ghost ? null : after.players[mc.opponent];
+    if (p) {
+      target.querySelector('.stat.hp b').textContent = String(Math.max(0, p.hp));
+      const ar = target.querySelector('.stat.armor b');
+      if (ar) ar.textContent = String(p.armor);
+    }
+    if (won) FX.confetti(70);
+  }
+  await bgT(1300);
+  res.hidden = true;
+}
+
+function arNode(u) { return document.querySelector(`#bg-arena [data-u="${u}"]`); }
+function arFind(B, u) { return B.me.find(m => m.uid === u) || B.them.find(m => m.uid === u); }
+
+function arSetStats(n, m) {
+  const d = BG.MINIONS[m.id], k = m.golden ? 2 : 1;
+  const a = n.querySelector('.stat.atk'), h = n.querySelector('.stat.hp');
+  a.firstChild.textContent = String(m.atk);
+  h.firstChild.textContent = String(Math.max(0, m.hp));
+  a.classList.toggle('buffed', m.atk > d.atk * k);
+  h.classList.toggle('hurt', m.hp < (m.mh || d.hp * k));
+  h.classList.toggle('buffed', m.hp > d.hp * k && !(m.hp < (m.mh || 0)));
+  for (const kw of ['taunt', 'divine', 'reborn']) n.classList.toggle(kw, !!m[kw]);
+}
+
+function arFlip(laneEl, mutate) {
+  const r0 = new Map([...laneEl.children].map(k => [k, k.getBoundingClientRect()]));
+  mutate();
+  if (REDUCED || bgs.skip) return;
+  for (const k of laneEl.children) {
+    const a = r0.get(k);
+    if (!a || !k.animate) continue;
+    const dx = a.left - k.getBoundingClientRect().left;
+    if (Math.abs(dx) > 1) k.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 280 / bgs.speed, easing: 'ease-out' });
+  }
+}
+
+function arLunge(na, nt) {
+  const D = 720 / bgs.speed;
+  const ca = center(na.getBoundingClientRect()), ct = center(nt.getBoundingClientRect());
+  const dx = (ct.x - ca.x) * 0.8, dy = (ct.y - ca.y) * 0.8, tilt = dx > 0 ? -7 : 7;
+  na.style.zIndex = 12;
+  const anim = na.animate([
+    { transform: 'none', filter: 'none' },
+    { transform: `translate(${-dx * 0.1}px, ${-dy * 0.1 - 8}px) scale(1.25) rotate(${tilt}deg)`, filter: 'brightness(1.25) drop-shadow(0 18px 14px rgba(0,0,0,.6))', offset: 0.36, easing: 'cubic-bezier(.7,0,.9,.4)' },
+    { transform: `translate(${dx}px, ${dy}px) scale(1.12)`, filter: 'brightness(1.4)', offset: 0.5 },
+    { transform: `translate(${dx * 0.95}px, ${dy * 0.95}px) scale(1.1)`, filter: 'brightness(1.2)', offset: 0.62 },
+    { transform: 'none', filter: 'none' },
+  ], { duration: D });
+  const impact = sleep(D * 0.5).then(() => {
+    FX.slash(ct.x, ct.y, '#fff3c4');
+    FX.burst(ct.x, ct.y, ELEM.physique, 36, { speed: 340 });
+    FX.ring(ct.x, ct.y, '#ffffff', 80, 0.4, 9);
+    const len = Math.hypot(dx, dy) || 1;
+    if (nt.animate) nt.animate([
+      { transform: 'none', filter: 'brightness(3) saturate(0)' },
+      { transform: `translate(${dx / len * 16}px, ${dy / len * 16}px) rotate(${-tilt}deg)`, filter: 'brightness(1.8)', offset: 0.25 },
+      { transform: 'none', filter: 'none' },
+    ], { duration: 420 / bgs.speed, easing: 'ease-out' });
+    shakeNode($('bg-arena'), false);
+  });
+  return { impact, done: anim.finished.catch(() => {}).then(() => { na.style.zIndex = ''; }) };
+}
+
+async function arStep(e, B, lane) {
+  switch (e.k) {
+    case 'start': {
+      await B.anim;
+      const n = e.u ? arNode(e.u) : $('arh-' + e.side);
+      if (n) {
+        n.classList.add('soc');
+        const c = center(n.getBoundingClientRect());
+        FX.ring(c.x, c.y, '#ffe28a', 80, 0.5, 8);
+        FX.rise(c.x, c.y, ELEM.or, 14);
+        bgFloat(n, e.u ? 'Début du combat' : e.txt, 'f-shield');
+      }
+      await bgT(520);
+      if (n) n.classList.remove('soc');
+      B.atk = null;
+      break;
+    }
+    case 'atk': {
+      await B.anim;
+      const na = arNode(e.a), nt = arNode(e.t);
+      B.atk = { a: e.a, t: e.t, hits: 0 };
+      if (na && nt && !bgs.skip && !REDUCED && na.animate) {
+        const r = arLunge(na, nt);
+        B.anim = r.done;
+        await r.impact;
+      }
+      break;
+    }
+    case 'dmg': {
+      const m = arFind(B, e.u), n = arNode(e.u);
+      const melee = B.atk && B.atk.hits < 2 && ((e.src === B.atk.a && e.u === B.atk.t) || (e.src === B.atk.t && e.u === B.atk.a));
+      if (melee) B.atk.hits++;
+      if (!melee && n && !bgs.skip) {
+        const sn = e.src != null && arNode(e.src);
+        const from = sn ? center(sn.getBoundingClientRect()) : B.gone.get(e.src);
+        const sm = sn ? arFind(B, e.src) : null;
+        if (from) await FX.projectile(from, center(n.getBoundingClientRect()), BG_ELEM[sm ? sm.tribe : 'drag'] || ELEM.feu, 0.34 / bgs.speed, 20);
+      }
+      if (m) {
+        m.mh = m.mh || m.hp;
+        m.hp -= e.n;
+      }
+      if (n && m) {
+        arSetStats(n, m);
+        n.classList.remove('hit'); void n.offsetWidth; n.classList.add('hit');
+        const c = center(n.getBoundingClientRect());
+        FX.burst(c.x, c.y, ELEM.physique, 14 + Math.min(24, e.n * 3), { speed: 240 + e.n * 20 });
+        bgFloat(n, '-' + e.n, 'f-dmg' + (e.n >= 8 ? ' f-big' : ''));
+      }
+      if (!melee) await bgT(160);
+      break;
+    }
+    case 'shield': {
+      const m = arFind(B, e.u), n = arNode(e.u);
+      if (m) m.divine = false;
+      if (n && m) {
+        arSetStats(n, m);
+        const c = center(n.getBoundingClientRect());
+        FX.ring(c.x, c.y, '#ffe58a', 64, 0.45, 8);
+        FX.burst(c.x, c.y, ELEM.sacre, 22, { speed: 220 });
+        bgFloat(n, 'Bouclier !', 'f-shield');
+      }
+      break;
+    }
+    case 'poison': {
+      const m = arFind(B, e.u), n = arNode(e.u);
+      if (m) m.hp = 0;
+      if (n) {
+        const c = center(n.getBoundingClientRect());
+        FX.burst(c.x, c.y, ['#d6ff8a', '#7dff4f', '#2fbf3a', '#0f7a2a'], 30, { speed: 260 });
+        bgFloat(n, 'Toxique !', 'f-heal');
+        if (m) arSetStats(n, m);
+      }
+      break;
+    }
+    case 'stats': {
+      const m = arFind(B, e.u), n = arNode(e.u);
+      if (!m) break;
+      const up = e.atk > m.atk || e.hp > m.hp;
+      const gained = (e.divine && !m.divine) || (e.reborn && !m.reborn) || (e.venom && !m.venom);
+      if (e.hp > m.hp) m.mh = Math.max(m.mh || 0, e.hp);
+      Object.assign(m, { atk: e.atk, hp: e.hp, divine: e.divine, reborn: e.reborn, taunt: e.taunt, venom: e.venom, wf: e.wf });
+      if (n) {
+        arSetStats(n, m);
+        if ((up || gained) && !bgs.skip) {
+          const c = center(n.getBoundingClientRect());
+          FX.rise(c.x, c.y, gained && e.divine ? ELEM.sacre : BG_ELEM[m.tribe] || ELEM.or, 10);
+          n.classList.remove('buffpop'); void n.offsetWidth; n.classList.add('buffpop');
+          await bgT(90);
+        }
+      }
+      break;
+    }
+    case 'die': {
+      await B.anim;
+      const n = arNode(e.u), m = arFind(B, e.u);
+      if (m) {
+        const s = B.me.includes(m) ? 'me' : 'them';
+        B[s].splice(B[s].indexOf(m), 1);
+      }
+      if (!n) break;
+      const r = n.getBoundingClientRect(), c = center(r);
+      B.gone.set(e.u, c);
+      if (!bgs.skip) {
+        FX.burst(c.x, c.y, m ? [trCol(m.tribe), ...ELEM.ombre] : ELEM.ombre, 32, { speed: 260, grav: 520, size: 12 });
+        const g = n.cloneNode(true);
+        g.classList.add('dying');
+        Object.assign(g.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', margin: 0 });
+        $('fx').append(g);
+        setTimeout(() => g.remove(), 750);
+      }
+      arFlip(n.parentNode, () => n.remove());
+      await bgT(260);
+      break;
+    }
+    case 'summon': case 'reborn': {
+      await B.anim;
+      const m = { ...e.m }, L = B[e.side], laneEl = lane(e.side);
+      L.splice(Math.min(e.at, L.length), 0, m);
+      const n = bgMinionEl(m);
+      arFlip(laneEl, () => { const ref = laneEl.children[e.at]; if (ref) laneEl.insertBefore(n, ref); else laneEl.append(n); });
+      if (!bgs.skip) {
+        n.classList.add('enter');
+        setTimeout(() => {
+          const c = center(n.getBoundingClientRect());
+          FX.ring(c.x, c.y, e.k === 'reborn' ? '#c9a8ff' : 'rgba(255,255,255,.75)', 70, 0.5, 8);
+          if (e.k === 'reborn') { FX.rise(c.x, c.y, ELEM.ombre, 18); bgFloat(n, 'Réincarnation', 'f-shield'); }
+        }, 200 / bgs.speed);
+      }
+      await bgT(360);
+      break;
+    }
+  }
+}
+
+// ---------- Fin de partie ----------
+function bgEnd(v) {
+  const place = v.me.place || 8, gain = bgGain(place), orb = place === 1;
+  Profile.change(d => {
+    d.gold += gain;
+    if (orb) d.orbs.base = (d.orbs.base || 0) + 1;
+    d.bgGames = (d.bgGames || 0) + 1;
+    if (!d.bgBest || place < d.bgBest) d.bgBest = place;
+  });
+  bgSave();
+  const h = BG.HEROES[v.me.hero];
+  const o = $('bg-over');
+  o.dataset.kind = 'end';
+  const top = place === 1, good = place <= 4;
+  const board = el('div', 'endboard', ...(v.me.alive ? v.me.board : []).map(m => bgMinionEl(m)));
+  o.replaceChildren(el('div', 'box glass',
+    el('div', top ? 'rays' : null, el('div', 'hero', el('div', 'portrait', artEl(h.img)))),
+    el('div', 'big' + (good ? '' : ' lose'), top ? 'Victoire !' : `${place}e place`),
+    el('p', 'muted', top ? 'Tu es le dernier héros debout sur les Champs de bataille !' : good ? 'Dans le top 4, bien joué !' : 'Les Champs de bataille sont impitoyables. Retente ta chance !'),
+    board.childElementCount ? board : null,
+    el('div', 'reward', el('span', 'gain', el('i', 'coin'), `+${gain} or`), orb ? el('span', 'bonus', '+1 Orbe du Royaume') : null),
+    el('div', 'row', btn('Rejouer', 'primary', () => { o.hidden = true; bgPickHero(); }), btn('Menu', '', () => { o.hidden = true; bgs.st = null; go('menu'); renderMenu(); }))));
+  o.hidden = false;
+  if (top && !REDUCED) FX.confetti(220);
+}
+
+function bgInit() {
+  $('bg-quit').onclick = bgQuit;
+  $('bg-help').onclick = bgHowTo;
+  $('bg-up').onclick = () => bgAct(() => BG.upgrade(bgs.st));
+  $('bg-roll').onclick = () => bgAct(() => BG.refresh(bgs.st));
+  $('bg-freeze').onclick = () => bgAct(() => BG.freeze(bgs.st));
+  $('ar-speed').onclick = () => { bgs.speed = bgs.speed > 1 ? 1 : 2; $('ar-speed').textContent = bgs.speed > 1 ? '×2' : '×1'; };
+  $('ar-skip').onclick = () => { bgs.skip = true; };
+  $('s-bg').addEventListener('click', e => {
+    if (bgs.busy || bgs.drag || e.target.closest('[data-z], button, .bg-bar')) return;
+    if (bgs.sel || bgs.aim) { bgs.sel = null; bgs.aim = null; bgRender(); }
+  });
+  addEventListener('resize', () => { if (screen === 'bg' && bgs.st && !bgs.busy) bgRender(); });
+}
+
+
 // ===================== Collection, decks et profil =====================
 
 const COLLECTIBLE = Object.keys(CARDS).filter(c => !CARDS[c].tok);
@@ -1726,7 +4150,7 @@ function starterOwned() {
   return o;
 }
 function freshProfile() {
-  return { v: 1, rev: 0, gold: 200, orbs: { base: 2, epique: 0, legendaire: 0 }, owned: starterOwned(), prem: {}, decks: {}, backs: ['classique'], back: 'classique', wins: 0, games: 0, daily: '' };
+  return { v: 1, rev: 0, gold: 200, orbs: { base: 2, epique: 0, legendaire: 0 }, owned: starterOwned(), prem: {}, decks: {}, backs: ['classique'], back: 'classique', wins: 0, games: 0, daily: '', bgGames: 0, bgBest: 0 };
 }
 function cleanProfile(d) {
   const f = freshProfile();
@@ -1734,7 +4158,8 @@ function cleanProfile(d) {
   const int = (x, lo, hi, def) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(lo, Math.min(hi, Math.floor(x))) : def);
   const o = d.orbs && typeof d.orbs === 'object' ? d.orbs : { base: int(d.packs, 0, 999, f.orbs.base) };
   const p = { v: 1, rev: int(d.rev, 0, 1e9, 0), gold: int(d.gold, 0, 1e7, f.gold), orbs: {}, owned: {}, prem: {}, decks: {},
-    backs: ['classique'], back: 'classique', wins: int(d.wins, 0, 1e6, 0), games: int(d.games, 0, 1e6, 0), daily: typeof d.daily === 'string' ? d.daily.slice(0, 10) : '' };
+    backs: ['classique'], back: 'classique', wins: int(d.wins, 0, 1e6, 0), games: int(d.games, 0, 1e6, 0), daily: typeof d.daily === 'string' ? d.daily.slice(0, 10) : '',
+    bgGames: int(d.bgGames, 0, 1e6, 0), bgBest: int(d.bgBest, 0, 8, 0) };
   for (const k in ORBS) p.orbs[k] = int(o[k], 0, 999, 0);
   for (const c of COLLECTIBLE) {
     p.owned[c] = Math.max(f.owned[c] || 0, int(d.owned && d.owned[c], 0, maxCopies(c), 0));
@@ -3102,6 +5527,9 @@ function renderMenu() {
   const fan = [cardEl('boule'), cardEl('dragon', { foil: true }), cardEl('licorne')];
   $('menu-fan').replaceChildren(...fan.map(k => { if (FINE) enableTilt(k, 12); return el('div', 'fw', k); }));
   $('eyebrow').textContent = `Jeu de cartes · ${Object.keys(HEROES).length} héros · ${COLLECTIBLE.length} cartes`;
+  const saved = bgSaved();
+  $('b-bgres').hidden = !saved;
+  if (saved) $('b-bgres').textContent = `Reprendre ma partie (tour ${saved.round})`;
   refreshWallet();
 }
 
@@ -3137,6 +5565,9 @@ function boot(data) {
     onlineStatus(null);
     go('online');
   });
+  $('b-bg').onclick = bgPickHero;
+  $('b-bgres').onclick = () => { const s = bgSaved(); if (s) { bgs.st = s; bgEnter(); } else renderMenu(); };
+  bgInit();
   $('online-back').onclick = () => { closeOnline(); onlineStatus(null); go('menu'); };
   $('b-host').onclick = hostOnline;
   $('b-join').onclick = joinOnline;
@@ -3144,14 +5575,15 @@ function boot(data) {
   $('s-game').addEventListener('click', () => { if (ui.sel && !ui.busy) { ui.sel = null; render(); } });
   addEventListener('resize', () => { if (ui.view && screen === 'game') render(); });
   if (data && data.ai && data.ai.p) { enterGame(null); table = localTable(null, null, data.ai); }
+  else if (data && data.bg && data.bg.players && !data.bg.over) { bgs.st = data.bg; bgEnter(); }
   else if (Profile.isNew) welcome();
   Profile.connect();
 }
 
 const hot = window.claude && window.claude.hot;
-if (hot && hot.snapshot) hot.snapshot(() => (table && table.mode === 'ai' ? { ai: table.save() } : {}));
+if (hot && hot.snapshot) hot.snapshot(() => (table && table.mode === 'ai' ? { ai: table.save() } : bgs.st && !bgs.st.over && screen === 'bg' ? { bg: bgs.st } : {}));
 if (hot && hot.ready) hot.ready(boot); else boot((hot && hot.data) || {});
-window.Duel = { newGame, apply, legalActions, aiChoose, aiMulligan, viewFor, netView, cleanView, evaluate, validDeck, rollPack, applyPack, Profile, CARDS, HEROES, DECKS, clone };
+window.Duel = { newGame, apply, legalActions, aiChoose, aiMulligan, viewFor, netView, cleanView, evaluate, validDeck, rollPack, applyPack, Profile, CARDS, HEROES, DECKS, clone, BG, bgs };
 </script>
 </body>
 </html>

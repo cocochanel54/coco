@@ -28,10 +28,13 @@ Les sources sont `app.src.html`, `apps-script/Code.src.gs` et `data.json`. Aprè
 Jeu de cartes à collectionner façon Hearthstone, en français, qui marche sur ordinateur et sur téléphone. Ouvre `duel/index.html` dans un navigateur.
 
 - 4 héros (Mage, Guerrier, Prêtresse, Rôdeuse) avec chacun un pouvoir et un deck de départ, 50 cartes en 4 raretés (commune, rare, épique, légendaire).
+- Mode **Champs de bataille** façon Hearthstone : 8 héros, taverne où l'on recrute avec de l'or, 48 serviteurs en 5 familles avec leurs synergies (Dragons, Morts-vivants, Orcs, Elfes, Chevaliers), triples dorés et découvertes, combats automatiques animés, classement et récompenses.
 - Contre l'ordinateur, ou en ligne contre un ami avec un code de partie à 4 caractères (sur claude.ai par le salon partagé de la page, ailleurs par PeerJS).
 - Boutique : l'or gagné en jouant achète des orbes de 5 cartes (Orbe du Royaume, Orbe épique, Orbe légendaire avec une légendaire garantie) et des dos de cartes ; cartes premium holographiques ; collection et éditeur de decks.
 - Animations : cartes en 3D qui suivent le doigt, reflets holographiques, attaques avec impact, sorts lancés, entrée des légendaires.
 
 Les sources sont `duel/jeu.html` (aussi la version publiée sur claude.ai) et les images de `duel/art/`. Après modification, lancer `python3 duel/build.py` pour régénérer `duel/index.html`.
+
+Les illustrations du mode Champs de bataille (`duel/art/bg/`) sont assemblées par `duel/outils/champs_illustrations.py`.
 
 Illustrations : portraits peints du projet The Battle for Wesnoth (© leurs auteurs, licence GPL v2 ou ultérieure), posés sur des décors peints par `duel/outils/illustrations.py` et assemblés par `duel/outils/portraits.py` ; icônes des pouvoirs : Fluent Emoji de Microsoft (licence MIT). Détails dans `duel/art/LICENCES.txt`.
