@@ -22,3 +22,15 @@ Appli de saisie pour les techniciens, faite à partir du classeur `Journee_agent
 - La même page fonctionne aussi en artifact claude.ai (saisies partagées entre comptes claude.ai) ou ouverte directement (saisies gardées sur l'appareil).
 
 Les sources sont `app.src.html`, `apps-script/Code.src.gs` et `data.json`. Après modification, lancer `python3 journee-agent/build.py` pour régénérer `index.html`, `apps-script/Index.html` et `apps-script/Code.gs`.
+
+# Devis BPU Axione (`devis-axione/`)
+
+`Devis_BPU_Axione_RHD57.xlsx` : devis dont les prix viennent des deux BPU Moselle Fibre RHD57 (Maintenance et VDR Optique, 116 prestations).
+
+- On choisit la prestation dans une liste (code · désignation), on saisit la quantité : l'unité, le prix, le montant, la TVA et le total TTC se calculent.
+- Grille de prix au choix : « Prix BPU Axione » ou « Proposition Circet ».
+- Lignes « sur devis » : prix à saisir dans « PU HT sur devis » (case orange tant qu'il manque). Prestation hors BPU possible.
+- Majorations MC-07 (technicien supplémentaire) et MC-08 (HNO) applicables ligne par ligne.
+- Autoliquidation de TVA en option. Seules les colonnes A à H s'impriment.
+
+Le fichier est généré par `python3 devis-axione/build_devis.py <BPU Maintenance.xlsx> <BPU VDR Optique.xlsx> devis-axione/Devis_BPU_Axione_RHD57.xlsx`.
