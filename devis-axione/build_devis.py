@@ -14,7 +14,6 @@ from openpyxl.workbook.defined_name import DefinedName
 
 SRC_MAINT, SRC_OPT, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
 
-GRILLE_BPU, GRILLE_CIRCET = "Prix BPU Axione", "Proposition Circet"
 EURO = '_-* #,##0.00\\ "€"_-;\\-* #,##0.00\\ "€"_-;_-* "-"??\\ "€"_-;_-@_-'  # format des BPU d'origine
 COEF = '0.0000'
 NB_LIGNES = 30
@@ -64,9 +63,7 @@ for r in range(2, ws.max_row + 1):
     d = dict(bpu="Maintenance", lot=lot, famille=famille, code=propre(code),
              desig=propre(ws.cell(r, 3).value), descr=" / ".join(lignes(ws.cell(r, 7).value)),
              unite=propre(ws.cell(r, 5).value), pbpu=prix(ws.cell(r, 6).value),
-             pcircet=prix(ws.cell(r, 8).value),
-             comm=" / ".join(x for x in [propre(ws.cell(r, 4).value), propre(ws.cell(r, 9).value)] if x),
-             src=f"Maintenance BPU ST Circet · BPU ligne {r}")
+             comm=propre(ws.cell(r, 4).value), src=f"Maintenance BPU ST · BPU ligne {r}")
     if d["unite"].startswith("coef"):
         majorations.append(d)
         continue
@@ -74,7 +71,7 @@ for r in range(2, ws.max_row + 1):
     if d["code"] == "RA-ON" and "0,93€/ml" in str(ws.cell(r, 7).value).replace(" ", ""):
         # Le descriptif de RA-ON prévoit 0,93 €/ml au-delà de 300 ml : on en fait une ligne.
         articles.append(dict(d, desig=d["desig"] + " – ml au-delà de 300 ml", unite="ml",
-                             pbpu=0.93, pcircet=0.93, descr="Mètre linéaire au-delà des 300 ml compris dans le forfait",
+                             pbpu=0.93, descr="Mètre linéaire au-delà des 300 ml compris dans le forfait",
                              comm="D'après le descriptif de RA-ON (« jusqu'à 300ml, 0,93€/ml au-delà »)"))
 
 ws = openpyxl.load_workbook(SRC_OPT).worksheets[0]
@@ -97,9 +94,13 @@ for r in range(4, ws.max_row + 1):
     desig, reste = l[0].rstrip(" :"), l[1:]
     if reste and reste[0].startswith("Prix pour"):
         desig, reste = f"{desig} – {reste[0]}", reste[1:]
+    unite = propre(ws.cell(r, 3).value) or "U"
+    if unite == "fofait":  # coquille du BPU (4.6.1, 4.6.2)
+        unite = "Forfait"
+    if propre(ws.cell(r, 4).value) == "à la fibre":  # mesures et raccordements comptés à la fibre
+        unite = f"{unite} (à la fibre)"
     articles.append(dict(bpu="VDR Optique", lot=lot, famille=famille or lot, code=code, desig=desig,
-                         descr=" ".join(reste) or commun, unite=propre(ws.cell(r, 3).value) or "U",
-                         pbpu=prix(ws.cell(r, 5).value), pcircet=prix(ws.cell(r, 6).value),
+                         descr=" ".join(reste) or commun, unite=unite, pbpu=prix(ws.cell(r, 5).value),
                          comm=propre(ws.cell(r, 4).value),
                          src=f"BPU ST VDR Optique · BPU MISSION 3 Optique ligne {r}"))
 
@@ -113,7 +114,7 @@ def libelle(d, n=95):
 
 for d in articles:
     d["lib"] = libelle(d)
-    assert d["pbpu"] is not None and d["pcircet"] is not None, d["code"]
+    assert d["pbpu"] is not None, d["code"]
 libs = [d["lib"] for d in articles]
 assert len(libs) == len(set(libs)), "libellés en double"
 N = len(articles) + 1  # dernière ligne du tableau BPU
@@ -129,33 +130,31 @@ maj = wb.create_sheet("Majorations")
 
 # ---------- Onglet BPU ----------
 ent = ["BPU", "Lot", "Famille", "Code", "Désignation", "Descriptif", "Unité",
-       "Prix BPU Axione\n€ HT / u", "Proposition Circet\n€ HT / u", "Commentaire",
-       "Libellé dans le devis", "Source"]
-larg = [12, 30, 30, 9, 60, 50, 16, 14, 14, 40, 70, 42]
+       "Prix BPU\n€ HT / u", "Commentaire", "Libellé dans le devis", "Source"]
+larg = [12, 30, 30, 9, 60, 50, 16, 14, 40, 70, 42]
 for c, (t, w) in enumerate(zip(ent, larg), 1):
     x = bpu.cell(1, c, t)
     x.font, x.fill, x.alignment, x.border = F(bold=True, color="FFFFFF"), fill(BLEU), CENTRE, CADRE
     bpu.column_dimensions[x.column_letter].width = w
 bpu.row_dimensions[1].height = 30
 bpu["H1"].comment = Comment("Maintenance : colonne « Prix unitaire Euro(s) / u ».\n"
-                            "VDR Optique : colonne « Prix Cible V1 ».", "Devis")
-bpu["I1"].comment = Comment("Colonne « Proposition Circet » des deux BPU.", "Devis")
+                            "VDR Optique : colonne « PU ».", "Devis")
 for i, d in enumerate(articles, 2):
     vals = [d["bpu"], d["lot"], d["famille"], d["code"], d["desig"], d["descr"], d["unite"],
-            d["pbpu"], d["pcircet"], d["comm"], d["lib"], d["src"]]
+            d["pbpu"], d["comm"], d["lib"], d["src"]]
     for c, v in enumerate(vals, 1):
         x = bpu.cell(i, c, v)
-        x.font = F(color="0000FF") if c in (8, 9) else F()
+        x.font = F(color="0000FF") if c == 8 else F()
         x.border = CADRE
         x.alignment = Alignment(vertical="center", wrap_text=c == 5)
-        if c in (8, 9):
+        if c == 8:
             x.number_format = EURO
             x.alignment = Alignment(horizontal="right", vertical="center")
     if d["bpu"] == "VDR Optique":
         for c in range(1, 5):
             bpu.cell(i, c).fill = fill("EAF6FA")
 bpu.freeze_panes = "E2"
-bpu.auto_filter.ref = f"A1:L{N}"
+bpu.auto_filter.ref = f"A1:K{N}"
 
 # ---------- Onglet Majorations ----------
 for c, (t, w) in enumerate(zip(["Code", "Libellé dans le devis", "Coefficient", "Unité", "Commentaire", "Source"],
@@ -172,17 +171,15 @@ for i, m in enumerate(majorations, 2):
         x.alignment = Alignment(vertical="center", wrap_text=c == 5)
     maj.cell(i, 3).number_format = COEF
 x = maj.cell(5, 1, "Le montant de la ligne du devis est multiplié par le coefficient "
-               "(ex. 1,4078 = +40,78 %). La Proposition Circet ne donne pas de coefficient : "
-               "celui du BPU s'applique dans les deux grilles.")
+               "(ex. 1,4078 = +40,78 %).")
 x.font, x.alignment = F(italic=True, color="595959"), GAUCHE
 maj.merge_cells("A5:F5")
 maj.row_dimensions[5].height = 30
 
-wb.defined_names["ListePrestations"] = DefinedName("ListePrestations", attr_text=f"BPU!$K$2:$K${N}")
+wb.defined_names["ListePrestations"] = DefinedName("ListePrestations", attr_text=f"BPU!$J$2:$J${N}")
 wb.defined_names["ListeMajorations"] = DefinedName("ListeMajorations", attr_text="Majorations!$B$2:$B$3")
-wb.defined_names["Grille"] = DefinedName("Grille", attr_text="Devis!$N$2")
-wb.defined_names["TauxTVA"] = DefinedName("TauxTVA", attr_text="Devis!$N$3")
-wb.defined_names["Autoliq"] = DefinedName("Autoliq", attr_text="Devis!$N$4")
+wb.defined_names["TauxTVA"] = DefinedName("TauxTVA", attr_text="Devis!$N$2")
+wb.defined_names["Autoliq"] = DefinedName("Autoliq", attr_text="Devis!$N$3")
 
 # ---------- Onglet Devis ----------
 ws = dv_ws
@@ -239,7 +236,7 @@ for i, t in enumerate(["Société", "Contact", "Adresse", "Code postal – Ville
 chantier = [("Projet / réseau", "Moselle Fibre – RHD57"),
             ("Objet", "Exemple : raccordements, SAV et pose de câble (à remplacer)"),
             ("Site / commune", None),
-            ("Base de prix", '="BPU Moselle Fibre RHD57 – "&Grille')]
+            ("Base de prix", "BPU Moselle Fibre – RHD57 (Maintenance et VDR Optique)")]
 for i, (lab, v) in enumerate(chantier, 9):
     ws[f"C{i}"] = lab
     ws[f"C{i}"].font = F(bold=True)
@@ -266,8 +263,7 @@ ws["J14"], ws["K14"] = "lig", "prix"
 rng = lambda col: f"BPU!${col}$2:${col}${N}"
 for r in range(L1, LN + 1):
     ws[f"J{r}"] = f'=IF($B{r}="","",IFERROR(MATCH($B{r},ListePrestations,0),0))'
-    ws[f"K{r}"] = (f'=IF(OR($J{r}="",$J{r}=0),"",IF(Grille="{GRILLE_CIRCET}",'
-                   f'INDEX({rng("I")},$J{r}),INDEX({rng("H")},$J{r})))')
+    ws[f"K{r}"] = f'=IF(OR($J{r}="",$J{r}=0),"",INDEX({rng("H")},$J{r}))'
     ws[f"A{r}"] = f'=IF($B{r}="","",COUNTA($B${L1}:$B{r}))'
     ws[f"C{r}"] = f'=IF(OR($J{r}="",$J{r}=0),"",INDEX({rng("G")},$J{r})&"")'
     ws[f"E{r}"] = f'=IF($B{r}="","",IF($J{r}=0,"Hors BPU",IF(ISNUMBER($K{r}),ROUND($K{r},2),$K{r})))'
@@ -350,8 +346,7 @@ C0 = T + 4
 bandeau(f"A{C0}:H{C0}", "CONDITIONS")
 conditions = [
     "Prix unitaires HT issus du BPU Moselle Fibre – RHD57 (Maintenance et VDR Optique).",
-    "Hors fourniture, sauf mention contraire du BPU. Travaux en hauteur nécessitant une nacelle non compris "
-    "dans les forfaits de raccordement.",
+    "Hors fourniture, sauf mention contraire du BPU.",
     "Conditions de paiement : à préciser.",
     '="Devis valable jusqu\'au "&IF(H5="","…",DAY(H5)&"/"&RIGHT("0"&MONTH(H5),2)&"/"&YEAR(H5))&"."']
 for i, t in enumerate(conditions, C0 + 1):
@@ -378,21 +373,16 @@ FIN = S0 + 5
 # Paramètres et mode d'emploi (hors zone d'impression)
 ws.merge_cells("L1:N1")
 ws["L1"], ws["L1"].font, ws["L1"].fill = "PARAMÈTRES", F(bold=True, color="FFFFFF"), fill(ORANGE)
-params = [("Grille de prix", GRILLE_BPU), ("Taux de TVA", 0.2), ("Autoliquidation TVA (sous-traitance BTP)", "Non")]
+params = [("Taux de TVA", 0.2), ("Autoliquidation TVA", "Non")]
 for i, (lab, val) in enumerate(params, 2):
     ws[f"L{i}"] = lab
-    ws[f"L{i}"].font, ws[f"L{i}"].alignment = F(bold=True), GAUCHE
+    ws[f"L{i}"].font = F(bold=True)
     saisie(f"N{i}", val).border = CADRE
-ws["N3"].number_format = "0%"
-g = DataValidation(type="list", formula1=f'"{GRILLE_BPU},{GRILLE_CIRCET}"', allow_blank=False)
-g.add("N2")
+ws["N2"].number_format = "0%"
 o = DataValidation(type="list", formula1='"Non,Oui"', allow_blank=False)
-o.add("N4")
-ws.add_data_validation(g)
+o.add("N3")
 ws.add_data_validation(o)
-ws["N2"].comment = Comment(f"{GRILLE_BPU} : colonne « Prix unitaire » (Maintenance) et « Prix Cible V1 » "
-                           f"(VDR Optique).\n{GRILLE_CIRCET} : colonne « Proposition Circet » des deux BPU.", "Devis")
-ws["N4"].comment = Comment("Oui : TVA à 0 et mention d'autoliquidation (sous-traitance de travaux). "
+ws["N3"].comment = Comment("Oui : TVA à 0 et mention d'autoliquidation (sous-traitance de travaux). "
                            "À valider avec votre comptable.", "Devis")
 
 ws.merge_cells("L6:N6")
@@ -400,11 +390,10 @@ ws["L6"], ws["L6"].font, ws["L6"].fill = "COMMENT REMPLIR", F(bold=True, color="
 aide = [
     "Cases jaunes = à remplir. Tout le reste se calcule.",
     "Prestation : choisir dans la liste (code · désignation). Unité et prix viennent de l'onglet BPU.",
-    "Qté : en ml, U, BPE, heures, fibres… selon l'unité affichée.",
+    "Qté : en ml, unités, heures, fibres… selon l'unité affichée.",
     "PU HT sur devis : seulement pour les lignes « Sur devis » (case orange) ou pour forcer un prix.",
     "Majoration : MC-07 (technicien supplémentaire) ou MC-08 (HNO) multiplie le montant de la ligne "
     "par le coefficient du BPU (onglet Majorations).",
-    "Grille de prix : Prix BPU Axione ou Proposition Circet. Tout le devis bascule d'un coup.",
     "Les 6 lignes remplies sont un exemple : effacer les colonnes Prestation, Qté et Majoration.",
     f"{NB_LIGNES} lignes prévues. Pour en ajouter : insérer des lignes au milieu du tableau, "
     "puis recopier une ligne remplie vers le bas.",
@@ -424,7 +413,7 @@ ws.page_margins.left = ws.page_margins.right = 0.4
 ws.page_margins.top = ws.page_margins.bottom = 0.5
 ws.oddFooter.center.text = "Page &P / &N"
 ws.oddFooter.center.font = "Arial"
-bpu.print_area = f"A1:J{N}"
+bpu.print_area = f"A1:I{N}"
 bpu.print_title_rows = "1:1"
 for s in (bpu, maj):
     s.page_setup.orientation = "landscape"
