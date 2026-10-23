@@ -25,11 +25,14 @@ Les sources sont `app.src.html`, `apps-script/Code.src.gs` et `data.json`. Aprè
 
 # Devis BPU Axione (`devis-axione/`)
 
-`Devis_BPU_Axione_RHD57.xlsx` : devis dont les prix viennent des deux BPU Moselle Fibre RHD57 (Maintenance et VDR Optique, 116 prestations).
+`build_devis.py` fabrique `Devis_BPU_Axione_RHD57.xlsx`, au format du devis Circet (modèle `Exemple_devis_LOSANGE.xlsx`) pour le client Axione, avec les articles des deux BPU Moselle Fibre RHD57 (Maintenance et VDR Optique, 116 articles + majorations MC-07 / MC-08).
 
-- On choisit la prestation dans une liste (code · désignation), on saisit la quantité : l'unité, le prix, le montant, la TVA et le total TTC se calculent.
-- Lignes « sur devis » : prix à saisir dans « PU HT sur devis » (case orange tant qu'il manque). Prestation hors BPU possible.
-- Majorations MC-07 (technicien supplémentaire) et MC-08 (HNO) applicables ligne par ligne.
-- Autoliquidation de TVA en option. Seules les colonnes A à H s'impriment.
+- On choisit l'article dans une liste (code · désignation) et on saisit la quantité : unité, P.U.H.T, montant et sous-total HT se calculent.
+- Articles « Sur devis » ou hors BPU : le P.U.H.T s'affiche en jaune, on tape le prix dans la case.
+- Majoration MC-07 / MC-08 : ligne placée sous l'intervention, P.U.H.T de la ligne au-dessus × (coef − 1).
 
-Le fichier est généré par `python3 devis-axione/build_devis.py <BPU Maintenance.xlsx> <BPU VDR Optique.xlsx> devis-axione/Devis_BPU_Axione_RHD57.xlsx`.
+```
+python3 devis-axione/build_devis.py <BPU Maintenance.xlsx> <BPU VDR Optique.xlsx> <Exemple_devis_LOSANGE.xlsx> Devis_BPU_Axione_RHD57.xlsx
+```
+
+Le classeur produit (logo, signature, prix) n'est pas versionné : ce dépôt est public.
