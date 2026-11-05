@@ -55,12 +55,15 @@ note = Font(name=FT, size=9, italic=True, color='595959')
 COLS = [('A', 'N°', 20), ('B', 'Description', 42), ('C', 'Nom technicien', 18), ('D', 'Agence', 18),
         ('F', 'Client', 16), ('G', 'SITE', 18), ('H', 'Début', 15), ('I', 'Soldée', 15), ('J', 'Type inter.', 20),
         ('K', 'Commentaire facturation', 22), ('L', "Du matériel à t'il été utlisé?", 18), ('M', 'Cerfa / Plainte/ Constat', 18),
-        ('V', 'Commentaire', 24)]
+        ('X', 'Commentaire', 24)]
 C_AGENCE, C_PROJET, C_DEB, C_CLO, C_TYPE = 'D', 'E', 'H', 'I', 'J'
 # NB Ticket : forfait, bonif ticket (saisie après vérification), durée, bonif proposée ; puis hors forfait sur devis
-C_F, C_NBB, C_DUR, C_BON, C_IRIS, C_HF, C_MOT, C_PV = 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'
-C_AIDE, C_AIDE2, C_RET, C_STAT = 'W', 'X', 'Y', 'Z'   # cachées : début et fin en nombres, bonif retenue, statut du ticket
-DERNIERE_COL = 22            # V
+# NOMBRE DE TICKETS ; bonif : demandée par le sous-traitant, durée, bonif possible, validation OUI/NON, commentaire de validation ;
+# IRRIS ; hors forfait sur devis
+C_F, C_NBB, C_DUR, C_BON, C_VAL, C_VCOM = 'N', 'O', 'P', 'Q', 'R', 'S'
+C_IRIS, C_HF, C_MOT, C_PV = 'T', 'U', 'V', 'W'
+C_AIDE, C_AIDE2, C_RET, C_STAT = 'Y', 'Z', 'AA', 'AB'   # cachées : début et fin en nombres, bonif retenue, statut du ticket
+DERNIERE_COL = 24            # X
 A_VERIFIER, VERIFIE = 'À vérifier', 'Vérifié'
 
 
@@ -142,8 +145,9 @@ def construire(sous_traitant, chemin):
     cellule(rg, 'A2', "Chaque mois : 1) efface l'onglet Export (Ctrl+A puis Suppr) ; 2) colle en A1 de l'onglet Export (jamais dans "
             "l'onglet Attachement) l'export des "
             "interventions du sous-traitant, avec sa ligne de titres ; 3) l'onglet Attachement se remplit et calcule tout seul, "
-            "projet par projet ; 4) vérifie les tickets de 2h30 ou plus (case orange) et saisis le nombre de tickets bonifiés "
-            "dans la case BONIF TICKET (colonne O) ; 5) pour un ticket hors forfait sur devis, saisis la plus-value colonne U ; "
+            "projet par projet ; 4) envoie le fichier au sous-traitant : il indique la bonif demandée colonne O pour ses tickets de 2h30 "
+            "ou plus ; 5) à son retour, valide chaque bonif colonne R (OUI / NON) et, si tu refuses, écris pourquoi colonne S ; "
+            "une bonif ne compte qu'une fois validée OUI ; pour un ticket hors forfait sur devis, la plus-value se saisit colonne W ; "
             "6) le projet est trouvé tout seul à partir de l'agence ; si une agence apparaît « Agence inconnue », ajoute un mot "
             "qui la reconnaît dans le tableau « Agences de l'export » ci-dessous ; "
             "7) enregistre sous « Attachement <sous-traitant> <mois>.xlsx » et envoie-le. Pars chaque mois du fichier vide : "
@@ -164,7 +168,7 @@ def construire(sous_traitant, chemin):
         (10, 'HFIN', 'Fin des heures ouvrables', dt.time(18, 0), 'hh:mm', '18:00 pile reste au forfait.'),
         (11, 'WE', 'Week-ends et jours fériés hors forfait', 'OUI', None, 'OUI ou NON.'),
         (12, 'BONIF', 'Bonif de ticket à partir de', dt.time(2, 30), '[h]:mm',
-         'Durée Soldée - Début. Le ticket est alors « À vérifier ».'),
+         'Durée Soldée - Début : +1 ticket par tranche. Demandée par le sous-traitant, validée par toi.'),
         (13, 'PRIX_IRIS', "Prix d'une malfaçon (IRRIS)", 50, EUR, "Les malfaçons ne comptent pas comme tickets : elles sont payées à l'unité."),
         (14, 'MALF_NUM', 'Malfaçon si le N° commence par', 'MAL', None, 'Ex. MAL-20260722T0465#1.'),
         (15, 'MALF_TYPE', 'ou si le Type inter. contient', 'MALFA', None, 'Ex. MAINTENANCE - REPRISE MALFACON IRRIS.'),
@@ -270,7 +274,7 @@ def construire(sous_traitant, chemin):
 
     # ================================================================== Attachement
     larg = {l: w for l, _, w in COLS}
-    larg.update({C_PROJET: 14, C_F: 13, C_NBB: 13, C_DUR: 16, C_BON: 13, C_IRIS: 11, C_HF: 13, C_MOT: 24, C_PV: 15,
+    larg.update({C_PROJET: 14, C_F: 13, C_NBB: 14, C_DUR: 16, C_BON: 13, C_VAL: 12, C_VCOM: 26, C_IRIS: 11, C_HF: 13, C_MOT: 24, C_PV: 15,
                  C_AIDE: 14, C_AIDE2: 14, C_RET: 8, C_STAT: 14})
     for l, w in larg.items():
         at.column_dimensions[l].width = w
@@ -305,13 +309,13 @@ def construire(sous_traitant, chemin):
     at.merge_cells(f'A3:{der}3')
 
     # ---- récapitulatif par projet (colonnes A à P)
-    titres = ['Projet', 'Agences', 'Nombre de tickets', 'Bonif tickets', 'Tickets retenus', 'Jours ouvrés',
+    titres = ['Projet', 'Agences', 'Nombre de tickets', 'Bonif validées', 'Tickets retenus', 'Jours ouvrés',
               'Tickets demandés / jour / équipe', 'Tickets par jour', "NOMBRE D'ÉQUIPES", 'Base mensuelle / équipe', 'Montant forfait',
               'IRRIS (malfaçons)', 'Montant IRRIS', 'Tickets hors forfait (sur devis)', 'Plus-values sur devis', 'TOTAL HT']
     for i, t in enumerate(titres):
         coul = JAUNE if t == "NOMBRE D'ÉQUIPES" else IRIS_FOND if t.startswith(('IRRIS', 'Montant IRRIS')) else VERT
         cellule(at, f'{L(i + 1)}{R_ENT}', t, Font(name=FT, size=9, bold=True), fond(coul), align=centre)
-    cellule(at, f'Q{R_ENT}', 'Tickets retenus = nombre de tickets + bonif tickets. Équipes = tickets retenus ÷ jours ÷ tickets demandés. '
+    cellule(at, f'Q{R_ENT}', 'Tickets retenus = nombre de tickets + bonif validées. Équipes = tickets retenus ÷ jours ÷ tickets demandés. '
             'TOTAL HT = montant forfait + montant IRIS + plus-values.', note, align=Alignment(wrap_text=True, vertical='center'), border=None)
     at.merge_cells(f'Q{R_ENT}:{der}{R_ENT}')
     at.row_dimensions[R_ENT].height = 36
@@ -368,8 +372,8 @@ def construire(sous_traitant, chemin):
         cellule(at, f'{col}{r}', som(col, b=R_INC - 1), v10b, fmt=EUR)
     cellule(at, f'P{r}', som('P', b=R_INC - 1), gros, fond(JAUNE), EUR, mil)
     at.row_dimensions[r].height = 28
-    a_verifier = f'COUNTIFS({bon},">0",{nbb},"")'
-    cellule(at, f'Q{r}', f'=IF({a_verifier}=0,"",{a_verifier}&" ticket(s) de "&TEXT(BONIF,"hh:mm")&" ou plus à vérifier : bonif à saisir colonne {C_NBB} (BONIF TICKET)")',
+    a_valider = f'COUNTIFS({nbb},">0",{rng(C_VAL)},"")'
+    cellule(at, f'Q{r}', f'=IF({a_valider}=0,"",{a_valider}&" bonif(s) demandée(s) à valider : OUI ou NON colonne {C_VAL}")',
             Font(name=FT, size=10, bold=True, color='9C5700'), align=Alignment(wrap_text=True, vertical='center'), border=None)
     at.merge_cells(f'Q{r}:{der}{r}')
 
@@ -378,9 +382,9 @@ def construire(sous_traitant, chemin):
     cellule(at, f'A{R_NOTE}',
             '="Forfait par projet : tickets classiques et travaux commencés entre "&TEXT(HDEB,"hh:mm")&" et "&TEXT(HFIN,"hh:mm")'
             '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Un ticket de "&TEXT(BONIF,"hh:mm")&" ou plus (Soldée - Début) '
-            'compte un ticket de plus par tranche de "&TEXT(BONIF,"hh:mm")&" (bonif saisie après vérification colonne O). Nombre d\'équipes = tickets retenus du projet ÷ jours ouvrés ÷ '
+            'compte un ticket de plus par tranche de "&TEXT(BONIF,"hh:mm")&" : bonif demandée par le sous-traitant (colonne O), comptée seulement si elle est validée OUI (colonne R). Nombre d\'équipes = tickets retenus du projet ÷ jours ouvrés ÷ '
             'tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle. '
-            'En dehors des heures, le ticket est sur devis et peut entraîner une plus-value (colonne U). Les malfaçons ne comptent pas comme tickets : '
+            'En dehors des heures, le ticket est sur devis et peut entraîner une plus-value (colonne W). Les malfaçons ne comptent pas comme tickets : '
             'elles sont payées en IRRIS, "&TEXT(PRIX_IRIS,"0")&" € l\'unité. Un même N° de ticket n\'est compté qu\'une fois."'
             f'&IF({doublons}+{autres}=0,""," Non comptés ce mois-ci : "&{doublons}&" doublon(s), "&{autres}&" ticket(s) d\'un autre mois.")',
             note, align=Alignment(wrap_text=True, vertical='center'), border=None)
@@ -399,7 +403,7 @@ def construire(sous_traitant, chemin):
     cellule(at, f'{C_F}{R_T1}', 'NOMBRE DE TICKETS', ent, fond(VERT), align=centre)
     cellule(at, f'{C_F}{r2}', None, fill=fond(VERT))
     at.merge_cells(f'{C_F}{R_T1}:{C_F}{r2}')
-    for debut, fin_, titre, coul in ((C_NBB, C_BON, '="Bonif (tickets de "&TEXT(BONIF,"hh:mm")&" et plus)"', VERT),
+    for debut, fin_, titre, coul in ((C_NBB, C_VCOM, '="Bonif (tickets de "&TEXT(BONIF,"hh:mm")&" et plus)"', VERT),
                                      (C_HF, C_PV, 'Hors forfait (sur devis)', 'F8CBAD')):
         cellule(at, f'{debut}{R_T1}', titre, ent, fond(coul), align=centre)
         for k in range(openpyxl.utils.column_index_from_string(debut) + 1, openpyxl.utils.column_index_from_string(fin_) + 1):
@@ -408,13 +412,16 @@ def construire(sous_traitant, chemin):
     cellule(at, f'{C_IRIS}{R_T1}', 'IRRIS (malfaçon)', ent, fond(IRIS_FOND), align=centre)
     cellule(at, f'{C_IRIS}{r2}', None, fill=fond(IRIS_FOND))
     at.merge_cells(f'{C_IRIS}{R_T1}:{C_IRIS}{r2}')
-    sous = [(C_NBB, 'BONIF TICKET', JAUNE),
-            (C_DUR, 'Durée', VERT), (C_BON, '="Bonif proposée (+1 par "&TEXT(BONIF,"hh:mm")&")"', VERT),
+    sous = [(C_NBB, 'BONIF DEMANDÉE (sous-traitant)', JAUNE),
+            (C_DUR, 'Durée', VERT), (C_BON, '="Bonif possible (+1 par "&TEXT(BONIF,"hh:mm")&")"', VERT),
+            (C_VAL, 'VALIDATION (OUI / NON)', VERT), (C_VCOM, 'Commentaire validation', VERT),
             (C_HF, 'HORS FORFAIT', 'F8CBAD'), (C_MOT, 'Motif', 'F8CBAD'), (C_PV, 'Plus-value (€)', 'F8CBAD')]
     for col, t, coul in sous:
         cellule(at, f'{col}{r2}', t, ent, fond(coul), align=centre)
-    at[f'{C_NBB}{r2}'].comment = Comment("Après vérification, saisis le nombre de tickets en plus (souvent celui proposé à droite). "
-                                         "Vide = pas de bonif. Seuls les tickets de 2h30 ou plus, dans les heures ouvrables, peuvent être bonifiés.", 'Attachement')
+    at[f'{C_NBB}{r2}'].comment = Comment("À remplir par le sous-traitant : nombre de tickets en plus demandés pour ce ticket "
+                                         "(+1 par tranche de 2h30, voir « Bonif possible »).", 'Attachement')
+    at[f'{C_VAL}{r2}'].comment = Comment("À remplir par toi : OUI, la bonif demandée est comptée ; NON, elle ne l'est pas "
+                                         "(écris pourquoi dans « Commentaire validation »).", 'Attachement')
     at.row_dimensions[R_T1].height = 24
     at.row_dimensions[r2].height = 36
 
@@ -463,8 +470,10 @@ def construire(sous_traitant, chemin):
                 f'=IF(OR(${C_F}{r}<>1,${C_DUR}{r}=""),"",IFERROR(IF({duree}>=ROUND(BONIF*1440,0),INT({duree}/ROUND(BONIF*1440,0)),""),""))',
                 f9b, fmt='"+"0', align=mil)
         cel(at, f'{C_NBB}{r}', None, f9b, align=mil)
-        b, v = f'${C_BON}{r}', f'${C_NBB}{r}'
-        at[f'{C_RET}{r}'] = f'=IF(AND({b}<>"",ISNUMBER({v})),{v},0)'
+        cel(at, f'{C_VAL}{r}', None, f9b, align=mil)
+        cel(at, f'{C_VCOM}{r}', None, f9, align=Alignment(vertical='center', wrap_text=True))
+        v, ok = f'${C_NBB}{r}', f'${C_VAL}{r}'
+        at[f'{C_RET}{r}'] = f'=IF(AND(${C_F}{r}=1,ISNUMBER({v}),UPPER({ok})="OUI"),{v},0)'
         cel(at, f'{C_PV}{r}', None, f9b, fmt=EUR)
 
     plage = f'A{P0}:{der}{P1}'
@@ -472,16 +481,22 @@ def construire(sous_traitant, chemin):
         formula=[f'${C_HF}{P0}=1'], fill=fond('FFC7CE'), font=Font(color='9C0006', bold=True)))
     at.conditional_formatting.add(f'{C_IRIS}{P0}:{C_IRIS}{P1}', FormulaRule(
         formula=[f'${C_IRIS}{P0}=1'], fill=fond(IRIS_FOND), font=Font(color='1F4E79', bold=True)))
-    # bonif : orange tant qu'elle n'est pas validée, verte une fois validée
-    at.conditional_formatting.add(f'{C_BON}{P0}:{C_BON}{P1}', FormulaRule(
-        formula=[f'AND(${C_BON}{P0}<>"",${C_NBB}{P0}="")'], fill=fond('FFEB9C'), font=Font(color='9C5700', bold=True)))
-    at.conditional_formatting.add(f'{C_BON}{P0}:{C_BON}{P1}', FormulaRule(
-        formula=[f'AND(${C_BON}{P0}<>"",${C_NBB}{P0}<>"")'], fill=fond('C6EFCE'), font=Font(color='006100', bold=True)))
-    at.conditional_formatting.add(f'{C_NBB}{P0}:{C_NBB}{P1}', FormulaRule(
-        formula=[f'AND(${C_BON}{P0}<>"",${C_NBB}{P0}="")'], fill=fond('FFEB9C')))
-    at.conditional_formatting.add(f'{C_NBB}{P0}:{C_NBB}{P1}', FormulaRule(formula=[f'${C_BON}{P0}<>""'], fill=fond(SAISIE)))
-    at.conditional_formatting.add(f'{C_NBB}{P0}:{C_NBB}{P1}', FormulaRule(
-        formula=[f'AND(${C_NBB}{P0}<>"",${C_BON}{P0}="")'], font=Font(color='A6A6A6', strike=True)))
+    # bonif : demande (O) en jaune sur les tickets qui y ont droit ; orange tant qu'elle n'est pas validée,
+    # verte si OUI, rouge si NON ; rouge aussi si elle dépasse la bonif possible
+    dem, pos, val, com = f'${C_NBB}{P0}', f'${C_BON}{P0}', f'${C_VAL}{P0}', f'${C_VCOM}{P0}'
+    zone = lambda c: f'{c}{P0}:{c}{P1}'
+    regle = lambda c, f, **k: at.conditional_formatting.add(zone(c), FormulaRule(formula=[f], **k))
+    regle(C_NBB, f'AND(ISNUMBER({dem}),UPPER({val})="OUI")', fill=fond('C6EFCE'), font=Font(color='006100', bold=True))
+    regle(C_NBB, f'AND(ISNUMBER({dem}),UPPER({val})="NON")', fill=fond('FFC7CE'), font=Font(color='9C0006', strike=True))
+    regle(C_NBB, f'AND(ISNUMBER({dem}),OR({pos}="",{dem}>{pos}))', fill=fond('FFEB9C'), font=Font(color='C00000', bold=True))
+    regle(C_NBB, f'AND({dem}<>"",{val}="")', fill=fond('FFEB9C'), font=Font(color='9C5700', bold=True))
+    regle(C_NBB, f'{pos}<>""', fill=fond(SAISIE))
+    regle(C_VAL, f'UPPER({val})="OUI"', fill=fond('C6EFCE'), font=Font(color='006100', bold=True))
+    regle(C_VAL, f'UPPER({val})="NON"', fill=fond('FFC7CE'), font=Font(color='9C0006', bold=True))
+    regle(C_VAL, f'AND({dem}<>"",{val}="")', fill=fond('FFEB9C'))
+    regle(C_VCOM, f'AND(UPPER({val})="NON",{com}="")', fill=fond('FFEB9C'))
+    regle(C_VCOM, f'UPPER({val})="NON"', fill=fond('FCE4E4'), font=Font(color='9C0006'))
+    regle(C_BON, f'{pos}<>""', font=Font(color='006100', bold=True))
     at.conditional_formatting.add(f'{C_PV}{P0}:{C_PV}{P1}', FormulaRule(formula=[f'${C_HF}{P0}=1'], fill=fond(SAISIE)))
     # montant saisi sur un ticket au forfait : barré, il n'est pas compté
     at.conditional_formatting.add(f'{C_PV}{P0}:{C_PV}{P1}', FormulaRule(
@@ -493,9 +508,13 @@ def construire(sous_traitant, chemin):
     # en dernier : les règles de couleur ci-dessus passent avant (LibreOffice n'applique que la première règle vraie)
     at.conditional_formatting.add(plage, FormulaRule(formula=[f'$A{P0}<>""'], border=BORD))
     dv_bonif = DataValidation(type='decimal', operator='greaterThanOrEqual', formula1='0', allow_blank=True,
-                              errorTitle='Bonif ticket', error='Saisis un nombre de tickets en plus : 0, 1, 2…')
+                              errorTitle='Bonif demandée', error='Saisis un nombre de tickets en plus : 0, 1, 2…')
     at.add_data_validation(dv_bonif)
     dv_bonif.add(f'{C_NBB}{P0}:{C_NBB}{P1}')
+    dv_val = DataValidation(type='list', formula1='"OUI,NON"', allow_blank=True, errorTitle='Validation',
+                            error='Choisis OUI ou NON dans la liste.')
+    at.add_data_validation(dv_val)
+    dv_val.add(f'{C_VAL}{P0}:{C_VAL}{P1}')
     at.auto_filter.ref = f'A{r2}:{der}{P1}'
 
     # impression : paysage, une page de large, titres répétés, zone limitée aux tickets présents
