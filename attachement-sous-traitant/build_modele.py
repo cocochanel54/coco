@@ -7,12 +7,12 @@
 # Chaque mois : coller l'export des interventions du sous-traitant dans l'onglet « Export » (en A1, avec
 # la ligne des titres). L'onglet « Attachement » se remplit et calcule tout seul, avec un forfait d'équipes
 # par projet (le projet vient de la colonne Agence, voir PROJETS) :
-#   nombre d'équipes du projet = tickets au forfait du projet ÷ jours ouvrés du mois ÷ 4,
+#   nombre d'équipes du projet = (nombre de tickets + bonif tickets) du projet ÷ jours ouvrés du mois ÷ 4,
 #   montant forfait du projet = équipes × 12 000 € ;
 #   le forfait couvre les tickets classiques et les travaux de 8h à 18h (du lundi au vendredi hors jours fériés) ;
 #   en dehors, le ticket est sur devis et peut entraîner une plus-value, saisie à la main ;
-#   un ticket au forfait de 2h30 ou plus (Clôturée - Date de début) est « À vérifier » : après vérification, le nombre
-#   de tickets bonifiés se saisit à la main et s'ajoute aux tickets au forfait du projet.
+#   un ticket de 2h30 ou plus (dans les heures ouvrables) (Clôturée - Date de début) est « À vérifier » : après vérification, le nombre
+#   de tickets bonifiés se saisit à la main et s'ajoute au nombre de tickets du projet.
 import sys, datetime as dt, pathlib
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -264,12 +264,12 @@ def construire(sous_traitant, chemin):
     at.row_dimensions[3].height = 10
 
     # ---- récapitulatif par projet (colonnes A à N)
-    titres = ['Projet', 'Agences', 'Tickets au forfait', 'Bonif tickets', 'Tickets retenus', 'Jours ouvrés',
+    titres = ['Projet', 'Agences', 'Nombre de tickets', 'Bonif tickets', 'Tickets retenus', 'Jours ouvrés',
               'Tickets demandés / jour / équipe', 'Tickets par jour', "NOMBRE D'ÉQUIPES", 'Base mensuelle / équipe', 'Montant forfait',
               'Tickets hors forfait (sur devis)', 'Plus-values sur devis', 'TOTAL HT']
     for i, t in enumerate(titres):
         cellule(at, f'{L(i + 1)}{R_ENT}', t, Font(name=FT, size=9, bold=True), fond(JAUNE if t == "NOMBRE D'ÉQUIPES" else VERT), align=centre)
-    cellule(at, f'O{R_ENT}', 'Tickets retenus = tickets au forfait + tickets bonifiés. Équipes = tickets retenus ÷ jours ÷ tickets demandés.',
+    cellule(at, f'O{R_ENT}', 'Tickets retenus = nombre de tickets + bonif tickets. Équipes = tickets retenus ÷ jours ÷ tickets demandés.',
             note, align=Alignment(wrap_text=True, vertical='center'), border=None)
     at.merge_cells(f'O{R_ENT}:{der}{R_ENT}')
     at.row_dimensions[R_ENT].height = 36
@@ -332,7 +332,7 @@ def construire(sous_traitant, chemin):
     autres = f'COUNTIF({mot},"Autre mois")'
     cellule(at, f'A{R_NOTE}',
             '="Forfait par projet : tickets classiques et travaux commencés entre "&TEXT(HDEB,"hh:mm")&" et "&TEXT(HFIN,"hh:mm")'
-            '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Un ticket au forfait de "&TEXT(BONIF,"hh:mm")&" ou plus (Clôturée - Date de début) '
+            '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Un ticket de "&TEXT(BONIF,"hh:mm")&" ou plus (Clôturée - Date de début) '
             'compte un ticket de plus par tranche de "&TEXT(BONIF,"hh:mm")&" (bonif saisie après vérification colonne O). Nombre d\'équipes = tickets retenus du projet ÷ jours ouvrés ÷ '
             'tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle. '
             'En dehors des heures, le ticket est sur devis et peut entraîner une plus-value (colonne T). Un même N° de ticket n\'est compté qu\'une fois."'
@@ -350,18 +350,22 @@ def construire(sous_traitant, chemin):
         at.merge_cells(f'{lettre}{R_T1}:{lettre}{r2}')
     at[f'A{R_T1}'].comment = Comment("Les titres de cette ligne sont ceux cherchés dans l'export. "
                                      "Si une colonne de l'export porte un autre nom, écris-le ici.", 'Attachement')
-    for debut, fin_, titre, coul in ((C_F, C_BON, 'NB Ticket', VERT), (C_HF, C_PV, 'Hors forfait (sur devis)', 'F8CBAD')):
+    cellule(at, f'{C_F}{R_T1}', 'NOMBRE DE TICKETS', ent, fond(VERT), align=centre)
+    cellule(at, f'{C_F}{r2}', None, fill=fond(VERT))
+    at.merge_cells(f'{C_F}{R_T1}:{C_F}{r2}')
+    for debut, fin_, titre, coul in ((C_NBB, C_BON, '="Bonif (tickets de "&TEXT(BONIF,"hh:mm")&" et plus)"', VERT),
+                                     (C_HF, C_PV, 'Hors forfait (sur devis)', 'F8CBAD')):
         cellule(at, f'{debut}{R_T1}', titre, ent, fond(coul), align=centre)
         for k in range(openpyxl.utils.column_index_from_string(debut) + 1, openpyxl.utils.column_index_from_string(fin_) + 1):
             cellule(at, f'{L(k)}{R_T1}', None, fill=fond(coul))
         at.merge_cells(f'{debut}{R_T1}:{fin_}{R_T1}')
-    sous = [(C_F, '="FORFAIT "&TEXT(HDEB,"hh:mm")&"-"&TEXT(HFIN,"hh:mm")', VERT), (C_NBB, 'BONIF TICKET', JAUNE),
+    sous = [(C_NBB, 'BONIF TICKET', JAUNE),
             (C_DUR, 'Durée', VERT), (C_BON, '="Bonif proposée (+1 par "&TEXT(BONIF,"hh:mm")&")"', VERT),
             (C_HF, 'HORS FORFAIT', 'F8CBAD'), (C_MOT, 'Motif', 'F8CBAD'), (C_PV, 'Plus-value (€)', 'F8CBAD')]
     for col, t, coul in sous:
         cellule(at, f'{col}{r2}', t, ent, fond(coul), align=centre)
     at[f'{C_NBB}{r2}'].comment = Comment("Après vérification, saisis le nombre de tickets en plus (souvent celui proposé à droite). "
-                                         "Vide = pas de bonif. Seuls les tickets au forfait de 2h30 ou plus peuvent être bonifiés.", 'Attachement')
+                                         "Vide = pas de bonif. Seuls les tickets de 2h30 ou plus, dans les heures ouvrables, peuvent être bonifiés.", 'Attachement')
     at.row_dimensions[R_T1].height = 24
     at.row_dimensions[r2].height = 36
 
