@@ -25,10 +25,14 @@ Les sources sont `app.src.html`, `apps-script/Code.src.gs` et `data.json`. Aprè
 
 # Attachement sous-traitants (`attachement-sous-traitant/`)
 
-Page qui calcule ce qu'il faut payer à chaque sous-traitant à partir de l'export des tickets, et prépare l'attachement Excel. Ouvre `attachement-sous-traitant/index.html` dans un navigateur et dépose l'export (`.xlsx`, `.xls`, `.ods` ou `.csv`) : rien n'est envoyé, tout se calcule dans le navigateur.
+**`Attachement_sous-traitant.xlsx`** : le fichier à remplir chaque mois, un par sous-traitant, au format du suivi maintenance (titre rouge, colonnes N° à CERFA/ASSURANCE, « NB Ticket » en vert, case jaune, TOTAL HT). Il fonctionne sans macro.
 
-- **Nombre d'équipes à payer** = tickets au forfait ÷ jours ouvrés du mois ÷ 4 tickets demandés par jour et par équipe. **Montant** = nombre d'équipes × 12 000 €. Les jours ouvrés (lundi au vendredi, hors jours fériés) sont calculés pour le mois et modifiables, globalement ou pour un seul sous-traitant. Base, tickets par jour et arrondi (au centième par défaut) se règlent.
-- **Hors forfait** : un ticket dont la « Date de début » est avant 8h ou après 18h (et, en option cochée par défaut, un samedi, un dimanche ou un jour férié) ne compte pas dans le forfait. Il est payé à part, au prix d'un ticket hors forfait à renseigner.
-- Le sous-traitant est lu dans une colonne de l'export, ou dans le code entre crochets de la colonne EQUIPE (`[CET] CLAIRET` → CET), ou dans le nom du fichier (un export par sous-traitant). Les noms se renomment dans le tableau.
-- Les tickets en double (même n° de ticket) et ceux d'un autre mois (date « Clôturée ») sont écartés ; un statut peut aussi filtrer.
-- **Excel téléchargé**, au format du suivi maintenance (titre rouge, en-têtes « NB Ticket » en vert, case jaune, TOTAL HT) : un onglet Synthèse avec les réglages, puis un onglet par sous-traitant avec ses tickets, les colonnes Forfait / Hors forfait / Motif, et le calcul en formules. Changer un réglage dans la Synthèse recalcule tout. Bouton « Excel » sur chaque ligne pour l'attachement d'un seul sous-traitant.
+- **Chaque mois** : efface l'onglet **Export**, colle en A1 l'export des interventions du sous-traitant (avec sa ligne de titres). L'onglet **Attachement** se remplit et calcule tout seul. Le nom du sous-traitant se tape une fois dans **Réglages**.
+- **Forfait** : tickets classiques et travaux commencés entre 8h et 18h, du lundi au vendredi hors jours fériés. **Nombre d'équipes à payer** = tickets au forfait ÷ jours ouvrés du mois ÷ 4 (arrondi au centième). **Montant forfait** = équipes × 12 000 €.
+- **Hors forfait** : ticket commencé avant 8h, après 18h, un samedi, un dimanche ou un jour férié. Il est sur devis : sa plus-value se saisit à la main colonne P (case jaune), et s'ajoute au TOTAL HT.
+- Les colonnes sont retrouvées dans l'export par leur titre (ligne 16 de l'Attachement) : si un titre diffère dans l'export, l'écrire à la place. L'onglet Réglages montre quelles colonnes ont été trouvées.
+- Un même N° de ticket n'est compté qu'une fois ; un ticket d'un autre mois n'est pas compté (affiché en gris). Le mois et les jours ouvrés sont lus dans l'export et modifiables dans Réglages (base, tickets par jour, heures, week-ends, jours fériés jusqu'en 2032).
+- Impression : paysage, une page de large, limitée aux tickets présents. 300 tickets maximum par mois.
+- Le fichier est généré par `build_modele.py` (`python3 attachement-sous-traitant/build_modele.py "CET" "LOR"` crée un fichier par sous-traitant).
+
+`index.html` : première version, une page qui calcule dans le navigateur à partir de l'export et télécharge un attachement Excel. Les tickets hors forfait y sont payés à un prix fixe réglable, pas sur devis.
