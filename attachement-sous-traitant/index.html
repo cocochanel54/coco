@@ -1,0 +1,1014 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Attachement sous-traitants</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+/* Layout : bande de titre avec la formule, puis résultat (tableau par sous-traitant) à gauche et réglages à droite ; une colonne sur téléphone.
+   Mêmes polices et couleurs que Journée agent ; le jaune reprend la case surlignée du suivi Excel. */
+:root {
+  --bg: #eef2f1; --surface: #ffffff; --ink: #14242a; --muted: #5d6f73; --line: #d3dcdb;
+  --accent: #0b6e79; --accent-ink: #ffffff; --accent-soft: #dcefee;
+  --hi: #fff1a8; --hi-ink: #3d3300; --xl: #c6e0b4; --xl-ink: #1e3a12;
+  --warn: #9a5b00; --warn-soft: #fdf0d8; --bad: #b3261e; --bad-soft: #fbe4e1; --ok: #1d7a43;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  --f-body: "Barlow", system-ui, sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1a1d; --surface: #172529; --ink: #e5eeee; --muted: #93a6a8; --line: #2a3b3f;
+  --accent: #3fb6c2; --accent-ink: #062226; --accent-soft: #163a3e;
+  --hi: #4a420f; --hi-ink: #fff2b0; --xl: #23402a; --xl-ink: #cfeccb;
+  --warn: #f0b45a; --warn-soft: #3a2c12; --bad: #f08a80; --bad-soft: #3d1c19; --ok: #6fd39a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1a1d; --surface: #172529; --ink: #e5eeee; --muted: #93a6a8; --line: #2a3b3f;
+  --accent: #3fb6c2; --accent-ink: #062226; --accent-soft: #163a3e;
+  --hi: #4a420f; --hi-ink: #fff2b0; --xl: #23402a; --xl-ink: #cfeccb;
+  --warn: #f0b45a; --warn-soft: #3a2c12; --bad: #f08a80; --bad-soft: #3d1c19; --ok: #6fd39a; color-scheme: dark }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 var(--f-body); }
+.wrap { max-width: 1320px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+
+header.band { background: var(--surface); border-bottom: 1px solid var(--line); }
+header.band .wrap { padding-block: 20px 18px; display: grid; gap: 6px; }
+.eyebrow { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
+h1 { font-size: 30px; letter-spacing: .01em; }
+.formule { margin: 4px 0 0; font-size: 17px; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.formule b { white-space: nowrap; font-family: var(--f-data); font-weight: 500; background: var(--accent-soft); border-radius: 6px; padding: 1px 6px; }
+.formule b.hi { background: var(--hi); color: var(--hi-ink); }
+#fPlage { white-space: normal; }
+
+main.wrap { padding-block: 18px 48px; display: grid; gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 14px; min-width: 0; align-content: start; }
+h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
+.drop { border: 2px dashed var(--line); border-radius: 14px; padding: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; background: var(--surface); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop .txt { flex: 1 1 260px; min-width: 0; }
+.drop .txt b { display: block; font-family: var(--f-display); font-size: 19px; }
+.drop .txt span { color: var(--muted); font-size: 14px; }
+.files { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+.files span { font-size: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--bg); overflow-wrap: anywhere; }
+.btn { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 9px 14px; font-weight: 600; }
+.btn.primary, label.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+label.primary { border-radius: 10px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
+label.primary:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+input[type=file] { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; }
+label.primary { position: relative; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.link { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 600; text-decoration: underline; }
+
+.note { border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.note.info { background: var(--accent-soft); }
+.note.warn { background: var(--warn-soft); color: var(--warn); }
+.note.bad { background: var(--bad-soft); color: var(--bad); }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 1319px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .layout > aside { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px 20px; }
+  .layout > aside > h2, .layout > aside > details { grid-column: 1 / -1; }
+}
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--bg); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; }
+.kpi b { font-family: var(--f-data); font-weight: 500; font-size: 20px; overflow-wrap: anywhere; }
+.kpi span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.kpi.hi { background: var(--hi); color: var(--hi-ink); }
+.kpi.hi span { color: inherit; opacity: .8; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 6px 7px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: middle; }
+thead th { white-space: normal; line-height: 1.25; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; background: var(--bg); }
+thead th.xl { background: var(--xl); color: var(--xl-ink); }
+td.r, th.r { text-align: right; }
+td.num, td .num { font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+tbody tr.off td { opacity: .45; }
+tfoot td { font-weight: 700; border-bottom: 0; background: var(--bg); }
+td.eq { background: var(--hi); color: var(--hi-ink); font-weight: 600; }
+td.hf { color: var(--bad); }
+input.nom { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 4px 6px; width: 13ch; font-weight: 600; }
+input.nom:hover, input.nom:focus { border-color: var(--line); background: var(--bg); }
+input.jours { width: 5ch; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 3px 4px; text-align: right; font-family: var(--f-data); }
+input.jours.manuel { border-color: var(--warn); }
+.mini { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 4px 9px; font-size: 13px; font-weight: 600; }
+.mini[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.mini.dl { background: var(--accent-soft); }
+.muted { color: var(--muted); font-size: 14px; margin: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btns { display: flex; gap: 6px; }
+.actions .btn.primary { padding: 12px 20px; font-size: 16px; }
+
+.detail { display: grid; gap: 8px; }
+.detail .tablewrap { max-height: 360px; overflow: auto; }
+.detail table { font-size: 13px; }
+.badge { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; background: var(--accent-soft); }
+.badge.hf { background: var(--bad-soft); color: var(--bad); }
+
+aside .field { display: grid; gap: 6px; }
+aside label, aside .lab { font-weight: 600; font-size: 14px; }
+aside small { color: var(--muted); font-weight: 400; font-size: 13px; }
+aside input[type=number], aside input[type=text], aside input[type=time], aside select {
+  width: 100%; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-weight: 500 !important; }
+.check input { margin-top: 4px; }
+details.cols { border-top: 1px solid var(--line); padding-top: 12px; }
+details.cols summary { cursor: pointer; font-family: var(--f-display); font-size: 16px; font-weight: 700; }
+details.cols[open] summary { margin-bottom: 12px; }
+details.cols .field + .field { margin-top: 12px; }
+.checks { display: grid; gap: 4px; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--bg); }
+.checks label { font-weight: 400; display: flex; gap: 8px; align-items: center; font-size: 14px; overflow-wrap: anywhere; }
+.checks label span { color: var(--muted); margin-left: auto; font-family: var(--f-data); font-size: 12px; }
+.auto { font-size: 13px; color: var(--muted); }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg);
+  padding: 10px 16px; border-radius: 10px; max-width: calc(100% - 32px); z-index: 5; font-size: 15px; }
+@media (prefers-reduced-motion: no-preference) { .drop, .mini { transition: background-color .12s, border-color .12s; } }
+</style>
+
+<header class="band">
+  <div class="wrap">
+    <p class="eyebrow">Contrat maintenance · sous-traitance</p>
+    <h1>Attachement sous-traitants</h1>
+    <p class="formule">
+      <span>Équipes à payer = tickets au forfait ÷ <b id="fJours">22</b> jours ÷ <b id="fTpj">4</b> tickets par jour</span>
+      <span>Montant = équipes × <b id="fBase" class="hi">12 000 €</b></span>
+      <span>Hors forfait : <b id="fPlage">avant 8h, après 18h</b></span>
+    </p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="drop" id="drop">
+    <div class="txt">
+      <b>Export des tickets</b>
+      <span>Dépose ici l'export (Excel ou CSV), un fichier par sous-traitant ou un seul pour tous. Rien n'est envoyé : tout se calcule dans le navigateur.</span>
+    </div>
+    <label class="primary">Choisir l'export<input type="file" id="file" multiple accept=".xlsx,.xlsm,.xls,.ods,.csv,.txt"></label>
+    <div class="files" id="files"></div>
+  </section>
+
+  <p class="note info" id="exemple">Exemple fictif : 3 sous-traitants en septembre 2026. Choisis ton export pour calculer ton attachement.</p>
+  <p class="note bad" id="erreur" hidden></p>
+
+  <div class="layout">
+    <section class="panel" aria-labelledby="tRes">
+      <h2 id="tRes">Attachement du mois</h2>
+      <div class="kpis">
+        <div class="kpi"><span>Tickets au forfait</span><b id="kF">0</b></div>
+        <div class="kpi"><span>Hors forfait</span><b id="kH">0</b></div>
+        <div class="kpi hi"><span>Équipes à payer</span><b id="kE">0</b></div>
+        <div class="kpi"><span>Total HT</span><b id="kT">0 €</b></div>
+      </div>
+      <p class="note warn" id="prixManquant" hidden>Il y a des tickets hors forfait mais leur prix est à 0 €. Renseigne le prix d'un ticket hors forfait dans les réglages.</p>
+      <div class="tablewrap">
+        <table id="table">
+          <thead>
+            <tr>
+              <th title="Inclure dans l'attachement"><span class="sr">Inclure</span></th>
+              <th>Sous-traitant</th>
+              <th class="r xl">Forfait</th>
+              <th class="r">Hors forfait</th>
+              <th class="r">Jours</th>
+              <th class="r">Tickets / jour</th>
+              <th class="r">Équipes</th>
+              <th class="r">Montant forfait</th>
+              <th class="r">Montant HF</th>
+              <th class="r">Total HT</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+          <tfoot id="tfoot"></tfoot>
+        </table>
+      </div>
+      <p class="muted" id="bilan"></p>
+      <div class="actions">
+        <button class="btn primary" id="dlTout">Télécharger l'attachement Excel</button>
+        <span class="muted">Un onglet Synthèse + un onglet par sous-traitant, avec les formules.</span>
+      </div>
+      <div class="detail" id="detail" hidden>
+        <h3 id="detailTitre"></h3>
+        <div class="tablewrap"><table><thead id="detailHead"></thead><tbody id="detailBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-labelledby="tReg">
+      <h2 id="tReg">Réglages</h2>
+      <div class="field">
+        <label for="mois">Mois de l'attachement</label>
+        <select id="mois"></select>
+      </div>
+      <div class="field">
+        <label for="jours">Jours ouvrés du mois</label>
+        <input type="number" id="jours" min="0" max="31" step="1" inputmode="numeric">
+        <span class="auto" id="joursAuto"></span>
+      </div>
+      <div class="pair">
+        <div class="field">
+          <label for="base">Base par équipe <small>€ / mois</small></label>
+          <input type="number" id="base" min="0" step="100" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label for="tpj">Tickets demandés <small>/ jour / équipe</small></label>
+          <input type="number" id="tpj" min="0" step="0.5" inputmode="decimal">
+        </div>
+      </div>
+      <div class="field">
+        <label for="arrondi">Nombre d'équipes</label>
+        <select id="arrondi">
+          <option value="centieme">Au prorata (2 décimales)</option>
+          <option value="proche">Arrondi à l'équipe la plus proche</option>
+          <option value="inf">Arrondi à l'équipe inférieure</option>
+          <option value="sup">Arrondi à l'équipe supérieure</option>
+        </select>
+      </div>
+      <div class="field">
+        <span class="lab">Heures ouvrables (forfait)</span>
+        <div class="pair">
+          <input type="time" id="hDeb" aria-label="Début des heures ouvrables">
+          <input type="time" id="hFin" aria-label="Fin des heures ouvrables">
+        </div>
+        <label class="check"><input type="checkbox" id="weekend"> Samedi, dimanche et jours fériés comptent aussi hors forfait</label>
+        <label class="check"><input type="checkbox" id="alsace"> Jours fériés d'Alsace-Moselle (Vendredi saint, 26 décembre)</label>
+      </div>
+      <div class="field">
+        <label for="prixHF">Prix d'un ticket hors forfait <small>€</small></label>
+        <input type="number" id="prixHF" min="0" step="1" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="titre1">Titre de l'attachement</label>
+        <input type="text" id="titre1">
+        <input type="text" id="titre2" aria-label="Titre, deuxième ligne">
+      </div>
+
+      <details class="cols" id="colonnes">
+        <summary>Colonnes de l'export</summary>
+        <div class="field">
+          <label for="cST">Sous-traitant</label>
+          <select id="cST"></select>
+        </div>
+        <div class="field">
+          <label for="cTicket">N° de ticket <small>(un ticket compté une fois)</small></label>
+          <select id="cTicket"></select>
+        </div>
+        <div class="field">
+          <label for="cMois">Date qui fixe le mois <small>(ticket effectué)</small></label>
+          <select id="cMois"></select>
+        </div>
+        <div class="field">
+          <label for="cHF">Heure qui décide du hors forfait</label>
+          <select id="cHF"></select>
+        </div>
+        <div class="field">
+          <label for="cStatut">Statut</label>
+          <select id="cStatut"></select>
+          <div class="checks" id="statuts" hidden></div>
+        </div>
+        <div class="field">
+          <span class="lab">Colonnes recopiées dans l'attachement</span>
+          <div class="checks" id="colsAttach"></div>
+        </div>
+      </details>
+    </aside>
+  </div>
+</main>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+'use strict';
+const X = window.XLSX;
+const $ = s => document.querySelector(s);
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const JOURS_SEM = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const fEur = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
+const fEur0 = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+const f2 = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fN = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
+const pad = n => String(n).padStart(2, '0');
+const norm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const r2 = x => Math.round((x + Number.EPSILON) * 100) / 100;
+
+// ---------- réglages gardés dans le navigateur ----------
+const STORE = 'coco-attachement-st-v1';
+const DEF = { base: 12000, tpj: 4, arrondi: 'centieme', hDeb: '08:00', hFin: '18:00', weekend: true, alsace: false, prixHF: 0,
+  titre1: 'SUIVI MAINTENANCE RESEAU 54', titre2: 'LOSANGE', noms: {}, choix: {}, colsOff: [], statutsOff: [] };
+let S = (() => { try { return Object.assign(JSON.parse(JSON.stringify(DEF)), JSON.parse(localStorage.getItem(STORE) || '{}')); } catch (e) { return JSON.parse(JSON.stringify(DEF)); } })();
+function sauver() { try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) { /* stockage indisponible : réglages non gardés */ } }
+
+// ---------- état ----------
+let DATA = null;            // { exemple, fichiers, headers, fileCol, rows, type }
+let MAP = {};               // colonnes choisies : st {mode, col}, ticket, mois, hf, statut
+let MOIS_CHOISI = null;     // 'AAAA-MM'
+let JOURS_GLOBAL = null;    // null = calcul automatique
+let JOURS_ST = {};          // sous-traitant -> jours saisis à la main
+let EXCLUS = new Set();     // sous-traitants décochés
+let DETAIL = null;          // sous-traitant affiché en détail
+let RES = null;
+
+// ---------- dates ----------
+const serialVersDate = n => new Date(Math.round((n - 25569) * 86400) * 1000);
+const dateVersSerial = d => d.getTime() / 86400000 + 25569;
+const jma = d => `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+const hm = d => `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+const minutes = s => { const m = /^(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
+const fmtH = s => { const m = minutes(s); if (m == null) return '?'; const h = Math.floor(m / 60), mn = m % 60; return mn ? `${h}h${pad(mn)}` : `${h}h`; };
+
+function infoDate(v) {
+  if (v instanceof Date) return isNaN(v) ? null : { d: v, t: v.getTime() % 86400000 !== 0 };
+  if (typeof v !== 'string' || !v) return null;
+  let y, mo, d, h = 0, mi = 0, s = 0, t = false;
+  let m = v.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4}|\d{2})(?:[\sT,à]+(\d{1,2})[:hH](\d{2})(?::(\d{2}))?)?\s*$/);
+  if (m) { d = +m[1]; mo = +m[2]; y = +m[3]; if (y < 100) y += 2000; if (m[4] != null) { h = +m[4]; mi = +m[5]; s = +(m[6] || 0); t = true; } }
+  else {
+    m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT](\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?\s*$/);
+    if (!m) return null;
+    y = +m[1]; mo = +m[2]; d = +m[3]; if (m[4] != null) { h = +m[4]; mi = +m[5]; s = +(m[6] || 0); t = true; }
+  }
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+  return dt.getUTCDate() === d ? { d: dt, t } : null;
+}
+
+function paques(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25),
+    g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4,
+    l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451),
+    mois = Math.floor((h + l - 7 * m + 114) / 31), jour = ((h + l - 7 * m + 114) % 31) + 1;
+  return Date.UTC(y, mois - 1, jour);
+}
+const CACHE_FERIES = {};
+function feries(y) {
+  const cle = y + (S.alsace ? 'A' : '');
+  if (CACHE_FERIES[cle]) return CACHE_FERIES[cle];
+  const P = paques(y), J = 86400000, iso = t => new Date(t).toISOString().slice(0, 10), map = new Map();
+  const add = (t, n) => map.set(iso(t), n);
+  add(Date.UTC(y, 0, 1), "Jour de l'an"); add(P + J, 'Lundi de Pâques'); add(Date.UTC(y, 4, 1), 'Fête du Travail');
+  add(Date.UTC(y, 4, 8), 'Victoire 1945'); add(P + 39 * J, 'Ascension'); add(P + 50 * J, 'Lundi de Pentecôte');
+  add(Date.UTC(y, 6, 14), 'Fête nationale'); add(Date.UTC(y, 7, 15), 'Assomption'); add(Date.UTC(y, 10, 1), 'Toussaint');
+  add(Date.UTC(y, 10, 11), 'Armistice 1918'); add(Date.UTC(y, 11, 25), 'Noël');
+  if (S.alsace) { add(P - 2 * J, 'Vendredi saint'); add(Date.UTC(y, 11, 26), 'Saint-Étienne'); }
+  return (CACHE_FERIES[cle] = map);
+}
+const ferie = d => feries(d.getUTCFullYear()).get(d.toISOString().slice(0, 10));
+function joursOuvres(cle) {
+  const [y, m] = cle.split('-').map(Number); let n = 0;
+  for (let d = 1; d <= 31; d++) {
+    const dt = new Date(Date.UTC(y, m - 1, d)); if (dt.getUTCMonth() !== m - 1) break;
+    const wd = dt.getUTCDay(); if (wd !== 0 && wd !== 6 && !ferie(dt)) n++;
+  }
+  return n;
+}
+const libMois = cle => { const [y, m] = cle.split('-').map(Number); return `${MOIS[m - 1]} ${y}`; };
+
+// ---------- lecture des fichiers ----------
+function valeur(cell) {
+  if (!cell || cell.v == null) return '';
+  if (cell.t === 'n') return cell.z && X.SSF.is_date(cell.z) ? serialVersDate(cell.v) : cell.v;
+  if (cell.t === 'd') { const d = new Date(cell.v); return isNaN(d) ? '' : new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds())); }
+  if (cell.t === 'b') return cell.v ? 'VRAI' : 'FAUX';
+  if (cell.t === 'e') return '';
+  return String(cell.v).trim();
+}
+function grille(ws) {
+  let maxR = -1, maxC = -1;
+  for (const k in ws) { if (k[0] === '!') continue; const a = X.utils.decode_cell(k); if (a.r > maxR) maxR = a.r; if (a.c > maxC) maxC = a.c; }
+  const out = [];
+  for (let r = 0; r <= maxR; r++) {
+    const row = []; let vide = true;
+    for (let c = 0; c <= maxC; c++) { const v = valeur(ws[X.utils.encode_cell({ r, c })]); if (v !== '') vide = false; row.push(v); }
+    out.push(vide ? null : row);
+  }
+  return out;
+}
+function ligneEnTete(g) {
+  const idx = []; for (let i = 0; i < g.length && idx.length < 30; i++) if (g[i]) idx.push(i);
+  if (!idx.length) return -1;
+  const pleins = i => g[i].filter(v => v !== '').length;
+  const max = Math.max(...idx.map(pleins));
+  for (const i of idx) {
+    const n = pleins(i), txt = g[i].filter(v => typeof v === 'string' && v !== '').length;
+    if (n >= Math.max(2, Math.ceil(max * 0.6)) && txt >= n * 0.8) return i;
+  }
+  return idx[0];
+}
+async function lireFichier(file) {
+  const buf = await file.arrayBuffer();
+  let wb;
+  if (/\.(csv|txt)$/i.test(file.name)) {
+    let txt; try { txt = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) { txt = new TextDecoder('windows-1252').decode(buf); }
+    wb = X.read(txt.replace(/^﻿/, ''), { type: 'string', raw: true });
+  } else wb = X.read(new Uint8Array(buf), { type: 'array', cellNF: true, cellDates: false });
+  // la feuille la plus remplie
+  let best = null, nb = -1;
+  for (const n of wb.SheetNames) { const c = Object.keys(wb.Sheets[n]).filter(k => k[0] !== '!').length; if (c > nb) { nb = c; best = n; } }
+  const g = grille(wb.Sheets[best]);
+  const h = ligneEnTete(g);
+  if (h < 0) throw new Error('feuille vide');
+  const vus = new Map();
+  const headers = g[h].map((v, i) => {
+    let nom = (v instanceof Date ? jma(v) : String(v)).replace(/\s+/g, ' ').trim() || 'Colonne ' + X.utils.encode_col(i);
+    const n = (vus.get(nom) || 0) + 1; vus.set(nom, n); return n > 1 ? `${nom} (${n})` : nom;
+  });
+  const rows = g.slice(h + 1).filter(Boolean).map(r => headers.map((_, i) => r[i] ?? ''));
+  return { nom: file.name, base: file.name.replace(/\.[^.]+$/, ''), feuille: best, headers, rows };
+}
+async function chargerFichiers(list) {
+  if (!X) { erreur("La bibliothèque Excel n'a pas pu se charger. Vérifie la connexion internet puis recharge la page."); return; }
+  const tables = [];
+  for (const f of list) {
+    try { tables.push(await lireFichier(f)); }
+    catch (e) { erreur(`Impossible de lire « ${f.name} ». Enregistre-le en .xlsx ou .csv puis réessaie.`); }
+  }
+  if (!tables.length) return;
+  const headers = [], idx = new Map();
+  for (const t of tables) for (const h of t.headers) if (!idx.has(h)) { idx.set(h, headers.length); headers.push(h); }
+  const fileCol = headers.length; headers.push('(nom du fichier)');
+  const rows = [];
+  for (const t of tables) for (const r of t.rows) {
+    const a = new Array(headers.length).fill('');
+    t.headers.forEach((h, i) => { a[idx.get(h)] = r[i]; });
+    a[fileCol] = t.base; rows.push(a);
+  }
+  installer({ exemple: false, fichiers: tables.map(t => `${t.nom} · ${t.rows.length} lignes`), headers, fileCol, rows });
+}
+
+// ---------- analyse et détection des colonnes ----------
+function installer(d) {
+  DATA = d; JOURS_ST = {}; EXCLUS = new Set(); DETAIL = null; JOURS_GLOBAL = null; MOIS_CHOISI = null;
+  analyser(); detecter(); remplirColonnes(); remplirMois(); calculer();
+  $('#exemple').hidden = !d.exemple; $('#erreur').hidden = true;
+  const fl = $('#files'); fl.textContent = '';
+  if (!d.exemple) for (const f of d.fichiers) fl.append(el('span', {}, f));
+}
+function analyser() {
+  const { headers, rows, fileCol } = DATA;
+  DATA.type = headers.map((_, c) => {
+    const T = { date: false, heure: false, crochets: 0 };
+    if (c === fileCol) return T;
+    let n = 0, d = 0, t = 0, cr = 0;
+    for (const r of rows) {
+      const v = r[c]; if (v === '' || v == null) continue; n++;
+      const inf = infoDate(v); if (inf) { d++; if (inf.t) t++; }
+      if (typeof v === 'string' && /^\s*\[[^\]]+\]/.test(v)) cr++;
+    }
+    T.date = n > 0 && d >= n * 0.8; T.heure = T.date && t > 0; T.crochets = n ? cr / n : 0;
+    if (T.date) for (const r of rows) { const inf = infoDate(r[c]); if (inf) r[c] = inf.d; }
+    return T;
+  });
+}
+function trouver(regs, ok) {
+  for (const re of regs) {
+    const i = DATA.headers.findIndex((h, k) => k !== DATA.fileCol && ok(k) && re.test(norm(h)));
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+function detecter() {
+  const T = DATA.type, H = DATA.headers, ch = S.choix || {};
+  const isD = k => T[k].date, notD = k => !T[k].date;
+  const parNom = n => { const i = H.indexOf(n); return i >= 0 && i !== DATA.fileCol ? i : -1; };
+  const choisi = (cle, auto) => { if (ch[cle] === '') return -1; if (ch[cle]) { const i = parNom(ch[cle]); if (i >= 0) return i; } return auto(); };
+  let st = null;
+  if (ch.st) {
+    if (ch.st.mode === 'fichier') st = { mode: 'fichier' };
+    else { const i = parNom(ch.st.col); if (i >= 0) st = { mode: ch.st.mode === 'code' && T[i].crochets > 0 ? 'code' : 'col', col: i }; }
+  }
+  if (!st) {
+    let i = trouver([/sous.?traitant/, /prestataire/, /^st$/, /entreprise|societe|partenaire|fournisseur/], notD);
+    if (i >= 0) st = { mode: 'col', col: i };
+    else {
+      i = trouver([/equipe/, /intervenant|technicien|^tech/], k => T[k].crochets >= 0.3);
+      if (i < 0) i = H.findIndex((h, k) => k !== DATA.fileCol && T[k].crochets >= 0.5);
+      st = i >= 0 ? { mode: 'code', col: i } : { mode: 'fichier' };
+    }
+  }
+  MAP.st = st;
+  MAP.ticket = choisi('ticket', () => trouver([/ticket/, /^(n ?°|n|no|num|numero)$/, /^n ?°|numero|^ref|reference|^id\b/], notD));
+  MAP.mois = choisi('mois', () => trouver([/clotur|resolu|realis|termin|^fin|date de fin/, /debut|intervention/, /date/, /./], isD));
+  MAP.hf = choisi('hf', () => {
+    const i = trouver([/debut|intervention|rdv|rendez/, /clotur|resolu|realis|fin/, /./], k => T[k].heure);
+    return i >= 0 ? i : trouver([/debut|intervention|rdv|rendez/, /./], isD);
+  });
+  MAP.statut = choisi('statut', () => trouver([/statut|^etat|status/], notD));
+}
+function memoriserChoix() {
+  const H = DATA.headers, nom = i => (i >= 0 ? H[i] : '');
+  S.choix = { st: MAP.st.mode === 'fichier' ? { mode: 'fichier' } : { mode: MAP.st.mode, col: H[MAP.st.col] },
+    ticket: nom(MAP.ticket), mois: nom(MAP.mois), hf: nom(MAP.hf), statut: nom(MAP.statut) };
+  sauver();
+}
+
+// ---------- calcul ----------
+function cleST(r) {
+  const m = MAP.st;
+  if (m.mode === 'fichier') return String(r[DATA.fileCol]);
+  const v = String(r[m.col] ?? '').trim();
+  if (m.mode === 'code') { const x = v.match(/^\s*\[([^\]]+)\]/); return x ? x[1].trim().toUpperCase() : v; }
+  return v;
+}
+function horsForfait(r) {
+  if (MAP.hf < 0) return null;
+  const d = r[MAP.hf]; if (!(d instanceof Date)) return null;
+  if (S.weekend) {
+    const wd = d.getUTCDay(); if (wd === 0 || wd === 6) return JOURS_SEM[wd];
+    const f = ferie(d); if (f) return 'Jour férié (' + f + ')';
+  }
+  if (DATA.type[MAP.hf].heure) {
+    const m = d.getUTCHours() * 60 + d.getUTCMinutes(), deb = minutes(S.hDeb), fin = minutes(S.hFin);
+    if (deb != null && m < deb) return 'Avant ' + fmtH(S.hDeb) + ' (' + hm(d) + ')';
+    if (fin != null && m > fin) return 'Après ' + fmtH(S.hFin) + ' (' + hm(d) + ')';
+  }
+  return null;
+}
+function arrondir(x) {
+  if (S.arrondi === 'proche') return Math.round(x);
+  if (S.arrondi === 'inf') return Math.floor(x + 1e-9);
+  if (S.arrondi === 'sup') return Math.ceil(x - 1e-9);
+  return r2(x);
+}
+function joursDuMois() { return JOURS_GLOBAL ?? (MOIS_CHOISI ? joursOuvres(MOIS_CHOISI) : 0); }
+function calculer() {
+  const stats = { lues: DATA.rows.length, sansST: 0, sansNum: 0, sansDate: 0, horsMois: 0, statut: 0, doublons: 0 };
+  const groupes = new Map(), vus = new Set();
+  const [my, mm] = MOIS_CHOISI ? MOIS_CHOISI.split('-').map(Number) : [0, 0];
+  const off = new Set(S.statutsOff);
+  for (const r of DATA.rows) {
+    let num = '';
+    if (MAP.ticket >= 0) { num = String(r[MAP.ticket] ?? '').trim(); if (!num) { stats.sansNum++; continue; } }
+    const cle = cleST(r); if (!cle) { stats.sansST++; continue; }
+    if (MAP.mois >= 0 && MOIS_CHOISI) {
+      const d = r[MAP.mois];
+      if (!(d instanceof Date)) { stats.sansDate++; continue; }
+      if (d.getUTCFullYear() !== my || d.getUTCMonth() + 1 !== mm) { stats.horsMois++; continue; }
+    }
+    if (MAP.statut >= 0 && off.has(String(r[MAP.statut]).trim())) { stats.statut++; continue; }
+    if (num) { if (vus.has(num)) { stats.doublons++; continue; } vus.add(num); }
+    let g = groupes.get(cle);
+    if (!g) groupes.set(cle, g = { cle, lignes: [], forfait: 0, hf: 0 });
+    const motif = horsForfait(r);
+    g.lignes.push({ r, hf: !!motif, motif: motif || '' });
+    if (motif) g.hf++; else g.forfait++;
+  }
+  const jm = joursDuMois(), tri = MAP.hf >= 0 ? MAP.hf : MAP.mois;
+  const liste = [...groupes.values()].map(g => {
+    g.nom = S.noms[g.cle] || g.cle;
+    g.joursManuel = g.cle in JOURS_ST;
+    g.jours = g.joursManuel ? JOURS_ST[g.cle] : jm;
+    g.tpd = g.jours > 0 ? g.forfait / g.jours : 0;
+    g.equipes = g.jours > 0 && S.tpj > 0 ? arrondir(g.forfait / g.jours / S.tpj) : 0;
+    g.montantF = r2(g.equipes * S.base);
+    g.montantHF = r2(g.hf * S.prixHF);
+    g.total = r2(g.montantF + g.montantHF);
+    g.inclus = !EXCLUS.has(g.cle);
+    if (tri >= 0) g.lignes.sort((a, b) => (a.r[tri] instanceof Date ? a.r[tri] : 0) - (b.r[tri] instanceof Date ? b.r[tri] : 0));
+    return g;
+  }).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+  RES = { groupes: liste, stats, jm };
+  afficher();
+}
+
+// ---------- affichage ----------
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, ''); else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const c of kids) if (c != null) e.append(c);
+  return e;
+}
+function afficher() {
+  const G = RES.groupes, inc = G.filter(g => g.inclus);
+  const somme = k => inc.reduce((s, g) => s + g[k], 0);
+  $('#kF').textContent = fN.format(somme('forfait'));
+  $('#kH').textContent = fN.format(somme('hf'));
+  $('#kE').textContent = f2.format(r2(somme('equipes')));
+  $('#kT').textContent = fEur.format(r2(somme('total')));
+  $('#fJours').textContent = RES.jm; $('#fTpj').textContent = fN.format(S.tpj); $('#fBase').textContent = fEur0.format(S.base);
+  $('#fPlage').textContent = `avant ${fmtH(S.hDeb)}, après ${fmtH(S.hFin)}` + (S.weekend ? ', week-ends et fériés' : '');
+  $('#prixManquant').hidden = !(somme('hf') > 0 && !(S.prixHF > 0));
+
+  const tb = $('#tbody'); tb.textContent = '';
+  for (const g of G) {
+    const jours = el('input', { class: 'jours num' + (g.joursManuel ? ' manuel' : ''), type: 'number', min: 0, max: 31, step: 1, value: g.jours,
+      'aria-label': 'Jours pour ' + g.nom, title: g.joursManuel ? 'Saisi à la main (vider pour revenir au mois)' : 'Jours ouvrés du mois',
+      onchange: e => { const v = e.target.value; if (v === '') delete JOURS_ST[g.cle]; else JOURS_ST[g.cle] = Math.max(0, +v); calculer(); } });
+    tb.append(el('tr', { class: g.inclus ? '' : 'off' },
+      el('td', {}, el('input', { type: 'checkbox', checked: g.inclus, 'aria-label': 'Inclure ' + g.nom,
+        onchange: e => { if (e.target.checked) EXCLUS.delete(g.cle); else EXCLUS.add(g.cle); calculer(); } })),
+      el('td', {}, el('input', { class: 'nom', value: g.nom, 'aria-label': 'Nom du sous-traitant ' + g.cle, title: g.nom !== g.cle ? 'Code dans l\'export : ' + g.cle : 'Clique pour renommer',
+        onchange: e => { const v = e.target.value.trim(); if (v && v !== g.cle) S.noms[g.cle] = v; else delete S.noms[g.cle]; sauver(); calculer(); } })),
+      el('td', { class: 'r num' }, fN.format(g.forfait)),
+      el('td', { class: 'r num' + (g.hf ? ' hf' : '') }, fN.format(g.hf)),
+      el('td', { class: 'r' }, jours),
+      el('td', { class: 'r num' }, f2.format(g.tpd)),
+      el('td', { class: 'r num eq' }, f2.format(g.equipes)),
+      el('td', { class: 'r num' }, fEur.format(g.montantF)),
+      el('td', { class: 'r num' }, fEur.format(g.montantHF)),
+      el('td', { class: 'r num' }, el('b', {}, fEur.format(g.total))),
+      el('td', {}, el('div', { class: 'btns' },
+        el('button', { class: 'mini', 'aria-expanded': String(DETAIL === g.cle), onclick: () => { DETAIL = DETAIL === g.cle ? null : g.cle; afficher(); } }, 'Tickets'),
+        el('button', { class: 'mini dl', onclick: () => telecharger([g], true) }, 'Excel')))));
+  }
+  if (!G.length) tb.append(el('tr', {}, el('td', { colspan: 11, class: 'muted' }, 'Aucun ticket pour ce mois. Vérifie le mois et les colonnes dans les réglages.')));
+  const tf = $('#tfoot'); tf.textContent = '';
+  if (G.length > 1) tf.append(el('tr', {}, el('td', {}), el('td', {}, 'Total'),
+    el('td', { class: 'r num' }, fN.format(somme('forfait'))), el('td', { class: 'r num' }, fN.format(somme('hf'))), el('td', {}), el('td', {}),
+    el('td', { class: 'r num eq' }, f2.format(r2(somme('equipes')))), el('td', { class: 'r num' }, fEur.format(r2(somme('montantF')))),
+    el('td', { class: 'r num' }, fEur.format(r2(somme('montantHF')))), el('td', { class: 'r num' }, fEur.format(r2(somme('total')))), el('td', {})));
+  $('#dlTout').disabled = !inc.length || !X;
+
+  const s = RES.stats, b = [`${fN.format(s.lues)} lignes lues`];
+  if (MOIS_CHOISI && MAP.mois >= 0) b.push(`${fN.format(s.horsMois)} hors de ${libMois(MOIS_CHOISI)}`);
+  if (s.doublons) b.push(`${fN.format(s.doublons)} doublon${s.doublons > 1 ? 's' : ''} (même n° de ticket) ignoré${s.doublons > 1 ? 's' : ''}`);
+  if (s.statut) b.push(`${fN.format(s.statut)} écartée${s.statut > 1 ? 's' : ''} par le statut`);
+  if (s.sansNum) b.push(`${fN.format(s.sansNum)} sans n° de ticket`);
+  if (s.sansDate) b.push(`${fN.format(s.sansDate)} sans date`);
+  if (s.sansST) b.push(`${fN.format(s.sansST)} sans sous-traitant`);
+  if (MAP.hf < 0) b.push('aucune colonne d\'heure : tous les tickets sont au forfait');
+  $('#bilan').textContent = b.join(' · ') + '.';
+  afficherDetail();
+}
+function afficherDetail() {
+  const g = DETAIL && RES.groupes.find(x => x.cle === DETAIL);
+  $('#detail').hidden = !g; if (!g) return;
+  $('#detailTitre').textContent = `Tickets de ${g.nom} : ${g.forfait} au forfait, ${g.hf} hors forfait`;
+  const cols = [MAP.ticket, MAP.hf, MAP.mois].filter((c, i, a) => c >= 0 && a.indexOf(c) === i);
+  const H = DATA.headers;
+  $('#detailHead').textContent = '';
+  $('#detailHead').append(el('tr', {}, ...cols.map(c => el('th', {}, H[c])), el('th', {}, 'Forfait')));
+  const tb = $('#detailBody'); tb.textContent = '';
+  for (const l of g.lignes.slice(0, 1000)) {
+    tb.append(el('tr', {}, ...cols.map(c => el('td', { class: 'num' }, texte(l.r[c], c))),
+      el('td', {}, l.hf ? el('span', { class: 'badge hf' }, 'Hors forfait · ' + l.motif) : el('span', { class: 'badge' }, 'Forfait'))));
+  }
+}
+const texte = (v, c) => v instanceof Date ? (DATA.type[c].heure ? `${jma(v)} ${hm(v)}` : jma(v)) : String(v ?? '');
+
+function remplirSelect(sel, opts, val) {
+  sel.textContent = ''; for (const [v, t] of opts) sel.append(el('option', { value: v }, t)); sel.value = val;
+}
+function remplirColonnes() {
+  const H = DATA.headers, T = DATA.type, reel = H.map((h, i) => i).filter(i => i !== DATA.fileCol);
+  const st = [];
+  for (const i of reel) {
+    if (T[i].date) continue;
+    st.push(['col:' + i, H[i]]);
+    if (T[i].crochets > 0) st.push(['code:' + i, H[i] + ' (code entre [ ])']);
+  }
+  st.push(['fichier', 'Nom du fichier']);
+  remplirSelect($('#cST'), st, MAP.st.mode === 'fichier' ? 'fichier' : MAP.st.mode + ':' + MAP.st.col);
+  remplirSelect($('#cTicket'), [['-1', 'Aucune (pas de dédoublonnage)'], ...reel.filter(i => !T[i].date).map(i => [String(i), H[i]])], String(MAP.ticket));
+  const dates = reel.filter(i => T[i].date);
+  remplirSelect($('#cMois'), [['-1', 'Aucune (tout l\'export)'], ...dates.map(i => [String(i), H[i]])], String(MAP.mois));
+  remplirSelect($('#cHF'), [['-1', 'Aucune (tout au forfait)'], ...dates.map(i => [String(i), H[i] + (T[i].heure ? '' : ' (sans heure)')])], String(MAP.hf));
+  remplirSelect($('#cStatut'), [['-1', 'Aucun'], ...reel.filter(i => !T[i].date).map(i => [String(i), H[i]])], String(MAP.statut));
+  remplirStatuts();
+  const ca = $('#colsAttach'); ca.textContent = '';
+  const off = new Set(S.colsOff);
+  for (const i of reel) ca.append(el('label', {}, el('input', { type: 'checkbox', checked: !off.has(H[i]),
+    onchange: e => { const s = new Set(S.colsOff); if (e.target.checked) s.delete(H[i]); else s.add(H[i]); S.colsOff = [...s]; sauver(); } }), H[i]));
+}
+function remplirStatuts() {
+  const box = $('#statuts'); box.textContent = '';
+  box.hidden = MAP.statut < 0; if (MAP.statut < 0) return;
+  const cnt = new Map();
+  for (const r of DATA.rows) { const v = String(r[MAP.statut] ?? '').trim(); cnt.set(v, (cnt.get(v) || 0) + 1); }
+  const off = new Set(S.statutsOff);
+  box.append(el('p', { class: 'auto' }, 'Statuts comptés comme tickets effectués :'));
+  for (const [v, n] of [...cnt].sort((a, b) => b[1] - a[1]).slice(0, 40)) {
+    box.append(el('label', {}, el('input', { type: 'checkbox', checked: !off.has(v),
+      onchange: e => { const s = new Set(S.statutsOff); if (e.target.checked) s.delete(v); else s.add(v); S.statutsOff = [...s]; sauver(); calculer(); } }),
+      v || '(vide)', el('span', {}, String(n))));
+  }
+}
+function remplirMois() {
+  const opts = [];
+  if (MAP.mois >= 0) {
+    const cnt = new Map();
+    for (const r of DATA.rows) { const d = r[MAP.mois]; if (d instanceof Date) { const k = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`; cnt.set(k, (cnt.get(k) || 0) + 1); } }
+    const cles = [...cnt.keys()].sort().reverse();
+    for (const k of cles) opts.push([k, `${libMois(k)} (${cnt.get(k)} lignes)`]);
+    if (!MOIS_CHOISI || !cnt.has(MOIS_CHOISI)) MOIS_CHOISI = cles.length ? cles.reduce((a, b) => (cnt.get(b) > cnt.get(a) ? b : a)) : null;
+  }
+  if (!opts.length) {
+    const now = new Date();
+    for (let i = 0; i < 15; i++) { const d = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i, 1)); const k = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`; opts.push([k, libMois(k)]); }
+    if (!MOIS_CHOISI) MOIS_CHOISI = opts[1][0];
+  }
+  remplirSelect($('#mois'), opts, MOIS_CHOISI);
+  majJours();
+}
+function majJours() {
+  const auto = MOIS_CHOISI ? joursOuvres(MOIS_CHOISI) : 0;
+  $('#jours').value = JOURS_GLOBAL ?? auto;
+  $('#jours').classList.toggle('manuel', JOURS_GLOBAL != null);
+  const a = $('#joursAuto'); a.textContent = '';
+  a.append(`Calcul automatique : ${auto} jours (lundi au vendredi, hors jours fériés).`);
+  if (JOURS_GLOBAL != null) a.append(' ', el('button', { class: 'link', onclick: () => { JOURS_GLOBAL = null; majJours(); calculer(); } }, 'Revenir au calcul'));
+}
+
+// ---------- réglages ----------
+function lierReglages() {
+  const num = (id, cle) => { const i = $(id); i.value = S[cle]; i.addEventListener('input', () => { const v = parseFloat(String(i.value).replace(',', '.')); S[cle] = isFinite(v) && v >= 0 ? v : 0; sauver(); calculer(); }); };
+  num('#base', 'base'); num('#tpj', 'tpj'); num('#prixHF', 'prixHF');
+  for (const [id, cle] of [['#hDeb', 'hDeb'], ['#hFin', 'hFin'], ['#titre1', 'titre1'], ['#titre2', 'titre2'], ['#arrondi', 'arrondi']]) {
+    const i = $(id); i.value = S[cle]; i.addEventListener('change', () => { S[cle] = i.value; sauver(); calculer(); });
+  }
+  for (const cle of ['weekend', 'alsace']) {
+    const i = $('#' + cle); i.checked = S[cle];
+    i.addEventListener('change', () => { S[cle] = i.checked; sauver(); if (cle === 'alsace') majJours(); calculer(); });
+  }
+  $('#mois').addEventListener('change', e => { MOIS_CHOISI = e.target.value; JOURS_GLOBAL = null; JOURS_ST = {}; majJours(); calculer(); });
+  $('#jours').addEventListener('input', e => { const v = e.target.value; JOURS_GLOBAL = v === '' ? null : Math.max(0, +v); $('#jours').classList.toggle('manuel', JOURS_GLOBAL != null); calculer(); });
+  $('#jours').addEventListener('change', majJours);
+  $('#cST').addEventListener('change', e => { const [m, c] = e.target.value.split(':'); MAP.st = m === 'fichier' ? { mode: 'fichier' } : { mode: m, col: +c }; EXCLUS = new Set(); JOURS_ST = {}; memoriserChoix(); calculer(); });
+  for (const [id, cle] of [['#cTicket', 'ticket'], ['#cMois', 'mois'], ['#cHF', 'hf'], ['#cStatut', 'statut']]) {
+    $(id).addEventListener('change', e => { MAP[cle] = +e.target.value; memoriserChoix(); if (cle === 'mois') remplirMois(); if (cle === 'statut') remplirStatuts(); calculer(); });
+  }
+}
+
+// ---------- Excel ----------
+const EUR = '#,##0.00\\ "€"';
+const FT = 'Calibri';
+const TRAIT = { style: 'thin', color: { rgb: 'A6A6A6' } }, FORT = { style: 'medium', color: { rgb: '000000' } };
+const BORD = { top: TRAIT, bottom: TRAIT, left: TRAIT, right: TRAIT };
+const fond = rgb => ({ patternType: 'solid', fgColor: { rgb } });
+const STY = {
+  titre: { font: { name: FT, sz: 12, bold: true, color: { rgb: 'FF0000' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: { bottom: FORT } },
+  sous: { font: { name: FT, sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: { bottom: FORT } },
+  ent: { font: { name: FT, sz: 9, bold: true }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: BORD },
+  entV: { font: { name: FT, sz: 9, bold: true }, fill: fond('C6E0B4'), alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: BORD },
+  d: { font: { name: FT, sz: 9 }, alignment: { vertical: 'center' }, border: BORD },
+  dC: { font: { name: FT, sz: 9 }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORD },
+  dN: { font: { name: FT, sz: 9 }, alignment: { horizontal: 'right', vertical: 'center' }, border: BORD },
+  hf: { font: { name: FT, sz: 9, bold: true, color: { rgb: '9C0006' } }, fill: fond('FFC7CE'), alignment: { horizontal: 'right', vertical: 'center' }, border: BORD },
+  hfTxt: { font: { name: FT, sz: 9, color: { rgb: '9C0006' } }, fill: fond('FFC7CE'), alignment: { vertical: 'center' }, border: BORD },
+  lab: { font: { name: FT, sz: 10, bold: true }, fill: fond('BFBFBF'), alignment: { horizontal: 'right', vertical: 'center' }, border: BORD },
+  labG: { font: { name: FT, sz: 10, bold: true }, fill: fond('BFBFBF'), alignment: { horizontal: 'left', vertical: 'center' }, border: BORD },
+  labFonce: { font: { name: FT, sz: 11, bold: true, color: { rgb: 'FFFFFF' } }, fill: fond('767171'), alignment: { horizontal: 'right', vertical: 'center' }, border: BORD },
+  val: { font: { name: FT, sz: 10 }, alignment: { horizontal: 'right', vertical: 'center' }, border: BORD },
+  valB: { font: { name: FT, sz: 10, bold: true }, alignment: { horizontal: 'right', vertical: 'center' }, border: BORD },
+  param: { font: { name: FT, sz: 10, bold: true }, fill: fond('FFF2CC'), alignment: { horizontal: 'right', vertical: 'center' }, border: BORD },
+  paramTxt: { font: { name: FT, sz: 10 }, alignment: { horizontal: 'left', vertical: 'center' } },
+  jaune: { font: { name: FT, sz: 14, bold: true }, fill: fond('FFFF00'), alignment: { horizontal: 'center', vertical: 'center' }, border: BORD },
+  jauneLab: { font: { name: FT, sz: 11, bold: true }, fill: fond('FFFF00'), alignment: { horizontal: 'right', vertical: 'center', wrapText: true }, border: BORD },
+  total: { font: { name: FT, sz: 12, bold: true }, fill: fond('FFFF00'), alignment: { horizontal: 'center', vertical: 'center' }, border: BORD },
+  note: { font: { name: FT, sz: 9, italic: true, color: { rgb: '595959' } }, alignment: { vertical: 'top', wrapText: true } },
+  gras: { font: { name: FT, sz: 11, bold: true } },
+};
+const L = c => X.utils.encode_col(c);
+function feuille() { return { ws: {}, maxR: 0, maxC: 0, merges: [], h: [], w: [] }; }
+function put(F, r, c, v, s, o = {}) {
+  let cell;
+  if (v instanceof Date) cell = { t: 'n', v: dateVersSerial(v), z: o.z || 'dd/mm/yyyy' };
+  else if (typeof v === 'number') cell = { t: 'n', v };
+  else cell = { t: 's', v: v == null ? '' : String(v) };
+  if (o.f) cell.f = o.f;
+  if (o.z) { cell.z = o.z; if (s) s = Object.assign({}, s, { numFmt: o.z }); }
+  if (s) cell.s = s;
+  F.ws[X.utils.encode_cell({ r, c })] = cell;
+  F.maxR = Math.max(F.maxR, r); F.maxC = Math.max(F.maxC, c);
+}
+function fusion(F, r1, c1, r2_, c2, s) {
+  for (let r = r1; r <= r2_; r++) for (let c = c1; c <= c2; c++) if (r !== r1 || c !== c1) put(F, r, c, '', s);
+  if (r1 !== r2_ || c1 !== c2) F.merges.push({ s: { r: r1, c: c1 }, e: { r: r2_, c: c2 } });
+}
+function finir(F) {
+  const ws = F.ws;
+  ws['!ref'] = X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: F.maxR, c: F.maxC } });
+  ws['!merges'] = F.merges;
+  ws['!rows'] = Array.from({ length: F.maxR + 1 }, (_, r) => (F.h[r] ? { hpt: F.h[r] } : {}));
+  ws['!cols'] = Array.from({ length: F.maxC + 1 }, (_, c) => ({ wch: F.w[c] || 10 }));
+  if (F.filtre) ws['!autofilter'] = { ref: F.filtre };
+  ws['!margins'] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 };
+  return ws;
+}
+const refFeuille = n => `'${n.replace(/'/g, "''")}'`;
+const formuleArrondi = x => ({ proche: `ROUND(${x},0)`, inf: `ROUNDDOWN(${x},0)`, sup: `ROUNDUP(${x},0)` }[S.arrondi] || `ROUND(${x},2)`);
+const texteArrondi = () => ({ proche: "arrondi à l'équipe la plus proche", inf: "arrondi à l'équipe inférieure", sup: "arrondi à l'équipe supérieure" }[S.arrondi] || 'au prorata, arrondi au centième');
+const fmtTpj = () => (Number.isInteger(S.tpj) ? '0' : '0.0#');
+const plage = () => `${fmtH(S.hDeb)}-${fmtH(S.hFin)}`;
+function texteHF() {
+  const col = MAP.hf >= 0 ? `« ${DATA.headers[MAP.hf]} »` : '';
+  if (MAP.hf < 0) return 'Aucune heure dans l\'export : tous les tickets sont comptés au forfait.';
+  return `Hors forfait : ticket dont la colonne ${col} tombe avant ${fmtH(S.hDeb)} ou après ${fmtH(S.hFin)}` + (S.weekend ? ', un samedi, un dimanche ou un jour férié.' : '.');
+}
+function contexte() {
+  const off = new Set(S.colsOff);
+  let cols = DATA.headers.map((h, i) => i).filter(i => i !== DATA.fileCol && !off.has(DATA.headers[i]));
+  if (!cols.length) cols = [MAP.ticket >= 0 ? MAP.ticket : 0];
+  const [y, m] = (MOIS_CHOISI || '').split('-').map(Number);
+  return { cols, moisMaj: MOIS_CHOISI ? `${MOIS[m - 1].toUpperCase()} ${y}` : '', moisFichier: MOIS_CHOISI ? `${MOIS[m - 1]} ${y}` : '' };
+}
+function largeurs(F, cols, lignes) {
+  cols.forEach((c, i) => {
+    if (DATA.type[c].date) { F.w[i] = DATA.type[c].heure ? 16 : 11; return; }
+    let m = Math.min(String(DATA.headers[c]).length, 18);
+    for (const l of lignes.slice(0, 300)) m = Math.max(m, String(l.r[c] ?? '').length);
+    F.w[i] = Math.max(8, Math.min(45, Math.ceil(m * 0.95) + 2));
+  });
+  const tot = F.w.slice(0, cols.length).reduce((a, b) => a + b, 0);
+  if (tot < 60) F.w[0] += 60 - tot;
+}
+
+function feuilleST(g, ctx, P) {
+  const F = feuille(), cols = ctx.cols, nC = cols.length, cF = nC, cH = nC + 1, cM = nC + 2, H = DATA.headers;
+  const titre = [S.titre1, S.titre2].filter(Boolean).join('\n');
+  put(F, 0, 0, titre, STY.titre); fusion(F, 0, 0, 0, cM, STY.titre); F.h[0] = 38;
+  put(F, 1, 0, `Attachement sous-traitant ${g.nom} pour le Contrat maintenance ${ctx.moisMaj}`, STY.sous); fusion(F, 1, 0, 1, cM, STY.sous); F.h[1] = 30;
+  cols.forEach((c, i) => { put(F, 2, i, H[c], STY.ent); fusion(F, 2, i, 3, i, STY.ent); });
+  put(F, 2, cF, 'NB Ticket', STY.entV); fusion(F, 2, cF, 2, cM, STY.entV);
+  put(F, 3, cF, `FORFAIT ${plage()}`, STY.entV); put(F, 3, cH, 'HORS FORFAIT', STY.entV); put(F, 3, cM, 'Motif hors forfait', STY.entV);
+  F.h[2] = 22; F.h[3] = 30;
+  let r = 4;
+  for (const l of g.lignes) {
+    cols.forEach((c, i) => {
+      const v = l.r[c];
+      if (v instanceof Date) put(F, r, i, v, STY.dC, { z: DATA.type[c].heure ? 'dd/mm/yyyy hh:mm' : 'dd/mm/yyyy' });
+      else put(F, r, i, v, typeof v === 'number' ? STY.dN : STY.d);
+    });
+    put(F, r, cF, l.hf ? '' : 1, STY.dN); put(F, r, cH, l.hf ? 1 : '', l.hf ? STY.hf : STY.dN); put(F, r, cM, l.motif, l.hf ? STY.hfTxt : STY.d);
+    r++;
+  }
+  const rT = r;
+  put(F, rT, 0, 'TOTAL TICKETS', STY.lab); fusion(F, rT, 0, rT, nC - 1, STY.lab);
+  put(F, rT, cF, g.forfait, STY.valB, { f: `SUM(${L(cF)}5:${L(cF)}${rT})` });
+  put(F, rT, cH, g.hf, STY.valB, { f: `SUM(${L(cH)}5:${L(cH)}${rT})` });
+  put(F, rT, cM, '', STY.val);
+  F.filtre = `A4:${L(cM)}${rT}`;
+
+  let rb = rT + 2;
+  const ligne = (label, v, o = {}) => {
+    put(F, rb, 0, label, o.lab || STY.lab); fusion(F, rb, 0, rb, nC - 1, o.lab || STY.lab);
+    put(F, rb, cF, v, o.s || STY.val, { f: o.f, z: o.z }); fusion(F, rb, cF, rb, cM, o.s || STY.val);
+    if (o.h) F.h[rb] = o.h;
+    return `${L(cF)}${++rb}`;
+  };
+  const sem = S.weekend ? ', du lundi au vendredi hors jours fériés' : '';
+  const aTF = ligne(`Tickets au forfait (${plage()}${sem})`, g.forfait, { f: `${L(cF)}${rT + 1}`, z: '0' });
+  const aJ = ligne('Jours ouvrés du mois', g.jours, { f: P && !g.joursManuel ? P.jours : null, z: '0' });
+  const aTPJ = ligne('Tickets demandés par jour et par équipe', S.tpj, { f: P ? P.tpj : null, z: fmtTpj() });
+  ligne('Tickets par jour (tickets au forfait ÷ jours)', g.tpd, { f: `IF(${aJ}>0,${aTF}/${aJ},0)`, z: '0.00' });
+  const aEQ = ligne("NOMBRE D'ÉQUIPES À PAYER (tickets ÷ jours ÷ tickets demandés par jour)", g.equipes,
+    { f: formuleArrondi(`IF(AND(${aJ}>0,${aTPJ}>0),${aTF}/${aJ}/${aTPJ},0)`), z: '0.00', s: STY.jaune, lab: STY.jauneLab, h: 30 });
+  const aB = ligne('Base mensuelle par équipe', S.base, { f: P ? P.base : null, z: EUR });
+  const aMF = ligne('Montant forfait (équipes × base)', g.montantF, { f: `${aEQ}*${aB}`, z: EUR, s: STY.valB });
+  const aTHF = ligne(`Tickets hors forfait (avant ${fmtH(S.hDeb)}, après ${fmtH(S.hFin)}${S.weekend ? ', week-ends et jours fériés' : ''})`, g.hf, { f: `${L(cH)}${rT + 1}`, z: '0' });
+  const aP = ligne("Prix d'un ticket hors forfait", S.prixHF, { f: P ? P.prix : null, z: EUR });
+  const aMHF = ligne('Montant hors forfait (tickets × prix)', g.montantHF, { f: `${aTHF}*${aP}`, z: EUR, s: STY.valB });
+  const aTOT = ligne('TOTAL HT', g.total, { f: `${aMF}+${aMHF}`, z: EUR, s: STY.total, lab: STY.labFonce, h: 26 });
+  rb++;
+  put(F, rb, 0, `Nombre d'équipes = tickets au forfait ÷ jours ouvrés ÷ ${fN.format(S.tpj)} tickets demandés par jour et par équipe (${texteArrondi()}). Montant forfait = nombre d'équipes × ${fEur0.format(S.base)}. ${texteHF()}`, STY.note);
+  fusion(F, rb, 0, rb, cM, STY.note); F.h[rb] = 42;
+
+  largeurs(F, cols, g.lignes);
+  F.w[cF] = 14; F.w[cH] = 14; F.w[cM] = 26;
+  return { ws: finir(F), a: { tf: aTF, j: aJ, eq: aEQ, mf: aMF, thf: aTHF, mhf: aMHF, tot: aTOT, tpd: null } };
+}
+
+function feuilleSynthese(liens, ctx) {
+  const F = feuille(), last = 8;
+  const titre = [S.titre1, S.titre2].filter(Boolean).join('\n');
+  put(F, 0, 0, titre, STY.titre); fusion(F, 0, 0, 0, last, STY.titre); F.h[0] = 38;
+  put(F, 1, 0, `Attachement sous-traitants pour le Contrat maintenance ${ctx.moisMaj}`, STY.sous); fusion(F, 1, 0, 1, last, STY.sous); F.h[1] = 30;
+  put(F, 3, 0, 'Réglages (modifiables : tout se recalcule)', STY.gras);
+  put(F, 4, 0, 'Base mensuelle par équipe', STY.labG); put(F, 4, 1, S.base, STY.param, { z: EUR });
+  put(F, 5, 0, 'Tickets demandés par jour et par équipe', STY.labG); put(F, 5, 1, S.tpj, STY.param, { z: fmtTpj() });
+  put(F, 6, 0, 'Jours ouvrés du mois', STY.labG); put(F, 6, 1, RES.jm, STY.param, { z: '0' });
+  put(F, 7, 0, "Prix d'un ticket hors forfait", STY.labG); put(F, 7, 1, S.prixHF, STY.param, { z: EUR });
+  put(F, 8, 0, 'Heures ouvrables (forfait)', STY.labG); put(F, 8, 1, `${fmtH(S.hDeb)} à ${fmtH(S.hFin)}` + (S.weekend ? ', du lundi au vendredi hors jours fériés' : ''), STY.paramTxt);
+  put(F, 9, 0, "Nombre d'équipes", STY.labG); put(F, 9, 1, texteArrondi(), STY.paramTxt);
+  const ent = ['Sous-traitant', 'Tickets au forfait', 'Jours ouvrés', 'Tickets par jour', "Nombre d'équipes", 'Montant forfait', 'Tickets hors forfait', 'Montant hors forfait', 'TOTAL HT'];
+  ent.forEach((t, c) => put(F, 11, c, t, STY.entV)); F.h[11] = 32;
+  let r = 12;
+  for (const { g, nom, a } of liens) {
+    const ref = x => `${refFeuille(nom)}!${x}`;
+    put(F, r, 0, g.nom, STY.d);
+    put(F, r, 1, g.forfait, STY.val, { f: ref(a.tf), z: '0' });
+    put(F, r, 2, g.jours, STY.val, { f: ref(a.j), z: '0' });
+    put(F, r, 3, g.tpd, STY.val, { f: `IF(C${r + 1}>0,B${r + 1}/C${r + 1},0)`, z: '0.00' });
+    put(F, r, 4, g.equipes, STY.jaune, { f: ref(a.eq), z: '0.00' });
+    put(F, r, 5, g.montantF, STY.val, { f: ref(a.mf), z: EUR });
+    put(F, r, 6, g.hf, STY.val, { f: ref(a.thf), z: '0' });
+    put(F, r, 7, g.montantHF, STY.val, { f: ref(a.mhf), z: EUR });
+    put(F, r, 8, g.total, STY.valB, { f: ref(a.tot), z: EUR });
+    r++;
+  }
+  const s = k => liens.reduce((t, x) => t + x.g[k], 0), sum = c => `SUM(${L(c)}13:${L(c)}${r})`;
+  put(F, r, 0, 'TOTAL', STY.labFonce);
+  put(F, r, 1, s('forfait'), STY.valB, { f: sum(1), z: '0' }); put(F, r, 2, '', STY.val); put(F, r, 3, '', STY.val);
+  put(F, r, 4, r2(s('equipes')), STY.jaune, { f: sum(4), z: '0.00' });
+  put(F, r, 5, r2(s('montantF')), STY.valB, { f: sum(5), z: EUR });
+  put(F, r, 6, s('hf'), STY.valB, { f: sum(6), z: '0' });
+  put(F, r, 7, r2(s('montantHF')), STY.valB, { f: sum(7), z: EUR });
+  put(F, r, 8, r2(s('total')), STY.total, { f: sum(8), z: EUR });
+  F.h[r] = 24;
+  r += 2;
+  for (const t of [`Nombre d'équipes = tickets au forfait ÷ jours ouvrés ÷ tickets demandés par jour et par équipe (${texteArrondi()}).`,
+    'Montant forfait = nombre d\'équipes × base mensuelle par équipe. Montant hors forfait = tickets hors forfait × prix d\'un ticket hors forfait.',
+    texteHF(), 'Le détail des tickets de chaque sous-traitant est dans son onglet.']) {
+    put(F, r, 0, t, STY.note); fusion(F, r, 0, r, last, STY.note); r++;
+  }
+  F.w = [40, 16, 12, 12, 14, 16, 14, 16, 16];
+  return finir(F);
+}
+
+function construire(groupes, seul) {
+  const ctx = contexte(), wb = X.utils.book_new(), pris = new Set(seul ? [] : ['synthèse']);
+  const nomFeuille = n => {
+    let base = n.replace(/[\[\]:*?\/\\]/g, ' ').replace(/^'+|'+$/g, '').trim().slice(0, 31) || 'Sous-traitant', nom = base, i = 2;
+    while (pris.has(nom.toLowerCase())) { const suf = ` (${i++})`; nom = base.slice(0, 31 - suf.length) + suf; }
+    pris.add(nom.toLowerCase()); return nom;
+  };
+  const P = seul ? null : { base: "'Synthèse'!$B$5", tpj: "'Synthèse'!$B$6", jours: "'Synthèse'!$B$7", prix: "'Synthèse'!$B$8" };
+  const liens = groupes.map(g => { const nom = nomFeuille(g.nom); const { ws, a } = feuilleST(g, ctx, P); return { g, nom, ws, a }; });
+  if (!seul) X.utils.book_append_sheet(wb, feuilleSynthese(liens, ctx), 'Synthèse');
+  for (const l of liens) X.utils.book_append_sheet(wb, l.ws, l.nom);
+  return { data: X.write(wb, { bookType: 'xlsx', type: 'array', compression: true }), ctx };
+}
+const nomFichier = s => s.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+const capDownloads = window.claude && typeof window.claude.use === 'function'
+  ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+async function telecharger(groupes, seul) {
+  if (!X) { erreur("La bibliothèque Excel n'a pas pu se charger. Vérifie la connexion internet puis recharge la page."); return; }
+  if (!groupes.length) return;
+  const { data, ctx } = construire(groupes, seul);
+  const nom = nomFichier(seul ? `Attachement ${groupes[0].nom} ${ctx.moisFichier}.xlsx` : `Attachement sous-traitants ${ctx.moisFichier}.xlsx`);
+  const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const dl = await capDownloads;
+  if (dl) {
+    try { await dl.save({ filename: nom, data: blob }); toast('Enregistré : ' + nom); }
+    catch (e) {
+      const c = e && e.code;
+      toast(c === 'declined' ? 'Téléchargement annulé.' : c === 'rate_limited' ? 'Une demande de téléchargement est déjà ouverte.' : "Le téléchargement n'est pas disponible dans cette vue.");
+    }
+    return;
+  }
+  if (window.claude) { toast("Le téléchargement n'est pas disponible dans cette vue."); return; }
+  const a = el('a', { href: URL.createObjectURL(blob), download: nom }); document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast('Téléchargé : ' + nom);
+}
+
+// ---------- messages ----------
+let minuteur;
+function toast(t) { const e = $('#toast'); e.textContent = t; e.hidden = false; clearTimeout(minuteur); minuteur = setTimeout(() => { e.hidden = true; }, 3500); }
+function erreur(t) { const e = $('#erreur'); e.textContent = t; e.hidden = false; }
+
+// ---------- exemple fictif ----------
+function exemple() {
+  let graine = 20260901; const alea = () => (graine = (graine * 16807) % 2147483647) / 2147483647;
+  const pick = a => a[Math.floor(alea() * a.length)];
+  const H = ['N°', 'Description', 'EQUIPE', 'Agence', 'Client', 'SITE', 'Date de début', 'Clôturée', 'Type inter.'];
+  const equipes = [['[ATR] MARTIN', 41], ['[ATR] Equipe 2', 37], ['[BEL] DUBOIS', 30], ['[BEL] GARNIER', 26], ['[NOV] Equipe 5', 33]];
+  const villes = ['NANCY', 'LUNEVILLE', 'TOUL', 'PONT A MOUSSON', 'BACCARAT', 'CHAMPIGNEULLES', 'VANDOEUVRE', 'LAXOU', 'MAXEVILLE', 'JARVILLE', 'FROUARD', 'LIVERDUN'];
+  const desc = ['[RDVCLI] [Niveau 2][OCEN] Notre client nous remonte une coupure', '[Niveau 2][OCEN] Client sans service depuis ce matin',
+    '[NIVEAU 4][NOC] Câble endommagé en aérien', '[RDVCLI] [Niveau 2] Perte de signal sur la ligne', '[Niveau 1] Vérification PBO', '[Niveau 2][SFR] Affaiblissement anormal'];
+  const ouvres = [], we = [];
+  for (let d = 1; d <= 30; d++) { const dt = new Date(Date.UTC(2026, 8, d)); (dt.getUTCDay() % 6 === 0 ? we : ouvres).push(d); }
+  const rows = [], vus = new Set();
+  const ticket = t => { let n = 'BB-' + new Date(t).toISOString().slice(0, 16).replace(/[-:]/g, '') + '#0'; while (vus.has(n)) n = n.replace(/#(\d+)$/, (m, k) => '#' + (+k + 1)); vus.add(n); return n; };
+  const ligne = (eq, mois, jour) => {
+    const x = alea(); let h, mn;
+    if (x < 0.07) { h = 6 + Math.floor(alea() * 2); mn = Math.floor(alea() * 60); }
+    else if (x < 0.13) { h = 18 + Math.floor(alea() * 3); mn = 5 + Math.floor(alea() * 50); }
+    else { h = 8 + Math.floor(alea() * 9); mn = Math.floor(alea() * 60); }
+    const deb = Date.UTC(2026, mois, jour, h, mn), fin = deb + (45 + Math.floor(alea() * 200)) * 60000, cree = deb - Math.floor(alea() * 40) * 3600000;
+    const site = `SRO-54-0${pad(10 + Math.floor(alea() * 30))}-${100 + Math.floor(alea() * 400)}`;
+    return [ticket(cree), pick(desc), eq, 'AGENCE 54 (RES)', pick(villes), site, new Date(deb), new Date(fin), 'Exploitation - Réseau', 'exemple'];
+  };
+  for (const [eq, n] of equipes) {
+    for (let i = 0; i < n; i++) rows.push(ligne(eq, 8, alea() < 0.05 ? pick(we) : pick(ouvres)));
+    rows.push(ligne(eq, 7, 31));
+  }
+  rows.push(rows[3].slice(), rows[50].slice());
+  installer({ exemple: true, fichiers: [], headers: [...H, '(nom du fichier)'], fileCol: H.length, rows });
+}
+
+// ---------- démarrage ----------
+lierReglages();
+$('#dlTout').addEventListener('click', () => telecharger(RES.groupes.filter(g => g.inclus), false));
+$('#file').addEventListener('change', e => { if (e.target.files.length) chargerFichiers([...e.target.files]); e.target.value = ''; });
+const zone = $('#drop');
+for (const ev of ['dragenter', 'dragover']) document.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('over'); });
+for (const ev of ['dragleave', 'drop']) document.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || !e.relatedTarget) zone.classList.remove('over'); });
+document.addEventListener('drop', e => { const f = [...(e.dataTransfer?.files || [])]; if (f.length) chargerFichiers(f); });
+if (!X) erreur("La bibliothèque Excel n'a pas pu se charger : la page affiche l'exemple mais ne peut ni lire ni créer de fichier Excel. Vérifie la connexion internet puis recharge la page.");
+exemple();
+</script>

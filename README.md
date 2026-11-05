@@ -22,3 +22,13 @@ Appli de saisie pour les techniciens, faite à partir du classeur `Journee_agent
 - La même page fonctionne aussi en artifact claude.ai (saisies partagées entre comptes claude.ai) ou ouverte directement (saisies gardées sur l'appareil).
 
 Les sources sont `app.src.html`, `apps-script/Code.src.gs` et `data.json`. Après modification, lancer `python3 journee-agent/build.py` pour régénérer `index.html`, `apps-script/Index.html` et `apps-script/Code.gs`.
+
+# Attachement sous-traitants (`attachement-sous-traitant/`)
+
+Page qui calcule ce qu'il faut payer à chaque sous-traitant à partir de l'export des tickets, et prépare l'attachement Excel. Ouvre `attachement-sous-traitant/index.html` dans un navigateur et dépose l'export (`.xlsx`, `.xls`, `.ods` ou `.csv`) : rien n'est envoyé, tout se calcule dans le navigateur.
+
+- **Nombre d'équipes à payer** = tickets au forfait ÷ jours ouvrés du mois ÷ 4 tickets demandés par jour et par équipe. **Montant** = nombre d'équipes × 12 000 €. Les jours ouvrés (lundi au vendredi, hors jours fériés) sont calculés pour le mois et modifiables, globalement ou pour un seul sous-traitant. Base, tickets par jour et arrondi (au centième par défaut) se règlent.
+- **Hors forfait** : un ticket dont la « Date de début » est avant 8h ou après 18h (et, en option cochée par défaut, un samedi, un dimanche ou un jour férié) ne compte pas dans le forfait. Il est payé à part, au prix d'un ticket hors forfait à renseigner.
+- Le sous-traitant est lu dans une colonne de l'export, ou dans le code entre crochets de la colonne EQUIPE (`[CET] CLAIRET` → CET), ou dans le nom du fichier (un export par sous-traitant). Les noms se renomment dans le tableau.
+- Les tickets en double (même n° de ticket) et ceux d'un autre mois (date « Clôturée ») sont écartés ; un statut peut aussi filtrer.
+- **Excel téléchargé**, au format du suivi maintenance (titre rouge, en-têtes « NB Ticket » en vert, case jaune, TOTAL HT) : un onglet Synthèse avec les réglages, puis un onglet par sous-traitant avec ses tickets, les colonnes Forfait / Hors forfait / Motif, et le calcul en formules. Changer un réglage dans la Synthèse recalcule tout. Bouton « Excel » sur chaque ligne pour l'attachement d'un seul sous-traitant.
