@@ -27,12 +27,14 @@ ICI = pathlib.Path(__file__).parent
 NB_TICKETS = 300
 EUR = '#,##0.00\\ "€"'
 
-# Projets : code, libellé, base mensuelle par équipe, tickets demandés par jour et par équipe, mots qui reconnaissent
+# Projets : code, libellé, base mensuelle par équipe, tickets demandés par jour et par équipe, prix par prod (rempli = projet
+# payé à l'unité au lieu du forfait d'équipes), mots qui reconnaissent
 # l'agence de l'export (l'agence doit contenir le mot ; espaces, parenthèses, tirets et majuscules ne comptent pas)
 PROJETS = [
-    ('P2200154', 'CIRCET NANCY RES', 12000, 4, ['NANCY']),
-    ('P2100474', 'CIRCET 54 RES', 12000, 4, ['CIRCET 54']),
-    ('P1800267', 'CIRCET GLAUCOS RES + CIRCET RESOPTIC RES', 12000, 4, ['GLAUCOS', 'RESOPTIC']),
+    ('P2200154', 'CIRCET NANCY RES', 12000, 4, None, ['NANCY']),
+    ('P2100474', 'CIRCET 54 RES', 12000, 4, None, ['CIRCET 54']),
+    ('P1800267', 'CIRCET GLAUCOS RES + CIRCET RESOPTIC RES', 12000, 4, None, ['GLAUCOS', 'RESOPTIC (RES)']),
+    ('P2200155', 'CIRCET RESOPTIC PROD-RACCO (à la prod)', None, None, 500, ['RESOPTIC (PROD-RACCO)']),
 ]
 LIGNES_AGENCES = 16          # place dans le tableau des mots qui reconnaissent les agences
 INCONNUE, SANS_AGENCE = 'Agence inconnue', 'Sans agence'
@@ -57,6 +59,7 @@ COLS = [('A', 'N°', 20), ('B', 'Description', 42), ('C', 'Nom technicien', 18),
         ('K', 'Commentaire facturation', 22), ('L', "Du matériel à t'il été utlisé?", 18), ('M', 'Cerfa / Plainte/ Constat', 18),
         ('X', 'Commentaire', 24)]
 C_AGENCE, C_PROJET, C_DEB, C_CLO, C_TYPE = 'D', 'E', 'H', 'I', 'J'
+C_SANS_PROD = ('L', 'M')     # matériel et CERFA : jamais sur un projet payé à la prod
 # NB Ticket : forfait, bonif ticket (saisie après vérification), durée, bonif proposée ; puis hors forfait sur devis
 # NOMBRE DE TICKETS ; bonif : demandée par le sous-traitant, durée, bonif possible, validation OUI/NON, commentaire de validation ;
 # IRRIS ; hors forfait sur devis
@@ -192,17 +195,21 @@ def construire(sous_traitant, chemin):
     r = 19
     cellule(rg, f'A{r}', "Projets : un forfait d'équipes par projet", Font(name=FT, size=12, bold=True), border=None)
     r += 1
-    for col, t in zip('ABCD', ['Code projet', 'Agences', 'Base mensuelle par équipe', 'Tickets demandés par jour et par équipe']):
+    for col, t in zip('ABCDE', ['Code projet', 'Agences', 'Base mensuelle par équipe', 'Tickets demandés par jour et par équipe',
+                                'Prix par prod (rempli = payé à l\'unité)']):
         cellule(rg, f'{col}{r}', t, Font(name=FT, size=10, bold=True), fond(VERT), align=centre)
     rg.row_dimensions[r].height = 30
     lignes_projet = []
-    for code, lib, base, tpj, _ in PROJETS:
+    for code, lib, base, tpj, prix, _ in PROJETS:
         r += 1
         lignes_projet.append(r)
         cellule(rg, f'A{r}', code, Font(name=FT, size=11, bold=True), fond(SAISIE))
         cellule(rg, f'B{r}', lib, Font(name=FT, size=10), fond(SAISIE))
         cellule(rg, f'C{r}', base, Font(name=FT, size=10), fond(SAISIE), EUR)
         cellule(rg, f'D{r}', tpj, Font(name=FT, size=10), fond(SAISIE), 'General')
+        cellule(rg, f'E{r}', prix, Font(name=FT, size=10, bold=True), fond(SAISIE), EUR)
+    nom_global(wb, 'PROJ_CODE', f"'Réglages'!$A${lignes_projet[0]}:$A${lignes_projet[-1]}")
+    nom_global(wb, 'PROJ_PRIX', f"'Réglages'!$E${lignes_projet[0]}:$E${lignes_projet[-1]}")
     dv_proj = DataValidation(type='list', formula1=f'$A${lignes_projet[0]}:$A${lignes_projet[-1]}', allow_blank=True)
     rg.add_data_validation(dv_proj)
 
@@ -216,7 +223,7 @@ def construire(sous_traitant, chemin):
             "Espaces, parenthèses, tirets et majuscules ne comptent pas. Si deux mots conviennent, la ligne la plus basse l'emporte.",
             note, align=Alignment(wrap_text=True, vertical='center'), border=None)
     rg.row_dimensions[r].height = 80
-    agences = [(a, code) for code, _, _, _, ags in PROJETS for a in ags]
+    agences = [(a, code) for code, _, _, _, _, ags in PROJETS for a in ags]
     a0 = r + 1
     for i in range(LIGNES_AGENCES):
         r += 1
@@ -310,7 +317,8 @@ def construire(sous_traitant, chemin):
 
     # ---- récapitulatif par projet (colonnes A à P)
     titres = ['Projet', 'Agences', 'Nombre de tickets', 'Bonif validées', 'Tickets retenus', 'Jours ouvrés',
-              'Tickets demandés / jour / équipe', 'Tickets par jour', "NOMBRE D'ÉQUIPES", 'Base mensuelle / équipe', 'Montant forfait',
+              'Tickets demandés / jour / équipe', 'Tickets par jour', "NOMBRE D'ÉQUIPES", 'Base mensuelle / équipe (ou prix par prod)',
+              'Montant forfait (ou prods)',
               'IRRIS (malfaçons)', 'Montant IRRIS', 'Tickets hors forfait (sur devis)', 'Plus-values sur devis', 'TOTAL HT']
     for i, t in enumerate(titres):
         coul = JAUNE if t == "NOMBRE D'ÉQUIPES" else IRIS_FOND if t.startswith(('IRRIS', 'Montant IRRIS')) else VERT
@@ -333,11 +341,12 @@ def construire(sous_traitant, chemin):
         cellule(at, f'D{r}', f'=SUMIFS({ret},{proj},$A{r})', v10, fmt='0')
         cellule(at, f'E{r}', f'=C{r}+D{r}', v10b, fmt='0')
         cellule(at, f'F{r}', '=JOURS', v10, fmt='0')
-        cellule(at, f'G{r}', f"='Réglages'!D{lp}", v10, fmt='General')
-        cellule(at, f'H{r}', f'=IF(F{r}>0,E{r}/F{r},0)', v10, fmt='0.00')
-        cellule(at, f'I{r}', f'=ROUND(IF(AND(F{r}>0,G{r}>0),E{r}/F{r}/G{r},0),2)', gros, fond(JAUNE), '0.00', mil)
-        cellule(at, f'J{r}', f"='Réglages'!C{lp}", v10, fmt=EUR)
-        cellule(at, f'K{r}', f'=I{r}*J{r}', v10b, fmt=EUR)
+        unite = f"N('Réglages'!E{lp})>0"          # projet payé à la prod
+        cellule(at, f'G{r}', f"=IF({unite},\"\",'Réglages'!D{lp})", v10, fmt='General')
+        cellule(at, f'H{r}', f'=IF({unite},"",IF(F{r}>0,E{r}/F{r},0))', v10, fmt='0.00')
+        cellule(at, f'I{r}', f'=IF({unite},"à la prod",ROUND(IF(AND(F{r}>0,G{r}>0),E{r}/F{r}/G{r},0),2))', gros, fond(JAUNE), '0.00', mil)
+        cellule(at, f'J{r}', f"=IF({unite},'Réglages'!E{lp},'Réglages'!C{lp})", v10, fmt=EUR)
+        cellule(at, f'K{r}', f'=IF({unite},E{r}*J{r},I{r}*J{r})', v10b, fmt=EUR)
         cellule(at, f'L{r}', f'=COUNTIFS({proj},$A{r},{iris},1)', v10, fmt='0')
         cellule(at, f'M{r}', f'=L{r}*PRIX_IRIS', v10b, fmt=EUR)
         cellule(at, f'N{r}', f'=COUNTIFS({proj},$A{r},{hf},1)', v10, fmt='0')
@@ -383,7 +392,8 @@ def construire(sous_traitant, chemin):
             '="Forfait par projet : tickets classiques et travaux commencés entre "&TEXT(HDEB,"hh:mm")&" et "&TEXT(HFIN,"hh:mm")'
             '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Un ticket de "&TEXT(BONIF,"hh:mm")&" ou plus (Soldée - Début) '
             'compte un ticket de plus par tranche de "&TEXT(BONIF,"hh:mm")&" : bonif demandée par le sous-traitant (colonne O), comptée seulement si elle est validée OUI (colonne R). Nombre d\'équipes = tickets retenus du projet ÷ jours ouvrés ÷ '
-            'tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle. '
+            'tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle ; '
+            'projet payé à la prod (prix par prod dans Réglages) : montant = tickets retenus × prix par prod, sans matériel ni CERFA. '
             'En dehors des heures, le ticket est sur devis et peut entraîner une plus-value (colonne W). Les malfaçons ne comptent pas comme tickets : '
             'elles sont payées en IRRIS, "&TEXT(PRIX_IRIS,"0")&" € l\'unité. Un même N° de ticket n\'est compté qu\'une fois."'
             f'&IF({doublons}+{autres}=0,""," Non comptés ce mois-ci : "&{doublons}&" doublon(s), "&{autres}&" ticket(s) d\'un autre mois.")',
@@ -431,6 +441,9 @@ def construire(sous_traitant, chemin):
         src = f'INDEX(Export!$A:$DZ,LIGNE_TITRES+ROW()-{P0 - 1},{rc})'
         if lettre == 'A':
             return f'=IF({rc}=0,"",IF({src}="","",{src}))'
+        if lettre in C_SANS_PROD:          # jamais de matériel ni de CERFA sur un projet payé à la prod
+            prod = f'COUNTIFS(PROJ_CODE,${C_PROJET}{r},PROJ_PRIX,">0")>0'
+            return f'=IF($A{r}="","",IF({prod},"—",IF({rc}=0,"",IF({src}="","",{src}))))'
         return f'=IF(OR($A{r}="",{rc}=0),"",IF({src}="","",{src}))'
 
     en_nombre = lambda col, r: f'=IF($A{r}="","",IF(ISNUMBER(${col}{r}),${col}{r},IFERROR(--${col}{r},"")))'
