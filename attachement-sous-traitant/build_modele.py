@@ -26,13 +26,14 @@ ICI = pathlib.Path(__file__).parent
 NB_TICKETS = 300
 EUR = '#,##0.00\\ "€"'
 
-# Projets : code, libellé, base mensuelle par équipe, tickets demandés par jour et par équipe, agences de l'export
+# Projets : code, libellé, base mensuelle par équipe, tickets demandés par jour et par équipe, mots qui reconnaissent
+# l'agence de l'export (l'agence doit contenir le mot ; espaces, parenthèses, tirets et majuscules ne comptent pas)
 PROJETS = [
-    ('P2200154', 'CIRCET NANCY RES', 12000, 4, ['CIRCET NANCY (RES)']),
-    ('P2100474', 'CIRCET 54 RES', 12000, 4, ['CIRCET 54 (RES)']),
-    ('P1800267', 'CIRCET GLAUCOS RES + CIRCET RESOPTIC RES', 12000, 4, ['CIRCET GLAUCOS (RES)', 'CIRCET RESOPTIC (RES)']),
+    ('P2200154', 'CIRCET NANCY RES', 12000, 4, ['NANCY']),
+    ('P2100474', 'CIRCET 54 RES', 12000, 4, ['CIRCET 54']),
+    ('P1800267', 'CIRCET GLAUCOS RES + CIRCET RESOPTIC RES', 12000, 4, ['GLAUCOS', 'RESOPTIC']),
 ]
-LIGNES_AGENCES = 16          # place dans le tableau Agences -> projet
+LIGNES_AGENCES = 16          # place dans le tableau des mots qui reconnaissent les agences
 INCONNUE, SANS_AGENCE = 'Agence inconnue', 'Sans agence'
 
 FT = 'Calibri'
@@ -137,7 +138,8 @@ def construire(sous_traitant, chemin):
             "interventions du sous-traitant, avec sa ligne de titres ; 3) l'onglet Attachement se remplit et calcule tout seul, "
             "projet par projet ; 4) vérifie les tickets de 2h30 ou plus (case orange) et saisis le nombre de tickets bonifiés "
             "dans la case BONIF TICKET (colonne O) ; 5) pour un ticket hors forfait sur devis, saisis la plus-value colonne T ; "
-            "6) si une agence apparaît « Agence inconnue », ajoute-la dans le tableau « Agences de l'export » ci-dessous ; "
+            "6) le projet est trouvé tout seul à partir de l'agence ; si une agence apparaît « Agence inconnue », ajoute un mot "
+            "qui la reconnaît dans le tableau « Agences de l'export » ci-dessous ; "
             "7) enregistre sous « Attachement <sous-traitant> <mois>.xlsx » et envoie-le. Pars chaque mois du fichier vide : "
             "les bonifs et plus-values saisies restent sinon sur les lignes.",
             Font(name=FT, size=10), align=Alignment(wrap_text=True, vertical='top'), border=None)
@@ -193,13 +195,14 @@ def construire(sous_traitant, chemin):
 
     # agences -> projet
     r += 2
-    cellule(rg, f'A{r}', "Agences de l'export : à quel projet elles appartiennent", Font(name=FT, size=12, bold=True), border=None)
+    cellule(rg, f'A{r}', "Agences de l'export : le projet est trouvé automatiquement", Font(name=FT, size=12, bold=True), border=None)
     r += 1
-    for col, t in zip('ABC', ["Agence (telle qu'écrite dans l'export)", 'Projet', 'Clé de comparaison (calculée)']):
+    for col, t in zip('ABC', ["Mot contenu dans l'agence", 'Projet', 'Mot comparé (calculé)']):
         cellule(rg, f'{col}{r}', t, Font(name=FT, size=10, bold=True), fond(VERT), align=centre)
-    cellule(rg, f'D{r}', 'Parenthèses, espaces, tirets et majuscules ne comptent pas : « CIRCET 54 RES » = « CIRCET 54 (RES) ».',
+    cellule(rg, f'D{r}', "Une agence qui contient le mot va dans le projet : « CIRCET NANCY (RES) » contient NANCY → P2200154. "
+            "Espaces, parenthèses, tirets et majuscules ne comptent pas. Si deux mots conviennent, la ligne la plus basse l'emporte.",
             note, align=Alignment(wrap_text=True, vertical='center'), border=None)
-    rg.row_dimensions[r].height = 30
+    rg.row_dimensions[r].height = 80
     agences = [(a, code) for code, _, _, _, ags in PROJETS for a in ags]
     a0 = r + 1
     for i in range(LIGNES_AGENCES):
@@ -207,7 +210,7 @@ def construire(sous_traitant, chemin):
         a, code = agences[i] if i < len(agences) else (None, None)
         cellule(rg, f'A{r}', a, Font(name=FT, size=10), fond(SAISIE))
         cellule(rg, f'B{r}', code, Font(name=FT, size=10, bold=True), fond(SAISIE))
-        cellule(rg, f'C{r}', f'=IF(OR(A{r}="",B{r}=""),"#",{cle(f"A{r}")})', Font(name=FT, size=9, color='808080'))
+        cellule(rg, f'C{r}', f'=IF(OR(A{r}="",B{r}=""),"§§§",{cle(f"A{r}")})', Font(name=FT, size=9, color='808080'))
         dv_proj.add(f'B{r}')
     nom_global(wb, 'AG_PROJ', f"'Réglages'!$B${a0}:$B${r}")
     nom_global(wb, 'AG_CLE', f"'Réglages'!$C${a0}:$C${r}")
@@ -385,7 +388,7 @@ def construire(sous_traitant, chemin):
                     align=Alignment(vertical='center', horizontal='center' if date else None))
         ag = f'${C_AGENCE}{r}'
         cellule(at, f'{C_PROJET}{r}',
-                f'=IF($A{r}="","",IF({ag}="","{SANS_AGENCE}",IFERROR(INDEX(AG_PROJ,MATCH({cle(ag)},AG_CLE,0)),"{INCONNUE}")))',
+                f'=IF($A{r}="","",IF({ag}="","{SANS_AGENCE}",IFERROR(LOOKUP(2^15,SEARCH(AG_CLE,{cle(ag)}),AG_PROJ),"{INCONNUE}")))',
                 f9b, align=mil)
         at[f'{C_AIDE}{r}'] = en_nombre(C_DEB, r)
         at[f'{C_AIDE2}{r}'] = en_nombre(C_CLO, r)
