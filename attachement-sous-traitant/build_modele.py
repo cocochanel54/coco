@@ -5,22 +5,33 @@
 #   python3 build_modele.py CET "LOR" "HK"       -> un fichier par sous-traitant : Attachement CET.xlsx, ...
 #
 # Chaque mois : coller l'export des interventions du sous-traitant dans l'onglet « Export » (en A1, avec
-# la ligne des titres). L'onglet « Attachement » se remplit et calcule tout seul :
-#   nombre d'équipes = tickets au forfait ÷ jours ouvrés du mois ÷ 4, montant = équipes × 12 000 €,
+# la ligne des titres). L'onglet « Attachement » se remplit et calcule tout seul, avec un forfait d'équipes
+# par projet (le projet vient de la colonne Agence, voir PROJETS) :
+#   nombre d'équipes du projet = tickets au forfait du projet ÷ jours ouvrés du mois ÷ 4,
+#   montant forfait du projet = équipes × 12 000 € ;
 #   le forfait couvre les tickets classiques et les travaux de 8h à 18h (du lundi au vendredi hors jours fériés) ;
-#   en dehors, le ticket est sur devis et peut entraîner une plus-value, saisie à la main colonne P.
+#   en dehors, le ticket est sur devis et peut entraîner une plus-value, saisie à la main.
 import sys, datetime as dt, pathlib
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.formatting.rule import FormulaRule
-from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.comments import Comment
+from openpyxl.utils import get_column_letter as L
 
 ICI = pathlib.Path(__file__).parent
-PREMIERE, DERNIERE = 18, 317            # lignes des tickets dans l'onglet Attachement (300 tickets)
+NB_TICKETS = 300
 EUR = '#,##0.00\\ "€"'
+
+# Projets : code, libellé, base mensuelle par équipe, tickets demandés par jour et par équipe, agences de l'export
+PROJETS = [
+    ('P2200154', 'CIRCET NANCY RES', 12000, 4, ['CIRCET NANCY (RES)']),
+    ('P2100474', 'CIRCET 54 RES', 12000, 4, ['CIRCET 54 (RES)']),
+    ('P1800267', 'CIRCET GLAUCOS RES + CIRCET RESOPTIC RES', 12000, 4, ['CIRCET GLAUCOS (RES)', 'CIRCET RESOPTIC (RES)']),
+]
+LIGNES_AGENCES = 16          # place dans le tableau Agences -> projet
+INCONNUE, SANS_AGENCE = 'Agence inconnue', 'Sans agence'
 
 FT = 'Calibri'
 fin = Side(style='thin', color='A6A6A6')
@@ -29,12 +40,17 @@ BORD = Border(top=fin, bottom=fin, left=fin, right=fin)
 fond = lambda c: PatternFill('solid', fgColor=c)
 GRIS, FONCE, VERT, JAUNE, SAISIE = 'BFBFBF', '767171', 'C6E0B4', 'FFFF00', 'FFF2CC'
 centre = Alignment(horizontal='center', vertical='center', wrap_text=True)
+f9, f9b = Font(name=FT, size=9), Font(name=FT, size=9, bold=True)
+note = Font(name=FT, size=9, italic=True, color='595959')
 
-# colonnes de l'attachement : (lettre, titre cherché dans l'export, largeur)
-COLS = [('A', 'N°', 20), ('B', 'Description', 42), ('C', 'EQUIPE', 16), ('D', 'Agence', 16), ('E', 'Client', 18),
-        ('F', 'SITE', 18), ('G', 'Date de début', 15), ('H', 'Clôturée', 15), ('I', 'Type inter.', 20),
-        ('J', 'Commentaire facturation', 22), ('K', 'Materiel utilisé', 16), ('L', 'CERFA/ASSURANCE', 16),
-        ('Q', 'Commentaire', 24)]
+# Colonnes de la liste des tickets. Celles avec un titre sont lues dans l'export (par leur titre).
+COLS = [('A', 'N°', 20), ('B', 'Description', 42), ('C', 'EQUIPE', 16), ('D', 'Agence', 18),
+        ('F', 'Client', 16), ('G', 'SITE', 18), ('H', 'Date de début', 15), ('I', 'Clôturée', 15), ('J', 'Type inter.', 20),
+        ('K', 'Commentaire facturation', 22), ('L', 'Materiel utilisé', 16), ('M', 'CERFA/ASSURANCE', 16),
+        ('R', 'Commentaire', 24)]
+C_AGENCE, C_PROJET, C_DEB = 'D', 'E', 'H'
+C_F, C_HF, C_MOT, C_PV, C_AIDE = 'N', 'O', 'P', 'Q', 'S'
+DERNIERE_COL = 18            # R
 
 
 def paques(y):
@@ -62,11 +78,44 @@ def feries(annees):
     return sorted(out)
 
 
+def cle(x):
+    """Clé de comparaison d'une agence : sans parenthèses, espaces ni tirets, en majuscules (« CIRCET 54 (RES) » = « CIRCET 54 RES »)."""
+    return f'UPPER(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({x},"(",""),")","")," ",""),"-",""))'
+
+
 def nom_global(wb, nom, ref):
     wb.defined_names[nom] = DefinedName(nom, attr_text=ref)
 
 
+def cellule(ws, ref, valeur=None, font=None, fill=None, fmt=None, align=None, border=BORD):
+    c = ws[ref]
+    if valeur is not None:
+        c.value = valeur
+    if font:
+        c.font = font
+    if fill:
+        c.fill = fill
+    if fmt:
+        c.number_format = fmt
+    if align:
+        c.alignment = align
+    if border:
+        c.border = border
+    return c
+
+
 def construire(sous_traitant, chemin):
+    n = len(PROJETS)
+    R_ENT = 4                                   # en-tête du récapitulatif par projet
+    R_P1 = R_ENT + 1                            # premier projet
+    R_INC = R_P1 + n                            # tickets non classés
+    R_TOT = R_INC + 1
+    R_NOTE = R_TOT + 1
+    R_T1 = R_NOTE + 2                           # en-têtes de la liste (2 lignes)
+    P0 = R_T1 + 2                               # premier ticket
+    P1 = P0 + NB_TICKETS - 1                    # dernier ticket
+    rng = lambda col: f'${col}${P0}:${col}${P1}'
+
     wb = openpyxl.Workbook()
     at = wb.active
     at.title = 'Attachement'
@@ -75,248 +124,269 @@ def construire(sous_traitant, chemin):
     at.sheet_properties.tabColor = '70AD47'
     ex.sheet_properties.tabColor = '5B9BD5'
 
-    # ------------------------------------------------------------------ Réglages
-    rg.column_dimensions['A'].width = 46
-    rg.column_dimensions['B'].width = 26
-    rg.column_dimensions['C'].width = 22
-    rg.column_dimensions['D'].width = 60
-    rg['A1'] = "Réglages de l'attachement"
-    rg['A1'].font = Font(name=FT, size=14, bold=True)
-    rg['A2'] = ("Chaque mois : 1) efface l'onglet Export (Ctrl+A puis Suppr) ; 2) colle en A1 de l'onglet Export l'export des "
-                "interventions du sous-traitant, avec sa ligne de titres ; 3) l'onglet Attachement se remplit et calcule tout seul ; "
-                "4) pour un ticket hors forfait sur devis, saisis le montant de la plus-value colonne P de l'Attachement ; "
-                "5) enregistre sous « Attachement <sous-traitant> <mois>.xlsx » et envoie-le.")
-    rg['A2'].alignment = Alignment(wrap_text=True, vertical='top')
-    rg['A2'].font = Font(name=FT, size=10)
+    # ================================================================== Réglages
+    for col, w in zip('ABCD', (44, 40, 24, 30)):
+        rg.column_dimensions[col].width = w
+    cellule(rg, 'A1', "Réglages de l'attachement", Font(name=FT, size=14, bold=True), border=None)
+    cellule(rg, 'A2', "Chaque mois : 1) efface l'onglet Export (Ctrl+A puis Suppr) ; 2) colle en A1 de l'onglet Export l'export des "
+            "interventions du sous-traitant, avec sa ligne de titres ; 3) l'onglet Attachement se remplit et calcule tout seul, "
+            "projet par projet ; 4) pour un ticket hors forfait sur devis, saisis la plus-value colonne Q de l'Attachement ; "
+            "5) si une agence apparaît « Agence inconnue », ajoute-la dans le tableau « Agences de l'export » ci-dessous ; "
+            "6) enregistre sous « Attachement <sous-traitant> <mois>.xlsx » et envoie-le.",
+            Font(name=FT, size=10), align=Alignment(wrap_text=True, vertical='top'), border=None)
     rg.merge_cells('A2:D4')
     for r in (2, 3, 4):
-        rg.row_dimensions[r].height = 18
+        rg.row_dimensions[r].height = 20
 
     params = [
-        # ligne, nom, libellé, valeur, format, remarque
-        (6, 'ST', 'Sous-traitant', sous_traitant, None, 'Nom affiché dans le titre de l\'attachement.'),
+        (6, 'ST', 'Sous-traitant', sous_traitant, None, "Nom affiché dans le titre de l'attachement."),
         (7, 'MOIS', "Mois de l'attachement",
-         f'=IF(COUNT(Attachement!$R${PREMIERE}:$R${DERNIERE})=0,"",DATE(YEAR(MEDIAN(Attachement!$R${PREMIERE}:$R${DERNIERE})),'
-         f'MONTH(MEDIAN(Attachement!$R${PREMIERE}:$R${DERNIERE})),1))', 'mmmm yyyy',
-         "Lu dans l'export (dates de début). Tu peux taper une date, ex. 01/09/2026."),
+         f'=IF(COUNT(Attachement!{rng(C_AIDE)})=0,"",DATE(YEAR(MEDIAN(Attachement!{rng(C_AIDE)})),MONTH(MEDIAN(Attachement!{rng(C_AIDE)})),1))',
+         'mmmm yyyy', "Lu dans l'export. Tu peux taper une date, ex. 01/09/2026."),
         (8, 'JOURS', 'Jours ouvrés du mois', '=IF(MOIS="",0,NETWORKDAYS(MOIS,EOMONTH(MOIS,0),FERIES))', '0',
-         'Lundi au vendredi hors jours fériés (liste plus bas). Tu peux taper un autre nombre.'),
-        (9, 'TPJ', 'Tickets demandés par jour et par équipe', 4, '0.##', ''),
-        (10, 'BASE', 'Base mensuelle par équipe', 12000, EUR, ''),
-        (11, 'HDEB', 'Début des heures ouvrables', dt.time(8, 0), 'hh:mm', ''),
-        (12, 'HFIN', 'Fin des heures ouvrables', dt.time(18, 0), 'hh:mm', 'Un ticket commencé à 18:00 pile reste au forfait.'),
-        (13, 'WE', 'Week-ends et jours fériés hors forfait', 'OUI', None, 'OUI ou NON.'),
-        (14, 'LIGNE_TITRES', "Ligne des titres dans l'onglet Export", 1, '0', 'Si l\'export a des lignes au-dessus de ses titres.'),
-        (15, 'MOIS_TXT', 'Mois en lettres (calculé)',
+         'Lundi au vendredi hors jours fériés. Tu peux taper un autre nombre.'),
+        (9, 'HDEB', 'Début des heures ouvrables', dt.time(8, 0), 'hh:mm', ''),
+        (10, 'HFIN', 'Fin des heures ouvrables', dt.time(18, 0), 'hh:mm', '18:00 pile reste au forfait.'),
+        (11, 'WE', 'Week-ends et jours fériés hors forfait', 'OUI', None, 'OUI ou NON.'),
+        (12, 'LIGNE_TITRES', "Ligne des titres dans l'onglet Export", 1, '0', "Si l'export a des lignes au-dessus de ses titres."),
+        (13, 'MOIS_TXT', 'Mois en lettres (calculé)',
          '=IF(MOIS="","",CHOOSE(MONTH(MOIS),"JANVIER","FÉVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOÛT","SEPTEMBRE",'
          '"OCTOBRE","NOVEMBRE","DÉCEMBRE")&" "&YEAR(MOIS))', None, ''),
     ]
     for r, nom, lib, val, fmt, rem in params:
-        rg.cell(r, 1, lib).font = Font(name=FT, size=10, bold=True)
-        rg.cell(r, 1).fill = fond(GRIS)
-        rg.cell(r, 1).border = BORD
-        c = rg.cell(r, 2, val)
-        c.font = Font(name=FT, size=11, bold=True)
-        c.fill = fond(SAISIE if nom not in ('MOIS_TXT',) else 'FFFFFF')
-        c.border = BORD
-        c.alignment = Alignment(horizontal='right')
-        if fmt:
-            c.number_format = fmt
-        rg.cell(r, 3, rem).font = Font(name=FT, size=9, italic=True, color='595959')
-        rg.merge_cells(start_row=r, start_column=3, end_row=r, end_column=4)
+        cellule(rg, f'A{r}', lib, Font(name=FT, size=10, bold=True), fond(GRIS))
+        cellule(rg, f'B{r}', val, Font(name=FT, size=11, bold=True), fond(SAISIE if nom != 'MOIS_TXT' else 'FFFFFF'), fmt,
+                Alignment(horizontal='right'))
+        cellule(rg, f'C{r}', rem, note, border=None)
+        rg.merge_cells(f'C{r}:D{r}')
         nom_global(wb, nom, f"'Réglages'!$B${r}")
     dv = DataValidation(type='list', formula1='"OUI,NON"', allow_blank=False)
     rg.add_data_validation(dv)
-    dv.add('B13')
+    dv.add('B11')
 
-    # colonnes de l'export
-    rg['A18'] = "Colonnes lues dans l'export"
-    rg['A18'].font = Font(name=FT, size=12, bold=True)
-    for c, t in zip('ABCD', ["Colonne de l'attachement", "Titre cherché dans l'export", "Trouvée en colonne n°", '']):
-        cell = rg[f'{c}19']
-        cell.value = t
-        cell.font = Font(name=FT, size=10, bold=True)
-        cell.fill = fond(VERT)
-        cell.border = BORD
+    # projets
+    r = 15
+    cellule(rg, f'A{r}', "Projets : un forfait d'équipes par projet", Font(name=FT, size=12, bold=True), border=None)
+    r += 1
+    for col, t in zip('ABCD', ['Code projet', 'Agences', 'Base mensuelle par équipe', 'Tickets demandés par jour et par équipe']):
+        cellule(rg, f'{col}{r}', t, Font(name=FT, size=10, bold=True), fond(VERT), align=centre)
+    rg.row_dimensions[r].height = 30
+    lignes_projet = []
+    for code, lib, base, tpj, _ in PROJETS:
+        r += 1
+        lignes_projet.append(r)
+        cellule(rg, f'A{r}', code, Font(name=FT, size=11, bold=True), fond(SAISIE))
+        cellule(rg, f'B{r}', lib, Font(name=FT, size=10), fond(SAISIE))
+        cellule(rg, f'C{r}', base, Font(name=FT, size=10), fond(SAISIE), EUR)
+        cellule(rg, f'D{r}', tpj, Font(name=FT, size=10), fond(SAISIE), '0.##')
+    dv_proj = DataValidation(type='list', formula1=f'$A${lignes_projet[0]}:$A${lignes_projet[-1]}', allow_blank=True)
+    rg.add_data_validation(dv_proj)
+
+    # agences -> projet
+    r += 2
+    cellule(rg, f'A{r}', "Agences de l'export : à quel projet elles appartiennent", Font(name=FT, size=12, bold=True), border=None)
+    r += 1
+    for col, t in zip('ABC', ["Agence (telle qu'écrite dans l'export)", 'Projet', 'Clé de comparaison (calculée)']):
+        cellule(rg, f'{col}{r}', t, Font(name=FT, size=10, bold=True), fond(VERT), align=centre)
+    cellule(rg, f'D{r}', 'Parenthèses, espaces, tirets et majuscules ne comptent pas : « CIRCET 54 RES » = « CIRCET 54 (RES) ».',
+            note, align=Alignment(wrap_text=True, vertical='center'), border=None)
+    rg.row_dimensions[r].height = 30
+    agences = [(a, code) for code, _, _, _, ags in PROJETS for a in ags]
+    a0 = r + 1
+    for i in range(LIGNES_AGENCES):
+        r += 1
+        a, code = agences[i] if i < len(agences) else (None, None)
+        cellule(rg, f'A{r}', a, Font(name=FT, size=10), fond(SAISIE))
+        cellule(rg, f'B{r}', code, Font(name=FT, size=10, bold=True), fond(SAISIE))
+        cellule(rg, f'C{r}', f'=IF(OR(A{r}="",B{r}=""),"#",{cle(f"A{r}")})', Font(name=FT, size=9, color='808080'))
+        dv_proj.add(f'B{r}')
+    nom_global(wb, 'AG_PROJ', f"'Réglages'!$B${a0}:$B${r}")
+    nom_global(wb, 'AG_CLE', f"'Réglages'!$C${a0}:$C${r}")
+
+    # colonnes lues dans l'export
+    r += 2
+    cellule(rg, f'A{r}', "Colonnes lues dans l'export", Font(name=FT, size=12, bold=True), border=None)
+    r += 1
+    for col, t in zip('ABCD', ["Colonne de l'attachement", "Titre cherché dans l'export", 'Trouvée en colonne n°', '']):
+        cellule(rg, f'{col}{r}', t, Font(name=FT, size=10, bold=True), fond(VERT))
     rang_col = {}
-    for i, (lettre, titre, _) in enumerate(COLS):
-        r = 20 + i
+    for lettre, titre, _ in COLS:
+        r += 1
         rang_col[lettre] = r
-        rg.cell(r, 1, f'Colonne {lettre}').border = BORD
-        rg.cell(r, 2, f'=Attachement!{lettre}16').border = BORD
-        rg.cell(r, 3, f'=IFERROR(MATCH(B{r},INDEX(Export!$1:$30,LIGNE_TITRES,0),0),0)').border = BORD
-        rg.cell(r, 4, f'=IF(C{r}>0,"OK","Absente de l\'export : la colonne reste vide (tu peux la remplir à la main)")')
-        for k in (1, 2, 3, 4):
-            rg.cell(r, k).font = Font(name=FT, size=10)
-    fin_cols = 20 + len(COLS)
-    rg.cell(fin_cols, 1, "Si une colonne est absente, écris dans l'onglet Attachement (ligne 16) le titre exact de la colonne de l'export.").font = Font(name=FT, size=9, italic=True, color='595959')
+        cellule(rg, f'A{r}', f'Colonne {lettre}', Font(name=FT, size=10))
+        cellule(rg, f'B{r}', f'=Attachement!{lettre}{R_T1}', Font(name=FT, size=10))
+        cellule(rg, f'C{r}', f'=IFERROR(MATCH(B{r},INDEX(Export!$1:$30,LIGNE_TITRES,0),0),0)', Font(name=FT, size=10))
+        cellule(rg, f'D{r}', f'=IF(C{r}>0,"OK","Absente de l\'export")', Font(name=FT, size=10), border=None)
+    r += 1
+    cellule(rg, f'A{r}', f"Si une colonne est absente, écris dans l'onglet Attachement (ligne {R_T1}) le titre exact de la colonne de l'export.",
+            note, border=None)
 
     # jours fériés
-    r0 = fin_cols + 2
-    rg.cell(r0, 1, 'Jours fériés').font = Font(name=FT, size=12, bold=True)
+    r += 2
+    cellule(rg, f'A{r}', 'Jours fériés', Font(name=FT, size=12, bold=True), border=None)
+    cellule(rg, f'B{r}', '(ajoute des dates à la suite si besoin)', note, border=None)
     liste = feries(range(2026, 2033))
-    for i, (d, n) in enumerate(liste):
-        rg.cell(r0 + 1 + i, 1, d).number_format = 'dd/mm/yyyy'
-        rg.cell(r0 + 1 + i, 2, n)
-    derniere_ferie = r0 + 1 + len(liste) + 20          # place pour en ajouter
-    nom_global(wb, 'FERIES', f"'Réglages'!$A${r0 + 1}:$A${derniere_ferie}")
-    rg.cell(r0, 2, '(ajoute des dates à la suite si besoin)').font = Font(name=FT, size=9, italic=True, color='595959')
+    f0 = r + 1
+    for d, nm in liste:
+        r += 1
+        rg.cell(r, 1, d).number_format = 'dd/mm/yyyy'
+        rg.cell(r, 2, nm)
+    nom_global(wb, 'FERIES', f"'Réglages'!$A${f0}:$A${r + 20}")
 
-    # ------------------------------------------------------------------ Attachement
+    # ================================================================== Attachement
     larg = {l: w for l, _, w in COLS}
-    larg.update({'M': 13, 'N': 13, 'O': 24, 'P': 15, 'R': 14})
+    larg.update({C_PROJET: 14, C_F: 13, C_HF: 13, C_MOT: 24, C_PV: 15, C_AIDE: 14})
     for l, w in larg.items():
         at.column_dimensions[l].width = w
-    at.column_dimensions['R'].hidden = True
+    at.column_dimensions[C_AIDE].hidden = True
+    der = L(DERNIERE_COL)
 
-    at['A1'] = 'SUIVI MAINTENANCE RESEAU 54\nLOSANGE'
-    at['A1'].font = Font(name=FT, size=12, bold=True, color='FF0000')
-    at['A1'].alignment = centre
-    at.merge_cells('A1:Q1')
+    cellule(at, 'A1', 'SUIVI MAINTENANCE RESEAU 54\nLOSANGE', Font(name=FT, size=12, bold=True, color='FF0000'), align=centre, border=None)
+    at.merge_cells(f'A1:{der}1')
     at.row_dimensions[1].height = 36
-    at['A2'] = '="Prestation "&ST&" pour le Contrat maintenance "&MOIS_TXT'
-    at['A2'].font = Font(name=FT, size=11, bold=True)
-    at['A2'].alignment = centre
-    at.merge_cells('A2:Q2')
+    cellule(at, 'A2', '="Prestation "&ST&" pour le Contrat maintenance "&MOIS_TXT', Font(name=FT, size=11, bold=True), align=centre, border=None)
+    at.merge_cells(f'A2:{der}2')
     at.row_dimensions[2].height = 30
-    for c in range(1, 18):
+    for c in range(1, DERNIERE_COL + 1):
         at.cell(1, c).border = Border(bottom=fort)
         at.cell(2, c).border = Border(bottom=fort)
-    at.row_dimensions[3].height = 8
+    at.row_dimensions[3].height = 10
 
-    # bloc de calcul (lignes 4 à 14) : libellés gris à droite, valeurs en M:N
-    P_, D_ = PREMIERE, DERNIERE
-    bloc = [
-        (4, '="Tickets au forfait ("&TEXT(HDEB,"hh:mm")&" - "&TEXT(HFIN,"hh:mm")&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&")"',
-         f'=SUM(M{P_}:M{D_})', '0', 'n'),
-        (5, 'Jours ouvrés du mois', '=JOURS', '0', 'n'),
-        (6, 'Tickets demandés par jour et par équipe', '=TPJ', '0.##', 'n'),
-        (7, 'Tickets par jour (tickets au forfait ÷ jours)', '=IF(M5>0,M4/M5,0)', '0.00', 'n'),
-        (8, "NOMBRE D'ÉQUIPES À PAYER  =  tickets au forfait ÷ jours ÷ tickets demandés par jour", '=ROUND(IF(AND(M5>0,M6>0),M4/M5/M6,0),2)', '0.00', 'jaune'),
-        (9, 'Base mensuelle par équipe', '=BASE', EUR, 'n'),
-        (10, "Montant forfait (nombre d'équipes × base mensuelle)", '=M8*M9', EUR, 'gras'),
-        (11, '="Tickets hors forfait, sur devis (avant "&TEXT(HDEB,"hh:mm")&", après "&TEXT(HFIN,"hh:mm")&IF(WE="OUI",", week-ends et jours fériés","")&")"',
-         f'=SUM(N{P_}:N{D_})', '0', 'n'),
-        (12, 'Plus-values sur devis des tickets hors forfait (colonne P)', f'=SUMIF(N{P_}:N{D_},1,P{P_}:P{D_})', EUR, 'gras'),
-        (13, 'TOTAL HT (forfait + plus-values)', '=M10+M12', EUR, 'total'),
-    ]
-    for r, lib, f, fmt, sty in bloc:
-        lab = at.cell(r, 1, lib)
-        at.merge_cells(start_row=r, start_column=1, end_row=r, end_column=12)
-        val = at.cell(r, 13, f)
-        at.merge_cells(start_row=r, start_column=13, end_row=r, end_column=14)
-        val.number_format = fmt
-        lab_fill, lab_font = fond(GRIS), Font(name=FT, size=10, bold=True)
-        val_fill, val_font, h = None, Font(name=FT, size=10), 16
-        if sty == 'gras':
-            val_font = Font(name=FT, size=10, bold=True)
-        if sty == 'jaune':
-            lab_fill, lab_font = fond(JAUNE), Font(name=FT, size=11, bold=True)
-            val_fill, val_font, h = fond(JAUNE), Font(name=FT, size=16, bold=True), 30
-        if sty == 'total':
-            lab_fill, lab_font = fond(FONCE), Font(name=FT, size=12, bold=True, color='FFFFFF')
-            val_fill, val_font, h = fond(JAUNE), Font(name=FT, size=13, bold=True), 26
-        for c in range(1, 13):
-            at.cell(r, c).fill = lab_fill
-            at.cell(r, c).border = BORD
-        lab.font = lab_font
-        lab.alignment = Alignment(horizontal='right', vertical='center')
-        for c in (13, 14):
-            at.cell(r, c).border = BORD
-            if val_fill:
-                at.cell(r, c).fill = val_fill
-        val.font = val_font
-        val.alignment = Alignment(horizontal='center' if sty in ('jaune', 'total') else 'right', vertical='center')
-        at.row_dimensions[r].height = h
-    at['O8'] = '=IF(COUNTIF(O18:O317,"Doublon")+COUNTIF(O18:O317,"Autre mois")=0,"",COUNTIF(O18:O317,"Doublon")&" doublon(s) et "&COUNTIF(O18:O317,"Autre mois")&" ticket(s) d\'un autre mois non comptés")'
-    at['O8'].font = Font(name=FT, size=9, italic=True, color='9C0006')
-    at['O8'].alignment = Alignment(wrap_text=True, vertical='center')
-    at.merge_cells('O8:Q8')
+    # ---- récapitulatif par projet (colonnes A à L)
+    titres = ['Projet', 'Agences', 'Tickets au forfait', 'Jours ouvrés', 'Tickets demandés / jour / équipe', 'Tickets par jour',
+              "NOMBRE D'ÉQUIPES", 'Base mensuelle / équipe', 'Montant forfait', 'Tickets hors forfait (sur devis)',
+              'Plus-values sur devis', 'TOTAL HT']
+    for i, t in enumerate(titres):
+        cellule(at, f'{L(i + 1)}{R_ENT}', t, Font(name=FT, size=9, bold=True), fond(JAUNE if i == 6 else VERT), align=centre)
+    cellule(at, f'M{R_ENT}', '="Équipes = tickets au forfait ÷ jours ÷ tickets demandés"', note,
+            align=Alignment(wrap_text=True, vertical='center'), border=None)
+    at.merge_cells(f'M{R_ENT}:O{R_ENT}')
+    at.row_dimensions[R_ENT].height = 36
 
-    at['A15'] = ('="Le forfait couvre les tickets classiques et les travaux commencés entre "&TEXT(HDEB,"hh:mm")&" et "&TEXT(HFIN,"hh:mm")'
-                 '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Nombre d\'équipes = tickets au forfait ÷ jours ouvrés ÷ "&TPJ'
-                 '&" tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle. '
-                 'En dehors de ces heures, le ticket est sur devis et peut entraîner une plus-value (colonne P). Un même N° de ticket n\'est compté qu\'une fois."')
-    at['A15'].font = Font(name=FT, size=9, italic=True, color='595959')
-    at['A15'].alignment = Alignment(wrap_text=True, vertical='center')
-    at.merge_cells('A15:Q15')
-    at.row_dimensions[15].height = 30
+    proj, forf, hf, mot, pv = rng(C_PROJET), rng(C_F), rng(C_HF), rng(C_MOT), rng(C_PV)
+    v10 = Font(name=FT, size=10)
+    for i, lp in enumerate(lignes_projet):
+        r = R_P1 + i
+        cellule(at, f'A{r}', f"='Réglages'!A{lp}", Font(name=FT, size=11, bold=True), align=Alignment(vertical='center'))
+        cellule(at, f'B{r}', f"='Réglages'!B{lp}", v10, align=Alignment(vertical='center', wrap_text=True))
+        cellule(at, f'C{r}', f'=COUNTIFS({proj},$A{r},{forf},1)', v10, fmt='0')
+        cellule(at, f'D{r}', '=JOURS', v10, fmt='0')
+        cellule(at, f'E{r}', f"='Réglages'!D{lp}", v10, fmt='0.##')
+        cellule(at, f'F{r}', f'=IF(D{r}>0,C{r}/D{r},0)', v10, fmt='0.00')
+        cellule(at, f'G{r}', f'=ROUND(IF(AND(D{r}>0,E{r}>0),C{r}/D{r}/E{r},0),2)', Font(name=FT, size=13, bold=True), fond(JAUNE), '0.00',
+                Alignment(horizontal='center', vertical='center'))
+        cellule(at, f'H{r}', f"='Réglages'!C{lp}", v10, fmt=EUR)
+        cellule(at, f'I{r}', f'=G{r}*H{r}', Font(name=FT, size=10, bold=True), fmt=EUR)
+        cellule(at, f'J{r}', f'=COUNTIFS({proj},$A{r},{hf},1)', v10, fmt='0')
+        cellule(at, f'K{r}', f'=SUMIFS({pv},{proj},$A{r},{hf},1)', v10, fmt=EUR)
+        cellule(at, f'L{r}', f'=I{r}+K{r}', Font(name=FT, size=10, bold=True), fmt=EUR)
+        at.row_dimensions[r].height = 22
+    r = R_INC
+    cellule(at, f'A{r}', 'Non classés', Font(name=FT, size=10, bold=True), align=Alignment(vertical='center'))
+    cellule(at, f'B{r}', 'Agence absente du tableau des Réglages : à classer', Font(name=FT, size=9, italic=True),
+            align=Alignment(vertical='center', wrap_text=True))
+    cellule(at, f'C{r}', f'=COUNTIFS({proj},"{INCONNUE}",{forf},1)+COUNTIFS({proj},"{SANS_AGENCE}",{forf},1)', v10, fmt='0')
+    cellule(at, f'J{r}', f'=COUNTIFS({proj},"{INCONNUE}",{hf},1)+COUNTIFS({proj},"{SANS_AGENCE}",{hf},1)', v10, fmt='0')
+    for col in 'DEFGHIKL':
+        cellule(at, f'{col}{r}', None, v10)
+    at.conditional_formatting.add(f'A{r}:L{r}', FormulaRule(formula=[f'$C${r}+$J${r}>0'], fill=fond('FFC7CE'), font=Font(color='9C0006', bold=True)))
+    at.conditional_formatting.add(f'A{r}:L{r}', FormulaRule(formula=[f'$C${r}+$J${r}=0'], font=Font(color='A6A6A6')))
+    r = R_TOT
+    cellule(at, f'A{r}', 'TOTAL', Font(name=FT, size=12, bold=True, color='FFFFFF'), fond(FONCE), align=Alignment(horizontal='right', vertical='center'))
+    cellule(at, f'B{r}', None, fill=fond(FONCE))
+    at.merge_cells(f'A{r}:B{r}')
+    som = lambda col, a=R_P1, b=R_INC: f'=SUM({col}{a}:{col}{b})'
+    cellule(at, f'C{r}', som('C'), Font(name=FT, size=10, bold=True), fmt='0')
+    for col in 'DEFH':
+        cellule(at, f'{col}{r}', None)
+    cellule(at, f'G{r}', som('G', b=R_INC - 1), Font(name=FT, size=13, bold=True), fond(JAUNE), '0.00', Alignment(horizontal='center', vertical='center'))
+    cellule(at, f'I{r}', som('I', b=R_INC - 1), Font(name=FT, size=10, bold=True), fmt=EUR)
+    cellule(at, f'J{r}', som('J'), Font(name=FT, size=10, bold=True), fmt='0')
+    cellule(at, f'K{r}', som('K', b=R_INC - 1), Font(name=FT, size=10, bold=True), fmt=EUR)
+    cellule(at, f'L{r}', som('L', b=R_INC - 1), Font(name=FT, size=13, bold=True), fond(JAUNE), EUR, Alignment(horizontal='center', vertical='center'))
+    at.row_dimensions[r].height = 28
 
-    # en-têtes (lignes 16-17)
+    doublons = f'COUNTIF({mot},"Doublon")'
+    autres = f'COUNTIF({mot},"Autre mois")'
+    cellule(at, f'A{R_NOTE}',
+            '="Forfait par projet : tickets classiques et travaux commencés entre "&TEXT(HDEB,"hh:mm")&" et "&TEXT(HFIN,"hh:mm")'
+            '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Nombre d\'équipes = tickets au forfait du projet ÷ jours ouvrés ÷ '
+            'tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle. '
+            'En dehors de ces heures, le ticket est sur devis et peut entraîner une plus-value (colonne Q). Un même N° de ticket n\'est compté qu\'une fois."'
+            f'&IF({doublons}+{autres}=0,""," Non comptés ce mois-ci : "&{doublons}&" doublon(s), "&{autres}&" ticket(s) d\'un autre mois.")',
+            note, align=Alignment(wrap_text=True, vertical='center'), border=None)
+    at.merge_cells(f'A{R_NOTE}:{der}{R_NOTE}')
+    at.row_dimensions[R_NOTE].height = 30
+
+    # ---- en-têtes de la liste des tickets
     ent = Font(name=FT, size=9, bold=True)
-    for lettre, titre, _ in COLS:
-        c = at[f'{lettre}16']
-        c.value = titre
-        at.merge_cells(f'{lettre}16:{lettre}17')
-        for r in (16, 17):
-            at[f'{lettre}{r}'].border = BORD
-            at[f'{lettre}{r}'].alignment = centre
-        c.font = ent
-    at['A16'].comment = Comment("Les titres de cette ligne sont ceux cherchés dans l'export. "
-                                "Si une colonne de l'export porte un autre nom, écris-le ici.", 'Attachement')
-    at['M16'] = 'NB Ticket'
-    at.merge_cells('M16:O16')
-    at['M17'] = '="FORFAIT "&TEXT(HDEB,"hh:mm")&"-"&TEXT(HFIN,"hh:mm")'
-    at['N17'] = 'HORS FORFAIT'
-    at['O17'] = 'Motif hors forfait'
-    at['P16'] = 'Plus-value sur devis (€)'
-    at.merge_cells('P16:P17')
-    for a in ('M16', 'N16', 'O16', 'M17', 'N17', 'O17', 'P16', 'P17'):
-        at[a].fill = fond(VERT)
-        at[a].border = BORD
-        at[a].alignment = centre
-        at[a].font = ent
-    at.row_dimensions[16].height = 24
-    at.row_dimensions[17].height = 30
+    r2 = R_T1 + 1
+    for lettre, titre, _ in COLS + [(C_PROJET, 'Projet', 0)]:
+        cellule(at, f'{lettre}{R_T1}', titre, ent, fond(GRIS) if lettre == C_PROJET else None, align=centre)
+        cellule(at, f'{lettre}{r2}', None, align=centre)
+        at.merge_cells(f'{lettre}{R_T1}:{lettre}{r2}')
+    at[f'A{R_T1}'].comment = Comment("Les titres de cette ligne sont ceux cherchés dans l'export. "
+                                     "Si une colonne de l'export porte un autre nom, écris-le ici.", 'Attachement')
+    cellule(at, f'{C_F}{R_T1}', 'NB Ticket', ent, fond(VERT), align=centre)
+    cellule(at, f'{C_HF}{R_T1}', None, fill=fond(VERT))
+    cellule(at, f'{C_MOT}{R_T1}', None, fill=fond(VERT))
+    at.merge_cells(f'{C_F}{R_T1}:{C_MOT}{R_T1}')
+    cellule(at, f'{C_F}{r2}', '="FORFAIT "&TEXT(HDEB,"hh:mm")&"-"&TEXT(HFIN,"hh:mm")', ent, fond(VERT), align=centre)
+    cellule(at, f'{C_HF}{r2}', 'HORS FORFAIT', ent, fond(VERT), align=centre)
+    cellule(at, f'{C_MOT}{r2}', 'Motif hors forfait', ent, fond(VERT), align=centre)
+    cellule(at, f'{C_PV}{R_T1}', 'Plus-value sur devis (€)', ent, fond(VERT), align=centre)
+    cellule(at, f'{C_PV}{r2}', None, fill=fond(VERT))
+    at.merge_cells(f'{C_PV}{R_T1}:{C_PV}{r2}')
+    at.row_dimensions[R_T1].height = 24
+    at.row_dimensions[r2].height = 30
 
-    # lignes de tickets
+    # ---- lignes de tickets
     def lecture(lettre, r):
         rc = f"'Réglages'!$C${rang_col[lettre]}"
-        src = f'INDEX(Export!$A:$DZ,LIGNE_TITRES+ROW()-{PREMIERE - 1},{rc})'
+        src = f'INDEX(Export!$A:$DZ,LIGNE_TITRES+ROW()-{P0 - 1},{rc})'
         if lettre == 'A':
             return f'=IF({rc}=0,"",IF({src}="","",{src}))'
         return f'=IF(OR($A{r}="",{rc}=0),"",IF({src}="","",{src}))'
 
-    d9 = Font(name=FT, size=9)
-    for r in range(PREMIERE, DERNIERE + 1):
+    for r in range(P0, P1 + 1):
         for lettre, _, _ in COLS:
-            c = at[f'{lettre}{r}']
-            c.value = lecture(lettre, r)
-            c.font = d9
-            c.alignment = Alignment(vertical='center', horizontal='center' if lettre in 'GH' else None)
-            if lettre in 'GH':
-                c.number_format = 'dd/mm/yyyy hh:mm'
-        at[f'R{r}'] = f'=IF($A{r}="","",IF(ISNUMBER($G{r}),$G{r},IFERROR(--$G{r},"")))'
-        at[f'R{r}'].number_format = 'dd/mm/yyyy hh:mm'
-        hm = f'ROUND(MOD($R{r},1)*1440,0)'
-        at[f'O{r}'] = (
-            f'=IF($A{r}="","",IF(COUNTIF($A${PREMIERE}:$A{r},$A{r})>1,"Doublon",IF($R{r}="","",'
-            f'IF(AND(MOIS<>"",OR($R{r}<MOIS,$R{r}>=EOMONTH(MOIS,0)+1)),"Autre mois",'
-            f'IF(AND(WE="OUI",WEEKDAY($R{r},2)=6),"Samedi",IF(AND(WE="OUI",WEEKDAY($R{r},2)=7),"Dimanche",'
-            f'IF(AND(WE="OUI",COUNTIF(FERIES,INT($R{r}))>0),"Jour férié",'
-            f'IF({hm}<ROUND(HDEB*1440,0),"Avant "&TEXT(HDEB,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")",'
-            f'IF({hm}>ROUND(HFIN*1440,0),"Après "&TEXT(HFIN,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")","")))))))))')
-        at[f'M{r}'] = f'=IF($A{r}="","",IF($O{r}="",1,""))'
-        at[f'N{r}'] = f'=IF(OR($A{r}="",$O{r}="",$O{r}="Doublon",$O{r}="Autre mois"),"",1)'
-        for a in ('M', 'N'):
-            at[f'{a}{r}'].font = d9
-            at[f'{a}{r}'].alignment = Alignment(horizontal='center', vertical='center')
-        at[f'O{r}'].font = d9
-        at[f'P{r}'].font = Font(name=FT, size=9, bold=True)
-        at[f'P{r}'].number_format = EUR
-    plage = f'A{PREMIERE}:Q{DERNIERE}'
-    for ligne in at.iter_rows(min_row=PREMIERE, max_row=DERNIERE, min_col=1, max_col=17):
-        for c in ligne:
-            c.border = BORD
-    at.conditional_formatting.add(f'N{PREMIERE}:O{DERNIERE}', FormulaRule(
-        formula=[f'$N{PREMIERE}=1'], fill=fond('FFC7CE'), font=Font(color='9C0006', bold=True)))
-    at.conditional_formatting.add(f'P{PREMIERE}:P{DERNIERE}', FormulaRule(formula=[f'$N{PREMIERE}=1'], fill=fond(SAISIE)))
+            date = lettre in (C_DEB, 'I')
+            cellule(at, f'{lettre}{r}', lecture(lettre, r), f9, fmt='dd/mm/yyyy hh:mm' if date else None,
+                    align=Alignment(vertical='center', horizontal='center' if date else None))
+        ag = f'${C_AGENCE}{r}'
+        cellule(at, f'{C_PROJET}{r}',
+                f'=IF($A{r}="","",IF({ag}="","{SANS_AGENCE}",IFERROR(INDEX(AG_PROJ,MATCH({cle(ag)},AG_CLE,0)),"{INCONNUE}")))',
+                f9b, align=Alignment(horizontal='center', vertical='center'))
+        at[f'{C_AIDE}{r}'] = f'=IF($A{r}="","",IF(ISNUMBER(${C_DEB}{r}),${C_DEB}{r},IFERROR(--${C_DEB}{r},"")))'
+        at[f'{C_AIDE}{r}'].number_format = 'dd/mm/yyyy hh:mm'
+        d = f'${C_AIDE}{r}'
+        hm = f'ROUND(MOD({d},1)*1440,0)'
+        cellule(at, f'{C_MOT}{r}',
+                f'=IF($A{r}="","",IF(COUNTIF($A${P0}:$A{r},$A{r})>1,"Doublon",IF({d}="","",'
+                f'IF(AND(MOIS<>"",OR({d}<MOIS,{d}>=EOMONTH(MOIS,0)+1)),"Autre mois",'
+                f'IF(AND(WE="OUI",WEEKDAY({d},2)=6),"Samedi",IF(AND(WE="OUI",WEEKDAY({d},2)=7),"Dimanche",'
+                f'IF(AND(WE="OUI",COUNTIF(FERIES,INT({d}))>0),"Jour férié",'
+                f'IF({hm}<ROUND(HDEB*1440,0),"Avant "&TEXT(HDEB,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")",'
+                f'IF({hm}>ROUND(HFIN*1440,0),"Après "&TEXT(HFIN,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")","")))))))))',
+                f9, align=Alignment(vertical='center'))
+        m = f'${C_MOT}{r}'
+        cellule(at, f'{C_F}{r}', f'=IF($A{r}="","",IF({m}="",1,""))', f9, align=Alignment(horizontal='center', vertical='center'))
+        cellule(at, f'{C_HF}{r}', f'=IF(OR($A{r}="",{m}="",{m}="Doublon",{m}="Autre mois"),"",1)', f9,
+                align=Alignment(horizontal='center', vertical='center'))
+        cellule(at, f'{C_PV}{r}', None, f9b, fmt=EUR)
+
+    plage = f'A{P0}:{der}{P1}'
+    at.conditional_formatting.add(f'{C_HF}{P0}:{C_MOT}{P1}', FormulaRule(
+        formula=[f'${C_HF}{P0}=1'], fill=fond('FFC7CE'), font=Font(color='9C0006', bold=True)))
+    at.conditional_formatting.add(f'{C_PV}{P0}:{C_PV}{P1}', FormulaRule(formula=[f'${C_HF}{P0}=1'], fill=fond(SAISIE)))
     # montant saisi sur un ticket au forfait : barré, il n'est pas compté
-    at.conditional_formatting.add(f'P{PREMIERE}:P{DERNIERE}', FormulaRule(
-        formula=[f'AND($P{PREMIERE}<>"",$N{PREMIERE}<>1)'], font=Font(color='A6A6A6', strike=True)))
+    at.conditional_formatting.add(f'{C_PV}{P0}:{C_PV}{P1}', FormulaRule(
+        formula=[f'AND(${C_PV}{P0}<>"",${C_HF}{P0}<>1)'], font=Font(color='A6A6A6', strike=True)))
+    at.conditional_formatting.add(f'{C_PROJET}{P0}:{C_PROJET}{P1}', FormulaRule(
+        formula=[f'OR(${C_PROJET}{P0}="{INCONNUE}",${C_PROJET}{P0}="{SANS_AGENCE}")'], fill=fond('FFC7CE'), font=Font(color='9C0006')))
     at.conditional_formatting.add(plage, FormulaRule(
-        formula=[f'OR($O{PREMIERE}="Doublon",$O{PREMIERE}="Autre mois")'], font=Font(color='A6A6A6', italic=True)))
-    at.auto_filter.ref = f'A17:Q{DERNIERE}'
+        formula=[f'OR(${C_MOT}{P0}="Doublon",${C_MOT}{P0}="Autre mois")'], font=Font(color='A6A6A6', italic=True)))
+    at.auto_filter.ref = f'A{r2}:{der}{P1}'
 
     # impression : paysage, une page de large, titres répétés, zone limitée aux tickets présents
     at.page_setup.orientation = 'landscape'
@@ -324,17 +394,18 @@ def construire(sous_traitant, chemin):
     at.page_setup.fitToWidth = 1
     at.page_setup.fitToHeight = 0
     at.sheet_properties.pageSetUpPr.fitToPage = True
-    at.print_title_rows = '16:17'
+    at.print_title_rows = f'{R_T1}:{r2}'
     at.page_margins.left = at.page_margins.right = 0.3
     at.page_margins.top = at.page_margins.bottom = 0.5
     at.defined_names['_xlnm.Print_Area'] = DefinedName(
         '_xlnm.Print_Area', localSheetId=0,
-        attr_text=f'OFFSET(Attachement!$A$1,0,0,{PREMIERE - 1}+SUMPRODUCT(--(Attachement!$A${PREMIERE}:$A${DERNIERE}<>"")),17)')
+        attr_text=f'OFFSET(Attachement!$A$1,0,0,{P0 - 1}+SUMPRODUCT(--(Attachement!$A${P0}:$A${P1}<>"")),{DERNIERE_COL})')
     at.sheet_view.zoomScale = 90
 
     wb.active = 0
     wb.calculation.fullCalcOnLoad = True
     wb.save(chemin)
+    return P0
 
 
 if __name__ == '__main__':
@@ -342,7 +413,7 @@ if __name__ == '__main__':
     if not noms:
         construire('NOM DU SOUS-TRAITANT', ICI / 'Attachement_sous-traitant.xlsx')
         print('Attachement_sous-traitant.xlsx')
-    for n in noms:
-        f = ICI / f'Attachement {n}.xlsx'
-        construire(n, f)
+    for nm in noms:
+        f = ICI / f'Attachement {nm}.xlsx'
+        construire(nm, f)
         print(f.name)
