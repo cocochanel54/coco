@@ -381,20 +381,22 @@ def construire(sous_traitant, chemin):
         return f'=IF(OR($A{r}="",{rc}=0),"",IF({src}="","",{src}))'
 
     en_nombre = lambda col, r: f'=IF($A{r}="","",IF(ISNUMBER(${col}{r}),${col}{r},IFERROR(--${col}{r},"")))'
+    # pas de bordure fixe sur les 300 lignes : elle vient d'une mise en forme conditionnelle (lignes remplies seulement)
+    cel = lambda *a, **k: cellule(*a, **{**k, 'border': None})
     for r in range(P0, P1 + 1):
         for lettre, _, _ in COLS:
             date = lettre in (C_DEB, C_CLO)
-            cellule(at, f'{lettre}{r}', lecture(lettre, r), f9, fmt='dd/mm/yyyy hh:mm' if date else None,
+            cel(at, f'{lettre}{r}', lecture(lettre, r), f9, fmt='dd/mm/yyyy hh:mm' if date else None,
                     align=Alignment(vertical='center', horizontal='center' if date else None))
         ag = f'${C_AGENCE}{r}'
-        cellule(at, f'{C_PROJET}{r}',
+        cel(at, f'{C_PROJET}{r}',
                 f'=IF($A{r}="","",IF({ag}="","{SANS_AGENCE}",IFERROR(LOOKUP(2^15,SEARCH(AG_CLE,{cle(ag)}),AG_PROJ),"{INCONNUE}")))',
                 f9b, align=mil)
         at[f'{C_AIDE}{r}'] = en_nombre(C_DEB, r)
         at[f'{C_AIDE2}{r}'] = en_nombre(C_CLO, r)
         d = f'${C_AIDE}{r}'
         hm = f'ROUND(MOD({d},1)*1440,0)'
-        cellule(at, f'{C_MOT}{r}',
+        cel(at, f'{C_MOT}{r}',
                 f'=IF($A{r}="","",IF(COUNTIF($A${P0}:$A{r},$A{r})>1,"Doublon",IF({d}="","",'
                 f'IF(AND(MOIS<>"",OR({d}<MOIS,{d}>=EOMONTH(MOIS,0)+1)),"Autre mois",'
                 f'IF(AND(WE="OUI",WEEKDAY({d},2)=6),"Samedi",IF(AND(WE="OUI",WEEKDAY({d},2)=7),"Dimanche",'
@@ -403,18 +405,18 @@ def construire(sous_traitant, chemin):
                 f'IF({hm}>ROUND(HFIN*1440,0),"Après "&TEXT(HFIN,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")","")))))))))',
                 f9, align=Alignment(vertical='center'))
         m = f'${C_MOT}{r}'
-        cellule(at, f'{C_F}{r}', f'=IF($A{r}="","",IF({m}="",1,""))', f9, align=mil)
-        cellule(at, f'{C_HF}{r}', f'=IF(OR($A{r}="",{m}="",{m}="Doublon",{m}="Autre mois"),"",1)', f9, align=mil)
+        cel(at, f'{C_F}{r}', f'=IF($A{r}="","",IF({m}="",1,""))', f9, align=mil)
+        cel(at, f'{C_HF}{r}', f'=IF(OR($A{r}="",{m}="",{m}="Doublon",{m}="Autre mois"),"",1)', f9, align=mil)
         fin_ = f'${C_AIDE2}{r}'
-        cellule(at, f'{C_DUR}{r}', f'=IF(OR({d}="",{fin_}=""),"",IF({fin_}>{d},{fin_}-{d},""))', f9, fmt='[h]:mm', align=mil)
+        cel(at, f'{C_DUR}{r}', f'=IF(OR({d}="",{fin_}=""),"",IF({fin_}>{d},{fin_}-{d},""))', f9, fmt='[h]:mm', align=mil)
         duree = f'ROUND(${C_DUR}{r}*1440,0)'
-        cellule(at, f'{C_BON}{r}',
+        cel(at, f'{C_BON}{r}',
                 f'=IF(OR(${C_F}{r}<>1,${C_DUR}{r}=""),"",IFERROR(IF({duree}>=ROUND(BONIF*1440,0),INT({duree}/ROUND(BONIF*1440,0)),""),""))',
                 f9b, fmt='"+"0', align=mil)
-        cellule(at, f'{C_NBB}{r}', None, f9b, align=mil)
+        cel(at, f'{C_NBB}{r}', None, f9b, align=mil)
         b, v = f'${C_BON}{r}', f'${C_NBB}{r}'
         at[f'{C_RET}{r}'] = f'=IF(AND({b}<>"",ISNUMBER({v})),{v},0)'
-        cellule(at, f'{C_PV}{r}', None, f9b, fmt=EUR)
+        cel(at, f'{C_PV}{r}', None, f9b, fmt=EUR)
 
     plage = f'A{P0}:{der}{P1}'
     at.conditional_formatting.add(f'{C_HF}{P0}:{C_MOT}{P1}', FormulaRule(
@@ -437,6 +439,8 @@ def construire(sous_traitant, chemin):
         formula=[f'OR(${C_PROJET}{P0}="{INCONNUE}",${C_PROJET}{P0}="{SANS_AGENCE}")'], fill=fond('FFC7CE'), font=Font(color='9C0006')))
     at.conditional_formatting.add(plage, FormulaRule(
         formula=[f'OR(${C_MOT}{P0}="Doublon",${C_MOT}{P0}="Autre mois")'], font=Font(color='A6A6A6', italic=True)))
+    # en dernier : les règles de couleur ci-dessus passent avant (LibreOffice n'applique que la première règle vraie)
+    at.conditional_formatting.add(plage, FormulaRule(formula=[f'$A{P0}<>""'], border=BORD))
     dv_bonif = DataValidation(type='decimal', operator='greaterThanOrEqual', formula1='0', allow_blank=True,
                               errorTitle='Bonif ticket', error='Saisis un nombre de tickets en plus : 0, 1, 2…')
     at.add_data_validation(dv_bonif)
