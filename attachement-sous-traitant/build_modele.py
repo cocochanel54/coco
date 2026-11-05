@@ -13,7 +13,7 @@
 #   en dehors, le ticket est sur devis et peut entraîner une plus-value, saisie à la main ;
 #   un ticket de 2h30 ou plus (dans les heures ouvrables) (Soldée - Début) est « À vérifier » : après vérification, le nombre
 #   de tickets bonifiés se saisit à la main et s'ajoute au nombre de tickets du projet ;
-#   une malfaçon (N° qui commence par MAL, ou type qui contient MALFA) n'est pas un ticket : elle compte en IRIS, 50 € l'unité.
+#   une malfaçon (N° qui commence par MAL, ou type qui contient MALFA) n'est pas un ticket : elle compte en IRRIS, 50 € l'unité.
 import sys, datetime as dt, pathlib
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -165,9 +165,9 @@ def construire(sous_traitant, chemin):
         (11, 'WE', 'Week-ends et jours fériés hors forfait', 'OUI', None, 'OUI ou NON.'),
         (12, 'BONIF', 'Bonif de ticket à partir de', dt.time(2, 30), '[h]:mm',
          'Durée Soldée - Début. Le ticket est alors « À vérifier ».'),
-        (13, 'PRIX_IRIS', "Prix d'une malfaçon (IRIS)", 50, EUR, "Les malfaçons ne comptent pas comme tickets : elles sont payées à l'unité."),
+        (13, 'PRIX_IRIS', "Prix d'une malfaçon (IRRIS)", 50, EUR, "Les malfaçons ne comptent pas comme tickets : elles sont payées à l'unité."),
         (14, 'MALF_NUM', 'Malfaçon si le N° commence par', 'MAL', None, 'Ex. MAL-20260722T0465#1.'),
-        (15, 'MALF_TYPE', 'ou si le Type inter. contient', 'MALFA', None, 'Ex. MAINTENANCE - REPRISE MALFAÇON.'),
+        (15, 'MALF_TYPE', 'ou si le Type inter. contient', 'MALFA', None, 'Ex. MAINTENANCE - REPRISE MALFACON IRRIS.'),
         (16, 'LIGNE_TITRES', "Ligne des titres dans l'onglet Export", 1, '0', "Si l'export a des lignes au-dessus de ses titres."),
         (17, 'MOIS_TXT', 'Mois en lettres (calculé)',
          '=IF(MOIS="","",CHOOSE(MONTH(MOIS),"JANVIER","FÉVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOÛT","SEPTEMBRE",'
@@ -307,9 +307,9 @@ def construire(sous_traitant, chemin):
     # ---- récapitulatif par projet (colonnes A à P)
     titres = ['Projet', 'Agences', 'Nombre de tickets', 'Bonif tickets', 'Tickets retenus', 'Jours ouvrés',
               'Tickets demandés / jour / équipe', 'Tickets par jour', "NOMBRE D'ÉQUIPES", 'Base mensuelle / équipe', 'Montant forfait',
-              'IRIS (malfaçons)', 'Montant IRIS', 'Tickets hors forfait (sur devis)', 'Plus-values sur devis', 'TOTAL HT']
+              'IRRIS (malfaçons)', 'Montant IRRIS', 'Tickets hors forfait (sur devis)', 'Plus-values sur devis', 'TOTAL HT']
     for i, t in enumerate(titres):
-        coul = JAUNE if t == "NOMBRE D'ÉQUIPES" else IRIS_FOND if t.startswith(('IRIS', 'Montant IRIS')) else VERT
+        coul = JAUNE if t == "NOMBRE D'ÉQUIPES" else IRIS_FOND if t.startswith(('IRRIS', 'Montant IRRIS')) else VERT
         cellule(at, f'{L(i + 1)}{R_ENT}', t, Font(name=FT, size=9, bold=True), fond(coul), align=centre)
     cellule(at, f'Q{R_ENT}', 'Tickets retenus = nombre de tickets + bonif tickets. Équipes = tickets retenus ÷ jours ÷ tickets demandés. '
             'TOTAL HT = montant forfait + montant IRIS + plus-values.', note, align=Alignment(wrap_text=True, vertical='center'), border=None)
@@ -381,7 +381,7 @@ def construire(sous_traitant, chemin):
             'compte un ticket de plus par tranche de "&TEXT(BONIF,"hh:mm")&" (bonif saisie après vérification colonne O). Nombre d\'équipes = tickets retenus du projet ÷ jours ouvrés ÷ '
             'tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle. '
             'En dehors des heures, le ticket est sur devis et peut entraîner une plus-value (colonne U). Les malfaçons ne comptent pas comme tickets : '
-            'elles sont payées en IRIS, "&TEXT(PRIX_IRIS,"0")&" € l\'unité. Un même N° de ticket n\'est compté qu\'une fois."'
+            'elles sont payées en IRRIS, "&TEXT(PRIX_IRIS,"0")&" € l\'unité. Un même N° de ticket n\'est compté qu\'une fois."'
             f'&IF({doublons}+{autres}=0,""," Non comptés ce mois-ci : "&{doublons}&" doublon(s), "&{autres}&" ticket(s) d\'un autre mois.")',
             note, align=Alignment(wrap_text=True, vertical='center'), border=None)
     at.merge_cells(f'A{R_NOTE}:{der}{R_NOTE}')
@@ -405,7 +405,7 @@ def construire(sous_traitant, chemin):
         for k in range(openpyxl.utils.column_index_from_string(debut) + 1, openpyxl.utils.column_index_from_string(fin_) + 1):
             cellule(at, f'{L(k)}{R_T1}', None, fill=fond(coul))
         at.merge_cells(f'{debut}{R_T1}:{fin_}{R_T1}')
-    cellule(at, f'{C_IRIS}{R_T1}', 'IRIS (malfaçon)', ent, fond(IRIS_FOND), align=centre)
+    cellule(at, f'{C_IRIS}{R_T1}', 'IRRIS (malfaçon)', ent, fond(IRIS_FOND), align=centre)
     cellule(at, f'{C_IRIS}{r2}', None, fill=fond(IRIS_FOND))
     at.merge_cells(f'{C_IRIS}{R_T1}:{C_IRIS}{r2}')
     sous = [(C_NBB, 'BONIF TICKET', JAUNE),
