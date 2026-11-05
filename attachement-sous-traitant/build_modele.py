@@ -35,6 +35,10 @@ PROJETS = [
 ]
 LIGNES_AGENCES = 16          # place dans le tableau des mots qui reconnaissent les agences
 INCONNUE, SANS_AGENCE = 'Agence inconnue', 'Sans agence'
+# autres titres acceptés dans l'export si le titre exact n'y est pas (* = n'importe quels caractères)
+AUTRES_TITRES = {'A': ('N°*', 'Num*'), 'B': ('*descri*', ''), 'C': ('*quipe*', ''), 'D': ('*agence*', ''),
+                 'F': ('*client*', ''), 'G': ('*site*', ''), 'H': ('*début*', '*debut*'), 'I': ('*clôtur*', '*clotur*'),
+                 'J': ('*type*', ''), 'K': ('*factur*', ''), 'L': ('*mat*riel*', ''), 'M': ('*cerfa*', '*assurance*')}
 
 FT = 'Calibri'
 fin = Side(style='thin', color='A6A6A6')
@@ -190,7 +194,7 @@ def construire(sous_traitant, chemin):
         cellule(rg, f'A{r}', code, Font(name=FT, size=11, bold=True), fond(SAISIE))
         cellule(rg, f'B{r}', lib, Font(name=FT, size=10), fond(SAISIE))
         cellule(rg, f'C{r}', base, Font(name=FT, size=10), fond(SAISIE), EUR)
-        cellule(rg, f'D{r}', tpj, Font(name=FT, size=10), fond(SAISIE), '0.##')
+        cellule(rg, f'D{r}', tpj, Font(name=FT, size=10), fond(SAISIE), 'General')
     dv_proj = DataValidation(type='list', formula1=f'$A${lignes_projet[0]}:$A${lignes_projet[-1]}', allow_blank=True)
     rg.add_data_validation(dv_proj)
 
@@ -216,23 +220,37 @@ def construire(sous_traitant, chemin):
     nom_global(wb, 'AG_PROJ', f"'Réglages'!$B${a0}:$B${r}")
     nom_global(wb, 'AG_CLE', f"'Réglages'!$C${a0}:$C${r}")
 
-    # colonnes lues dans l'export
+    # colonnes lues dans l'export : titre exact, sinon deux autres titres acceptés (* = n'importe quels caractères)
     r += 2
     cellule(rg, f'A{r}', "Colonnes lues dans l'export", Font(name=FT, size=12, bold=True), border=None)
     r += 1
-    for col, t in zip('ABCD', ["Colonne de l'attachement", "Titre cherché dans l'export", 'Trouvée en colonne n°', '']):
-        cellule(rg, f'{col}{r}', t, Font(name=FT, size=10, bold=True), fond(VERT))
+    for col, t in zip('ABCDEF', ["Colonne de l'attachement", "Titre cherché dans l'export", 'Autre titre accepté',
+                                 'Autre titre accepté', 'Trouvée en colonne n°', "Colonne de l'export utilisée"]):
+        cellule(rg, f'{col}{r}', t, Font(name=FT, size=10, bold=True), fond(VERT), align=centre)
+    rg.row_dimensions[r].height = 30
     rang_col = {}
+    entetes = 'INDEX(Export!$1:$30,LIGNE_TITRES,0)'
     for lettre, titre, _ in COLS:
         r += 1
         rang_col[lettre] = r
+        a1, a2 = AUTRES_TITRES.get(lettre, ('', ''))
         cellule(rg, f'A{r}', f'Colonne {lettre}', Font(name=FT, size=10))
         cellule(rg, f'B{r}', f'=Attachement!{lettre}{R_T1}', Font(name=FT, size=10))
-        cellule(rg, f'C{r}', f'=IFERROR(MATCH(B{r},INDEX(Export!$1:$30,LIGNE_TITRES,0),0),0)', Font(name=FT, size=10))
-        cellule(rg, f'D{r}', f'=IF(C{r}>0,"OK","Absente de l\'export")', Font(name=FT, size=10), border=None)
+        cellule(rg, f'C{r}', a1 or None, Font(name=FT, size=10), fond(SAISIE))
+        cellule(rg, f'D{r}', a2 or None, Font(name=FT, size=10), fond(SAISIE))
+        essai = lambda x: f'MATCH(IF({x}="","§§§",{x}),{entetes},0)'
+        cellule(rg, f'E{r}', f'=IFERROR(MATCH(B{r},{entetes},0),IFERROR({essai(f"C{r}")},IFERROR({essai(f"D{r}")},0)))',
+                Font(name=FT, size=10), align=Alignment(horizontal='center'))
+        cellule(rg, f'F{r}', f'=IF(E{r}>0,"OK : « "&INDEX(Export!$1:$30,LIGNE_TITRES,E{r})&" »","Absente de l\'export")',
+                Font(name=FT, size=10))
+    at_ = rang_col
+    rg.conditional_formatting.add(f'F{rang_col["A"]}:F{r}', FormulaRule(formula=[f'$E{rang_col["A"]}=0'], font=Font(color='C00000', bold=True)))
     r += 1
-    cellule(rg, f'A{r}', f"Si une colonne est absente, écris dans l'onglet Attachement (ligne {R_T1}) le titre exact de la colonne de l'export.",
+    cellule(rg, f'A{r}', f"Si une colonne est absente, écris dans l'onglet Attachement (ligne {R_T1}) le titre exact de la colonne de l'export, "
+            "ou un autre titre accepté ici (* remplace n'importe quels caractères : *début* trouve « Date de début intervention »).",
             note, border=None)
+    rg.column_dimensions['E'].width = 14
+    rg.column_dimensions['F'].width = 40
 
     # jours fériés
     r += 2
@@ -267,7 +285,16 @@ def construire(sous_traitant, chemin):
         at.cell(2, c).border = Border(bottom=fort)
     at.row_dimensions[3].height = 18
     # alerte si l'export a été collé dans cet onglet (les formules des tickets ont été effacées)
-    cellule(at, 'A3', f'=IF(AND(_xlfn.ISFORMULA(A{P0}),_xlfn.ISFORMULA({C_PROJET}{P0}),_xlfn.ISFORMULA({C_F}{P0})),"","ATTENTION : l\'export a été collé dans l\'onglet Attachement et a effacé ses formules. Reprends le fichier vide et colle l\'export dans l\'onglet « Export », cellule A1.")',
+    # sinon, alerte si les dates manquent (pas de mois, pas de jours ouvrés, pas de hors forfait ni de bonif)
+    msg_deb = ("ATTENTION : la colonne « Date de début » n'est pas trouvée dans l'export : mois, jours ouvrés, hors forfait et bonif "
+               f"ne peuvent pas être calculés. Écris en {C_DEB}{R_T1} le titre exact de cette colonne dans l'export (voir l'onglet Réglages).")
+    msg_fin = ("ATTENTION : la colonne « Clôturée » n'est pas trouvée dans l'export : la durée et la bonif ne peuvent pas être calculées. "
+               f"Écris en {C_CLO}{R_T1} le titre exact de cette colonne dans l'export (voir l'onglet Réglages).")
+    msg_jours = "ATTENTION : jours ouvrés = 0. Tape le mois dans l'onglet Réglages (Mois de l'attachement, ex. 01/10/2026)."
+    q = lambda t: '"' + t.replace('"', '""') + '"'
+    verif_dates = (f"IF('Réglages'!$E${rang_col[C_DEB]}=0,{q(msg_deb)},IF('Réglages'!$E${rang_col[C_CLO]}=0,{q(msg_fin)},"
+                   f'IF(AND(JOURS=0,SUM({C_F}{P0}:{C_F}{P1})>0),{q(msg_jours)},"")))')
+    cellule(at, 'A3', f'=IF(AND(_xlfn.ISFORMULA(A{P0}),_xlfn.ISFORMULA({C_PROJET}{P0}),_xlfn.ISFORMULA({C_F}{P0})),{verif_dates},"ATTENTION : l\'export a été collé dans l\'onglet Attachement et a effacé ses formules. Reprends le fichier vide et colle l\'export dans l\'onglet « Export », cellule A1.")',
             Font(name=FT, size=11, bold=True, color='C00000'), align=Alignment(horizontal='center', vertical='center'), border=None)
     at.merge_cells(f'A3:{der}3')
 
@@ -295,7 +322,7 @@ def construire(sous_traitant, chemin):
         cellule(at, f'D{r}', f'=SUMIFS({ret},{proj},$A{r})', v10, fmt='0')
         cellule(at, f'E{r}', f'=C{r}+D{r}', v10b, fmt='0')
         cellule(at, f'F{r}', '=JOURS', v10, fmt='0')
-        cellule(at, f'G{r}', f"='Réglages'!D{lp}", v10, fmt='0.##')
+        cellule(at, f'G{r}', f"='Réglages'!D{lp}", v10, fmt='General')
         cellule(at, f'H{r}', f'=IF(F{r}>0,E{r}/F{r},0)', v10, fmt='0.00')
         cellule(at, f'I{r}', f'=ROUND(IF(AND(F{r}>0,G{r}>0),E{r}/F{r}/G{r},0),2)', gros, fond(JAUNE), '0.00', mil)
         cellule(at, f'J{r}', f"='Réglages'!C{lp}", v10, fmt=EUR)
@@ -379,7 +406,7 @@ def construire(sous_traitant, chemin):
 
     # ---- lignes de tickets
     def lecture(lettre, r):
-        rc = f"'Réglages'!$C${rang_col[lettre]}"
+        rc = f"'Réglages'!$E${rang_col[lettre]}"
         src = f'INDEX(Export!$A:$DZ,LIGNE_TITRES+ROW()-{P0 - 1},{rc})'
         if lettre == 'A':
             return f'=IF({rc}=0,"",IF({src}="","",{src}))'
