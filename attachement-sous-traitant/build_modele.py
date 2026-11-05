@@ -15,7 +15,7 @@
 #   de tickets bonifiés se saisit à la main et s'ajoute au nombre de tickets du projet.
 import sys, datetime as dt, pathlib
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, Protection
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.workbook.defined_name import DefinedName
@@ -134,7 +134,8 @@ def construire(sous_traitant, chemin):
     for col, w in zip('ABCD', (44, 40, 24, 30)):
         rg.column_dimensions[col].width = w
     cellule(rg, 'A1', "Réglages de l'attachement", Font(name=FT, size=14, bold=True), border=None)
-    cellule(rg, 'A2', "Chaque mois : 1) efface l'onglet Export (Ctrl+A puis Suppr) ; 2) colle en A1 de l'onglet Export l'export des "
+    cellule(rg, 'A2', "Chaque mois : 1) efface l'onglet Export (Ctrl+A puis Suppr) ; 2) colle en A1 de l'onglet Export (jamais dans "
+            "l'onglet Attachement, qui est protégé) l'export des "
             "interventions du sous-traitant, avec sa ligne de titres ; 3) l'onglet Attachement se remplit et calcule tout seul, "
             "projet par projet ; 4) vérifie les tickets de 2h30 ou plus (case orange) et saisis le nombre de tickets bonifiés "
             "dans la case BONIF TICKET (colonne O) ; 5) pour un ticket hors forfait sur devis, saisis la plus-value colonne T ; "
@@ -264,7 +265,11 @@ def construire(sous_traitant, chemin):
     for c in range(1, DERNIERE_COL + 1):
         at.cell(1, c).border = Border(bottom=fort)
         at.cell(2, c).border = Border(bottom=fort)
-    at.row_dimensions[3].height = 10
+    at.row_dimensions[3].height = 18
+    # alerte si l'export a été collé dans cet onglet (les formules des tickets ont été effacées)
+    cellule(at, 'A3', f'=IF(AND(_xlfn.ISFORMULA(A{P0}),_xlfn.ISFORMULA({C_PROJET}{P0}),_xlfn.ISFORMULA({C_F}{P0})),"","ATTENTION : l\'export a été collé dans l\'onglet Attachement et a effacé ses formules. Reprends le fichier vide et colle l\'export dans l\'onglet « Export », cellule A1.")',
+            Font(name=FT, size=11, bold=True, color='C00000'), align=Alignment(horizontal='center', vertical='center'), border=None)
+    at.merge_cells(f'A3:{der}3')
 
     # ---- récapitulatif par projet (colonnes A à N)
     titres = ['Projet', 'Agences', 'Nombre de tickets', 'Bonif tickets', 'Tickets retenus', 'Jours ouvrés',
@@ -460,6 +465,21 @@ def construire(sous_traitant, chemin):
         '_xlnm.Print_Area', localSheetId=0,
         attr_text=f'OFFSET(Attachement!$A$1,0,0,{P0 - 1}+SUMPRODUCT(--(Attachement!$A${P0}:$A${P1}<>"")),{DERNIERE_COL})')
     at.sheet_view.zoomScale = 90
+
+    # protection sans mot de passe : on ne peut pas coller l'export ici par erreur. Restent modifiables : le titre,
+    # les titres de colonnes (ligne des en-têtes), la bonif, la plus-value et les colonnes à remplir à la main.
+    libre = Protection(locked=False)
+    at['A1'].protection = libre
+    for lettre, _, _ in COLS:
+        at[f'{lettre}{R_T1}'].protection = libre
+    for r in range(P0, P1 + 1):
+        for col in (C_NBB, C_PV, 'K', 'L', 'M', 'U'):
+            at[f'{col}{r}'].protection = libre
+    at.protection.sheet = True
+    at.protection.autoFilter = False
+    at.protection.formatColumns = False
+    at.protection.formatRows = False
+    at.protection.formatCells = False
 
     wb.active = 0
     wb.calculation.fullCalcOnLoad = True
