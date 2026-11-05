@@ -12,10 +12,11 @@
 #   le forfait couvre les tickets classiques et les travaux de 8h à 18h (du lundi au vendredi hors jours fériés) ;
 #   en dehors, le ticket est sur devis et peut entraîner une plus-value, saisie à la main ;
 #   un ticket de 2h30 ou plus (dans les heures ouvrables) (Soldée - Début) est « À vérifier » : après vérification, le nombre
-#   de tickets bonifiés se saisit à la main et s'ajoute au nombre de tickets du projet.
+#   de tickets bonifiés se saisit à la main et s'ajoute au nombre de tickets du projet ;
+#   une malfaçon (N° qui commence par MAL, ou type qui contient MALFA) n'est pas un ticket : elle compte en IRIS, 50 € l'unité.
 import sys, datetime as dt, pathlib
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, Protection
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.workbook.defined_name import DefinedName
@@ -45,7 +46,7 @@ fin = Side(style='thin', color='A6A6A6')
 fort = Side(style='medium', color='000000')
 BORD = Border(top=fin, bottom=fin, left=fin, right=fin)
 fond = lambda c: PatternFill('solid', fgColor=c)
-GRIS, FONCE, VERT, JAUNE, SAISIE = 'BFBFBF', '767171', 'C6E0B4', 'FFFF00', 'FFF2CC'
+GRIS, FONCE, VERT, JAUNE, SAISIE, IRIS_FOND = 'BFBFBF', '767171', 'C6E0B4', 'FFFF00', 'FFF2CC', 'DDEBF7'
 centre = Alignment(horizontal='center', vertical='center', wrap_text=True)
 f9, f9b = Font(name=FT, size=9), Font(name=FT, size=9, bold=True)
 note = Font(name=FT, size=9, italic=True, color='595959')
@@ -54,12 +55,12 @@ note = Font(name=FT, size=9, italic=True, color='595959')
 COLS = [('A', 'N°', 20), ('B', 'Description', 42), ('C', 'Nom technicien', 18), ('D', 'Agence', 18),
         ('F', 'Client', 16), ('G', 'SITE', 18), ('H', 'Début', 15), ('I', 'Soldée', 15), ('J', 'Type inter.', 20),
         ('K', 'Commentaire facturation', 22), ('L', "Du matériel à t'il été utlisé?", 18), ('M', 'Cerfa / Plainte/ Constat', 18),
-        ('U', 'Commentaire', 24)]
-C_AGENCE, C_PROJET, C_DEB, C_CLO = 'D', 'E', 'H', 'I'
+        ('V', 'Commentaire', 24)]
+C_AGENCE, C_PROJET, C_DEB, C_CLO, C_TYPE = 'D', 'E', 'H', 'I', 'J'
 # NB Ticket : forfait, bonif ticket (saisie après vérification), durée, bonif proposée ; puis hors forfait sur devis
-C_F, C_NBB, C_DUR, C_BON, C_HF, C_MOT, C_PV = 'N', 'O', 'P', 'Q', 'R', 'S', 'T'
-C_AIDE, C_AIDE2, C_RET = 'V', 'W', 'X'   # colonnes cachées : début et fin en nombres, bonif retenue
-DERNIERE_COL = 21            # U
+C_F, C_NBB, C_DUR, C_BON, C_IRIS, C_HF, C_MOT, C_PV = 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'
+C_AIDE, C_AIDE2, C_RET, C_STAT = 'W', 'X', 'Y', 'Z'   # cachées : début et fin en nombres, bonif retenue, statut du ticket
+DERNIERE_COL = 22            # V
 A_VERIFIER, VERIFIE = 'À vérifier', 'Vérifié'
 
 
@@ -139,10 +140,10 @@ def construire(sous_traitant, chemin):
         rg.column_dimensions[col].width = w
     cellule(rg, 'A1', "Réglages de l'attachement", Font(name=FT, size=14, bold=True), border=None)
     cellule(rg, 'A2', "Chaque mois : 1) efface l'onglet Export (Ctrl+A puis Suppr) ; 2) colle en A1 de l'onglet Export (jamais dans "
-            "l'onglet Attachement, qui est protégé) l'export des "
+            "l'onglet Attachement) l'export des "
             "interventions du sous-traitant, avec sa ligne de titres ; 3) l'onglet Attachement se remplit et calcule tout seul, "
             "projet par projet ; 4) vérifie les tickets de 2h30 ou plus (case orange) et saisis le nombre de tickets bonifiés "
-            "dans la case BONIF TICKET (colonne O) ; 5) pour un ticket hors forfait sur devis, saisis la plus-value colonne T ; "
+            "dans la case BONIF TICKET (colonne O) ; 5) pour un ticket hors forfait sur devis, saisis la plus-value colonne U ; "
             "6) le projet est trouvé tout seul à partir de l'agence ; si une agence apparaît « Agence inconnue », ajoute un mot "
             "qui la reconnaît dans le tableau « Agences de l'export » ci-dessous ; "
             "7) enregistre sous « Attachement <sous-traitant> <mois>.xlsx » et envoie-le. Pars chaque mois du fichier vide : "
@@ -164,8 +165,11 @@ def construire(sous_traitant, chemin):
         (11, 'WE', 'Week-ends et jours fériés hors forfait', 'OUI', None, 'OUI ou NON.'),
         (12, 'BONIF', 'Bonif de ticket à partir de', dt.time(2, 30), '[h]:mm',
          'Durée Soldée - Début. Le ticket est alors « À vérifier ».'),
-        (13, 'LIGNE_TITRES', "Ligne des titres dans l'onglet Export", 1, '0', "Si l'export a des lignes au-dessus de ses titres."),
-        (14, 'MOIS_TXT', 'Mois en lettres (calculé)',
+        (13, 'PRIX_IRIS', "Prix d'une malfaçon (IRIS)", 50, EUR, "Les malfaçons ne comptent pas comme tickets : elles sont payées à l'unité."),
+        (14, 'MALF_NUM', 'Malfaçon si le N° commence par', 'MAL', None, 'Ex. MAL-20260722T0465#1.'),
+        (15, 'MALF_TYPE', 'ou si le Type inter. contient', 'MALFA', None, 'Ex. MAINTENANCE - REPRISE MALFAÇON.'),
+        (16, 'LIGNE_TITRES', "Ligne des titres dans l'onglet Export", 1, '0', "Si l'export a des lignes au-dessus de ses titres."),
+        (17, 'MOIS_TXT', 'Mois en lettres (calculé)',
          '=IF(MOIS="","",CHOOSE(MONTH(MOIS),"JANVIER","FÉVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOÛT","SEPTEMBRE",'
          '"OCTOBRE","NOVEMBRE","DÉCEMBRE")&" "&YEAR(MOIS))', None, ''),
     ]
@@ -181,7 +185,7 @@ def construire(sous_traitant, chemin):
     dv.add('B11')
 
     # projets
-    r = 16
+    r = 19
     cellule(rg, f'A{r}', "Projets : un forfait d'équipes par projet", Font(name=FT, size=12, bold=True), border=None)
     r += 1
     for col, t in zip('ABCD', ['Code projet', 'Agences', 'Base mensuelle par équipe', 'Tickets demandés par jour et par équipe']):
@@ -266,12 +270,14 @@ def construire(sous_traitant, chemin):
 
     # ================================================================== Attachement
     larg = {l: w for l, _, w in COLS}
-    larg.update({C_PROJET: 14, C_F: 13, C_HF: 13, C_MOT: 24, C_DUR: 10, C_BON: 13, C_NBB: 13, C_PV: 15, C_AIDE: 14, C_AIDE2: 14, C_RET: 8})
+    larg.update({C_PROJET: 14, C_F: 13, C_NBB: 13, C_DUR: 16, C_BON: 13, C_IRIS: 11, C_HF: 13, C_MOT: 24, C_PV: 15,
+                 C_AIDE: 14, C_AIDE2: 14, C_RET: 8, C_STAT: 14})
     for l, w in larg.items():
         at.column_dimensions[l].width = w
     at.column_dimensions[C_AIDE].hidden = True
     at.column_dimensions[C_AIDE2].hidden = True
     at.column_dimensions[C_RET].hidden = True
+    at.column_dimensions[C_STAT].hidden = True
     der = L(DERNIERE_COL)
 
     cellule(at, 'A1', 'SUIVI MAINTENANCE RESEAU 54\nLOSANGE', Font(name=FT, size=12, bold=True, color='FF0000'), align=centre, border=None)
@@ -298,19 +304,20 @@ def construire(sous_traitant, chemin):
             Font(name=FT, size=11, bold=True, color='C00000'), align=Alignment(horizontal='center', vertical='center'), border=None)
     at.merge_cells(f'A3:{der}3')
 
-    # ---- récapitulatif par projet (colonnes A à N)
+    # ---- récapitulatif par projet (colonnes A à P)
     titres = ['Projet', 'Agences', 'Nombre de tickets', 'Bonif tickets', 'Tickets retenus', 'Jours ouvrés',
               'Tickets demandés / jour / équipe', 'Tickets par jour', "NOMBRE D'ÉQUIPES", 'Base mensuelle / équipe', 'Montant forfait',
-              'Tickets hors forfait (sur devis)', 'Plus-values sur devis', 'TOTAL HT']
+              'IRIS (malfaçons)', 'Montant IRIS', 'Tickets hors forfait (sur devis)', 'Plus-values sur devis', 'TOTAL HT']
     for i, t in enumerate(titres):
-        cellule(at, f'{L(i + 1)}{R_ENT}', t, Font(name=FT, size=9, bold=True), fond(JAUNE if t == "NOMBRE D'ÉQUIPES" else VERT), align=centre)
-    cellule(at, f'O{R_ENT}', 'Tickets retenus = nombre de tickets + bonif tickets. Équipes = tickets retenus ÷ jours ÷ tickets demandés.',
-            note, align=Alignment(wrap_text=True, vertical='center'), border=None)
-    at.merge_cells(f'O{R_ENT}:{der}{R_ENT}')
+        coul = JAUNE if t == "NOMBRE D'ÉQUIPES" else IRIS_FOND if t.startswith(('IRIS', 'Montant IRIS')) else VERT
+        cellule(at, f'{L(i + 1)}{R_ENT}', t, Font(name=FT, size=9, bold=True), fond(coul), align=centre)
+    cellule(at, f'Q{R_ENT}', 'Tickets retenus = nombre de tickets + bonif tickets. Équipes = tickets retenus ÷ jours ÷ tickets demandés. '
+            'TOTAL HT = montant forfait + montant IRIS + plus-values.', note, align=Alignment(wrap_text=True, vertical='center'), border=None)
+    at.merge_cells(f'Q{R_ENT}:{der}{R_ENT}')
     at.row_dimensions[R_ENT].height = 36
 
     proj, forf, hf, mot, pv = rng(C_PROJET), rng(C_F), rng(C_HF), rng(C_MOT), rng(C_PV)
-    bon, nbb, ret = rng(C_BON), rng(C_NBB), rng(C_RET)
+    bon, nbb, ret, iris = rng(C_BON), rng(C_NBB), rng(C_RET), rng(C_IRIS)
     v10, v10b = Font(name=FT, size=10), Font(name=FT, size=10, bold=True)
     gros = Font(name=FT, size=13, bold=True)
     mil = Alignment(horizontal='center', vertical='center')
@@ -327,9 +334,11 @@ def construire(sous_traitant, chemin):
         cellule(at, f'I{r}', f'=ROUND(IF(AND(F{r}>0,G{r}>0),E{r}/F{r}/G{r},0),2)', gros, fond(JAUNE), '0.00', mil)
         cellule(at, f'J{r}', f"='Réglages'!C{lp}", v10, fmt=EUR)
         cellule(at, f'K{r}', f'=I{r}*J{r}', v10b, fmt=EUR)
-        cellule(at, f'L{r}', f'=COUNTIFS({proj},$A{r},{hf},1)', v10, fmt='0')
-        cellule(at, f'M{r}', f'=SUMIFS({pv},{proj},$A{r},{hf},1)', v10, fmt=EUR)
-        cellule(at, f'N{r}', f'=K{r}+M{r}', v10b, fmt=EUR)
+        cellule(at, f'L{r}', f'=COUNTIFS({proj},$A{r},{iris},1)', v10, fmt='0')
+        cellule(at, f'M{r}', f'=L{r}*PRIX_IRIS', v10b, fmt=EUR)
+        cellule(at, f'N{r}', f'=COUNTIFS({proj},$A{r},{hf},1)', v10, fmt='0')
+        cellule(at, f'O{r}', f'=SUMIFS({pv},{proj},$A{r},{hf},1)', v10, fmt=EUR)
+        cellule(at, f'P{r}', f'=K{r}+M{r}+O{r}', v10b, fmt=EUR)
         at.row_dimensions[r].height = 22
     r = R_INC
     inc = lambda crit: f'COUNTIFS({proj},"{INCONNUE}",{crit},1)+COUNTIFS({proj},"{SANS_AGENCE}",{crit},1)'
@@ -339,29 +348,30 @@ def construire(sous_traitant, chemin):
     cellule(at, f'C{r}', '=' + inc(forf), v10, fmt='0')
     cellule(at, f'D{r}', f'=SUMIFS({ret},{proj},"{INCONNUE}")+SUMIFS({ret},{proj},"{SANS_AGENCE}")', v10, fmt='0')
     cellule(at, f'E{r}', f'=C{r}+D{r}', v10, fmt='0')
-    cellule(at, f'L{r}', '=' + inc(hf), v10, fmt='0')
-    for col in 'FGHIJKMN':
+    cellule(at, f'L{r}', '=' + inc(iris), v10, fmt='0')
+    cellule(at, f'N{r}', '=' + inc(hf), v10, fmt='0')
+    for col in 'FGHIJKMOP':
         cellule(at, f'{col}{r}', None, v10)
-    at.conditional_formatting.add(f'A{r}:N{r}', FormulaRule(formula=[f'$E${r}+$L${r}>0'], fill=fond('FFC7CE'), font=Font(color='9C0006', bold=True)))
-    at.conditional_formatting.add(f'A{r}:N{r}', FormulaRule(formula=[f'$E${r}+$L${r}=0'], font=Font(color='A6A6A6')))
+    at.conditional_formatting.add(f'A{r}:P{r}', FormulaRule(formula=[f'$E${r}+$L${r}+$N${r}>0'], fill=fond('FFC7CE'), font=Font(color='9C0006', bold=True)))
+    at.conditional_formatting.add(f'A{r}:P{r}', FormulaRule(formula=[f'$E${r}+$L${r}+$N${r}=0'], font=Font(color='A6A6A6')))
     r = R_TOT
     cellule(at, f'A{r}', 'TOTAL', Font(name=FT, size=12, bold=True, color='FFFFFF'), fond(FONCE), align=Alignment(horizontal='right', vertical='center'))
     cellule(at, f'B{r}', None, fill=fond(FONCE))
     at.merge_cells(f'A{r}:B{r}')
     som = lambda col, a=R_P1, b=R_INC: f'=SUM({col}{a}:{col}{b})'
-    for col in 'CDEL':
+    for col in 'CDELN':
         cellule(at, f'{col}{r}', som(col), v10b, fmt='0')
     for col in 'FGHJ':
         cellule(at, f'{col}{r}', None)
     cellule(at, f'I{r}', som('I', b=R_INC - 1), gros, fond(JAUNE), '0.00', mil)
-    for col in 'KM':
+    for col in 'KMO':
         cellule(at, f'{col}{r}', som(col, b=R_INC - 1), v10b, fmt=EUR)
-    cellule(at, f'N{r}', som('N', b=R_INC - 1), gros, fond(JAUNE), EUR, mil)
+    cellule(at, f'P{r}', som('P', b=R_INC - 1), gros, fond(JAUNE), EUR, mil)
     at.row_dimensions[r].height = 28
     a_verifier = f'COUNTIFS({bon},">0",{nbb},"")'
-    cellule(at, f'O{r}', f'=IF({a_verifier}=0,"",{a_verifier}&" ticket(s) de "&TEXT(BONIF,"hh:mm")&" ou plus à vérifier : bonif à saisir colonne O (BONIF TICKET)")',
+    cellule(at, f'Q{r}', f'=IF({a_verifier}=0,"",{a_verifier}&" ticket(s) de "&TEXT(BONIF,"hh:mm")&" ou plus à vérifier : bonif à saisir colonne {C_NBB} (BONIF TICKET)")',
             Font(name=FT, size=10, bold=True, color='9C5700'), align=Alignment(wrap_text=True, vertical='center'), border=None)
-    at.merge_cells(f'O{r}:{der}{r}')
+    at.merge_cells(f'Q{r}:{der}{r}')
 
     doublons = f'COUNTIF({mot},"Doublon")'
     autres = f'COUNTIF({mot},"Autre mois")'
@@ -370,11 +380,12 @@ def construire(sous_traitant, chemin):
             '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Un ticket de "&TEXT(BONIF,"hh:mm")&" ou plus (Soldée - Début) '
             'compte un ticket de plus par tranche de "&TEXT(BONIF,"hh:mm")&" (bonif saisie après vérification colonne O). Nombre d\'équipes = tickets retenus du projet ÷ jours ouvrés ÷ '
             'tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle. '
-            'En dehors des heures, le ticket est sur devis et peut entraîner une plus-value (colonne T). Un même N° de ticket n\'est compté qu\'une fois."'
+            'En dehors des heures, le ticket est sur devis et peut entraîner une plus-value (colonne U). Les malfaçons ne comptent pas comme tickets : '
+            'elles sont payées en IRIS, "&TEXT(PRIX_IRIS,"0")&" € l\'unité. Un même N° de ticket n\'est compté qu\'une fois."'
             f'&IF({doublons}+{autres}=0,""," Non comptés ce mois-ci : "&{doublons}&" doublon(s), "&{autres}&" ticket(s) d\'un autre mois.")',
             note, align=Alignment(wrap_text=True, vertical='center'), border=None)
     at.merge_cells(f'A{R_NOTE}:{der}{R_NOTE}')
-    at.row_dimensions[R_NOTE].height = 36
+    at.row_dimensions[R_NOTE].height = 40
 
     # ---- en-têtes de la liste des tickets
     ent = Font(name=FT, size=9, bold=True)
@@ -394,6 +405,9 @@ def construire(sous_traitant, chemin):
         for k in range(openpyxl.utils.column_index_from_string(debut) + 1, openpyxl.utils.column_index_from_string(fin_) + 1):
             cellule(at, f'{L(k)}{R_T1}', None, fill=fond(coul))
         at.merge_cells(f'{debut}{R_T1}:{fin_}{R_T1}')
+    cellule(at, f'{C_IRIS}{R_T1}', 'IRIS (malfaçon)', ent, fond(IRIS_FOND), align=centre)
+    cellule(at, f'{C_IRIS}{r2}', None, fill=fond(IRIS_FOND))
+    at.merge_cells(f'{C_IRIS}{R_T1}:{C_IRIS}{r2}')
     sous = [(C_NBB, 'BONIF TICKET', JAUNE),
             (C_DUR, 'Durée', VERT), (C_BON, '="Bonif proposée (+1 par "&TEXT(BONIF,"hh:mm")&")"', VERT),
             (C_HF, 'HORS FORFAIT', 'F8CBAD'), (C_MOT, 'Motif', 'F8CBAD'), (C_PV, 'Plus-value (€)', 'F8CBAD')]
@@ -428,17 +442,20 @@ def construire(sous_traitant, chemin):
         at[f'{C_AIDE2}{r}'] = en_nombre(C_CLO, r)
         d = f'${C_AIDE}{r}'
         hm = f'ROUND(MOD({d},1)*1440,0)'
-        cel(at, f'{C_MOT}{r}',
-                f'=IF($A{r}="","",IF(COUNTIF($A${P0}:$A{r},$A{r})>1,"Doublon",IF({d}="","",'
-                f'IF(AND(MOIS<>"",OR({d}<MOIS,{d}>=EOMONTH(MOIS,0)+1)),"Autre mois",'
-                f'IF(AND(WE="OUI",WEEKDAY({d},2)=6),"Samedi",IF(AND(WE="OUI",WEEKDAY({d},2)=7),"Dimanche",'
-                f'IF(AND(WE="OUI",COUNTIF(FERIES,INT({d}))>0),"Jour férié",'
-                f'IF({hm}<ROUND(HDEB*1440,0),"Avant "&TEXT(HDEB,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")",'
-                f'IF({hm}>ROUND(HFIN*1440,0),"Après "&TEXT(HFIN,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")","")))))))))',
-                f9, align=Alignment(vertical='center'))
-        m = f'${C_MOT}{r}'
-        cel(at, f'{C_F}{r}', f'=IF($A{r}="","",IF({m}="",1,""))', f9, align=mil)
-        cel(at, f'{C_HF}{r}', f'=IF(OR($A{r}="",{m}="",{m}="Doublon",{m}="Autre mois"),"",1)', f9, align=mil)
+        malf = (f'OR(AND(MALF_NUM<>"",LEFT($A{r},LEN(MALF_NUM))=MALF_NUM),'
+                f'AND(MALF_TYPE<>"",ISNUMBER(SEARCH(MALF_TYPE,${C_TYPE}{r}))))')
+        at[f'{C_STAT}{r}'] = (
+            f'=IF($A{r}="","",IF(COUNTIF($A${P0}:$A{r},$A{r})>1,"Doublon",'
+            f'IF(AND({d}<>"",MOIS<>"",OR({d}<MOIS,{d}>=EOMONTH(MOIS,0)+1)),"Autre mois",IF({malf},"IRIS",IF({d}="","",'
+            f'IF(AND(WE="OUI",WEEKDAY({d},2)=6),"Samedi",IF(AND(WE="OUI",WEEKDAY({d},2)=7),"Dimanche",'
+            f'IF(AND(WE="OUI",COUNTIF(FERIES,INT({d}))>0),"Jour férié",'
+            f'IF({hm}<ROUND(HDEB*1440,0),"Avant "&TEXT(HDEB,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")",'
+            f'IF({hm}>ROUND(HFIN*1440,0),"Après "&TEXT(HFIN,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")",""))))))))))')
+        st = f'${C_STAT}{r}'
+        cel(at, f'{C_MOT}{r}', f'=IF(OR({st}="",{st}="IRIS"),"",{st})', f9, align=Alignment(vertical='center'))
+        cel(at, f'{C_F}{r}', f'=IF($A{r}="","",IF({st}="",1,""))', f9, align=mil)
+        cel(at, f'{C_IRIS}{r}', f'=IF({st}="IRIS",1,"")', f9b, align=mil)
+        cel(at, f'{C_HF}{r}', f'=IF(OR($A{r}="",{st}="",{st}="Doublon",{st}="Autre mois",{st}="IRIS"),"",1)', f9, align=mil)
         fin_ = f'${C_AIDE2}{r}'
         cel(at, f'{C_DUR}{r}', f'=IF(OR({d}="",{fin_}=""),"",IF({fin_}>{d},{fin_}-{d},""))', f9, fmt='[h]:mm', align=mil)
         duree = f'ROUND(${C_DUR}{r}*1440,0)'
@@ -453,6 +470,8 @@ def construire(sous_traitant, chemin):
     plage = f'A{P0}:{der}{P1}'
     at.conditional_formatting.add(f'{C_HF}{P0}:{C_MOT}{P1}', FormulaRule(
         formula=[f'${C_HF}{P0}=1'], fill=fond('FFC7CE'), font=Font(color='9C0006', bold=True)))
+    at.conditional_formatting.add(f'{C_IRIS}{P0}:{C_IRIS}{P1}', FormulaRule(
+        formula=[f'${C_IRIS}{P0}=1'], fill=fond(IRIS_FOND), font=Font(color='1F4E79', bold=True)))
     # bonif : orange tant qu'elle n'est pas validée, verte une fois validée
     at.conditional_formatting.add(f'{C_BON}{P0}:{C_BON}{P1}', FormulaRule(
         formula=[f'AND(${C_BON}{P0}<>"",${C_NBB}{P0}="")'], fill=fond('FFEB9C'), font=Font(color='9C5700', bold=True)))
@@ -492,21 +511,6 @@ def construire(sous_traitant, chemin):
         '_xlnm.Print_Area', localSheetId=0,
         attr_text=f'OFFSET(Attachement!$A$1,0,0,{P0 - 1}+SUMPRODUCT(--(Attachement!$A${P0}:$A${P1}<>"")),{DERNIERE_COL})')
     at.sheet_view.zoomScale = 90
-
-    # protection sans mot de passe : on ne peut pas coller l'export ici par erreur. Restent modifiables : le titre,
-    # les titres de colonnes (ligne des en-têtes), la bonif, la plus-value et les colonnes à remplir à la main.
-    libre = Protection(locked=False)
-    at['A1'].protection = libre
-    for lettre, _, _ in COLS:
-        at[f'{lettre}{R_T1}'].protection = libre
-    for r in range(P0, P1 + 1):
-        for col in (C_NBB, C_PV, 'K', 'L', 'M', 'U'):
-            at[f'{col}{r}'].protection = libre
-    at.protection.sheet = True
-    at.protection.autoFilter = False
-    at.protection.formatColumns = False
-    at.protection.formatRows = False
-    at.protection.formatCells = False
 
     wb.active = 0
     wb.calculation.fullCalcOnLoad = True
