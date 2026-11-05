@@ -65,7 +65,8 @@ C_SANS_PROD = ('L', 'M')     # matériel et CERFA : jamais sur un projet payé �
 # IRRIS ; hors forfait sur devis
 C_F, C_NBB, C_DUR, C_BON, C_VAL, C_VCOM = 'N', 'O', 'P', 'Q', 'R', 'S'
 C_IRIS, C_HF, C_MOT, C_PV = 'T', 'U', 'V', 'W'
-C_AIDE, C_AIDE2, C_RET, C_STAT = 'Y', 'Z', 'AA', 'AB'   # cachées : début et fin en nombres, bonif retenue, statut du ticket
+C_AIDE, C_AIDE2, C_RET, C_STAT, C_PROD = 'Y', 'Z', 'AA', 'AB', 'AC'   # cachées : début et fin en nombres, bonif retenue,
+                                                                  # statut du ticket, ticket d'un projet payé à la prod
 DERNIERE_COL = 24            # X
 A_VERIFIER, VERIFIE = 'À vérifier', 'Vérifié'
 
@@ -282,13 +283,14 @@ def construire(sous_traitant, chemin):
     # ================================================================== Attachement
     larg = {l: w for l, _, w in COLS}
     larg.update({C_PROJET: 14, C_F: 13, C_NBB: 14, C_DUR: 16, C_BON: 13, C_VAL: 12, C_VCOM: 26, C_IRIS: 11, C_HF: 13, C_MOT: 24, C_PV: 15,
-                 C_AIDE: 14, C_AIDE2: 14, C_RET: 8, C_STAT: 14})
+                 C_AIDE: 14, C_AIDE2: 14, C_RET: 8, C_STAT: 14, C_PROD: 6})
     for l, w in larg.items():
         at.column_dimensions[l].width = w
     at.column_dimensions[C_AIDE].hidden = True
     at.column_dimensions[C_AIDE2].hidden = True
     at.column_dimensions[C_RET].hidden = True
     at.column_dimensions[C_STAT].hidden = True
+    at.column_dimensions[C_PROD].hidden = True
     der = L(DERNIERE_COL)
 
     cellule(at, 'A1', 'SUIVI MAINTENANCE RESEAU 54\nLOSANGE', Font(name=FT, size=12, bold=True, color='FF0000'), align=centre, border=None)
@@ -393,7 +395,7 @@ def construire(sous_traitant, chemin):
             '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Un ticket de "&TEXT(BONIF,"hh:mm")&" ou plus (Soldée - Début) '
             'compte un ticket de plus par tranche de "&TEXT(BONIF,"hh:mm")&" : bonif demandée par le sous-traitant (colonne O), comptée seulement si elle est validée OUI (colonne R). Nombre d\'équipes = tickets retenus du projet ÷ jours ouvrés ÷ '
             'tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle ; '
-            'projet payé à la prod (prix par prod dans Réglages) : montant = tickets retenus × prix par prod, sans matériel ni CERFA. '
+            'projet payé à la prod (prix par prod dans Réglages) : montant = nombre de prods × prix par prod, quelle que soit l\'heure, sans bonif, sans matériel ni CERFA. '
             'En dehors des heures, le ticket est sur devis et peut entraîner une plus-value (colonne W). Les malfaçons ne comptent pas comme tickets : '
             'elles sont payées en IRRIS, "&TEXT(PRIX_IRIS,"0")&" € l\'unité. Un même N° de ticket n\'est compté qu\'une fois."'
             f'&IF({doublons}+{autres}=0,""," Non comptés ce mois-ci : "&{doublons}&" doublon(s), "&{autres}&" ticket(s) d\'un autre mois.")',
@@ -442,8 +444,7 @@ def construire(sous_traitant, chemin):
         if lettre == 'A':
             return f'=IF({rc}=0,"",IF({src}="","",{src}))'
         if lettre in C_SANS_PROD:          # jamais de matériel ni de CERFA sur un projet payé à la prod
-            prod = f'COUNTIFS(PROJ_CODE,${C_PROJET}{r},PROJ_PRIX,">0")>0'
-            return f'=IF($A{r}="","",IF({prod},"—",IF({rc}=0,"",IF({src}="","",{src}))))'
+            return f'=IF($A{r}="","",IF(${C_PROD}{r}=1,"—",IF({rc}=0,"",IF({src}="","",{src}))))'
         return f'=IF(OR($A{r}="",{rc}=0),"",IF({src}="","",{src}))'
 
     en_nombre = lambda col, r: f'=IF($A{r}="","",IF(ISNUMBER(${col}{r}),${col}{r},IFERROR(--${col}{r},"")))'
@@ -464,9 +465,10 @@ def construire(sous_traitant, chemin):
         hm = f'ROUND(MOD({d},1)*1440,0)'
         malf = (f'OR(AND(MALF_NUM<>"",LEFT($A{r},LEN(MALF_NUM))=MALF_NUM),'
                 f'AND(MALF_TYPE<>"",ISNUMBER(SEARCH(MALF_TYPE,${C_TYPE}{r}))))')
+        at[f'{C_PROD}{r}'] = f'=IF($A{r}="",0,IF(COUNTIFS(PROJ_CODE,${C_PROJET}{r},PROJ_PRIX,">0")>0,1,0))'
         at[f'{C_STAT}{r}'] = (
             f'=IF($A{r}="","",IF(COUNTIF($A${P0}:$A{r},$A{r})>1,"Doublon",'
-            f'IF(AND({d}<>"",MOIS<>"",OR({d}<MOIS,{d}>=EOMONTH(MOIS,0)+1)),"Autre mois",IF({malf},"IRIS",IF({d}="","",'
+            f'IF(AND({d}<>"",MOIS<>"",OR({d}<MOIS,{d}>=EOMONTH(MOIS,0)+1)),"Autre mois",IF({malf},"IRIS",IF(OR({d}="",${C_PROD}{r}=1),"",'
             f'IF(AND(WE="OUI",WEEKDAY({d},2)=6),"Samedi",IF(AND(WE="OUI",WEEKDAY({d},2)=7),"Dimanche",'
             f'IF(AND(WE="OUI",COUNTIF(FERIES,INT({d}))>0),"Jour férié",'
             f'IF({hm}<ROUND(HDEB*1440,0),"Avant "&TEXT(HDEB,"hh:mm")&" (début "&TEXT({hm}/1440,"hh:mm")&")",'
@@ -480,13 +482,13 @@ def construire(sous_traitant, chemin):
         cel(at, f'{C_DUR}{r}', f'=IF(OR({d}="",{fin_}=""),"",IF({fin_}>{d},{fin_}-{d},""))', f9, fmt='[h]:mm', align=mil)
         duree = f'ROUND(${C_DUR}{r}*1440,0)'
         cel(at, f'{C_BON}{r}',
-                f'=IF(OR(${C_F}{r}<>1,${C_DUR}{r}=""),"",IFERROR(IF({duree}>=ROUND(BONIF*1440,0),INT({duree}/ROUND(BONIF*1440,0)),""),""))',
+                f'=IF(OR(${C_F}{r}<>1,${C_PROD}{r}=1,${C_DUR}{r}=""),"",IFERROR(IF({duree}>=ROUND(BONIF*1440,0),INT({duree}/ROUND(BONIF*1440,0)),""),""))',
                 f9b, fmt='"+"0', align=mil)
         cel(at, f'{C_NBB}{r}', None, f9b, align=mil)
         cel(at, f'{C_VAL}{r}', None, f9b, align=mil)
         cel(at, f'{C_VCOM}{r}', None, f9, align=Alignment(vertical='center', wrap_text=True))
         v, ok = f'${C_NBB}{r}', f'${C_VAL}{r}'
-        at[f'{C_RET}{r}'] = f'=IF(AND(${C_F}{r}=1,ISNUMBER({v}),UPPER({ok})="OUI"),{v},0)'
+        at[f'{C_RET}{r}'] = f'=IF(AND(${C_F}{r}=1,${C_PROD}{r}<>1,ISNUMBER({v}),UPPER({ok})="OUI"),{v},0)'
         cel(at, f'{C_PV}{r}', None, f9b, fmt=EUR)
 
     plage = f'A{P0}:{der}{P1}'
