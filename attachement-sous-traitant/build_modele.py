@@ -11,7 +11,7 @@
 #   montant forfait du projet = équipes × 12 000 € ;
 #   le forfait couvre les tickets classiques et les travaux de 8h à 18h (du lundi au vendredi hors jours fériés) ;
 #   en dehors, le ticket est sur devis et peut entraîner une plus-value, saisie à la main ;
-#   un ticket de 2h30 ou plus (dans les heures ouvrables) (Clôturée - Date de début) est « À vérifier » : après vérification, le nombre
+#   un ticket de 2h30 ou plus (dans les heures ouvrables) (Soldée - Début) est « À vérifier » : après vérification, le nombre
 #   de tickets bonifiés se saisit à la main et s'ajoute au nombre de tickets du projet.
 import sys, datetime as dt, pathlib
 import openpyxl
@@ -36,9 +36,9 @@ PROJETS = [
 LIGNES_AGENCES = 16          # place dans le tableau des mots qui reconnaissent les agences
 INCONNUE, SANS_AGENCE = 'Agence inconnue', 'Sans agence'
 # autres titres acceptés dans l'export si le titre exact n'y est pas (* = n'importe quels caractères)
-AUTRES_TITRES = {'A': ('N°*', 'Num*'), 'B': ('*descri*', ''), 'C': ('*quipe*', ''), 'D': ('*agence*', ''),
-                 'F': ('*client*', ''), 'G': ('*site*', ''), 'H': ('*début*', '*debut*'), 'I': ('*clôtur*', '*clotur*'),
-                 'J': ('*type*', ''), 'K': ('*factur*', ''), 'L': ('*mat*riel*', ''), 'M': ('*cerfa*', '*assurance*')}
+AUTRES_TITRES = {'A': ('N°*', 'Num*'), 'B': ('*descri*', ''), 'C': ('*techn*', '*quipe*'), 'D': ('*agence*', ''),
+                 'F': ('*client*', ''), 'G': ('*site*', ''), 'H': ('*d*but*', ''), 'I': ('*sold*', '*cl*tur*'),
+                 'J': ('*type*', ''), 'K': ('*factur*', ''), 'L': ('*mat*riel*', ''), 'M': ('*cerfa*', '*constat*')}
 
 FT = 'Calibri'
 fin = Side(style='thin', color='A6A6A6')
@@ -51,9 +51,9 @@ f9, f9b = Font(name=FT, size=9), Font(name=FT, size=9, bold=True)
 note = Font(name=FT, size=9, italic=True, color='595959')
 
 # Colonnes de la liste des tickets. Celles avec un titre sont lues dans l'export (par leur titre).
-COLS = [('A', 'N°', 20), ('B', 'Description', 42), ('C', 'EQUIPE', 16), ('D', 'Agence', 18),
-        ('F', 'Client', 16), ('G', 'SITE', 18), ('H', 'Date de début', 15), ('I', 'Clôturée', 15), ('J', 'Type inter.', 20),
-        ('K', 'Commentaire facturation', 22), ('L', 'Materiel utilisé', 16), ('M', 'CERFA/ASSURANCE', 16),
+COLS = [('A', 'N°', 20), ('B', 'Description', 42), ('C', 'Nom technicien', 18), ('D', 'Agence', 18),
+        ('F', 'Client', 16), ('G', 'SITE', 18), ('H', 'Début', 15), ('I', 'Soldée', 15), ('J', 'Type inter.', 20),
+        ('K', 'Commentaire facturation', 22), ('L', "Du matériel à t'il été utlisé?", 18), ('M', 'Cerfa / Plainte/ Constat', 18),
         ('U', 'Commentaire', 24)]
 C_AGENCE, C_PROJET, C_DEB, C_CLO = 'D', 'E', 'H', 'I'
 # NB Ticket : forfait, bonif ticket (saisie après vérification), durée, bonif proposée ; puis hors forfait sur devis
@@ -163,7 +163,7 @@ def construire(sous_traitant, chemin):
         (10, 'HFIN', 'Fin des heures ouvrables', dt.time(18, 0), 'hh:mm', '18:00 pile reste au forfait.'),
         (11, 'WE', 'Week-ends et jours fériés hors forfait', 'OUI', None, 'OUI ou NON.'),
         (12, 'BONIF', 'Bonif de ticket à partir de', dt.time(2, 30), '[h]:mm',
-         'Durée Clôturée - Date de début. Le ticket est alors « À vérifier ».'),
+         'Durée Soldée - Début. Le ticket est alors « À vérifier ».'),
         (13, 'LIGNE_TITRES', "Ligne des titres dans l'onglet Export", 1, '0', "Si l'export a des lignes au-dessus de ses titres."),
         (14, 'MOIS_TXT', 'Mois en lettres (calculé)',
          '=IF(MOIS="","",CHOOSE(MONTH(MOIS),"JANVIER","FÉVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOÛT","SEPTEMBRE",'
@@ -247,7 +247,7 @@ def construire(sous_traitant, chemin):
     rg.conditional_formatting.add(f'F{rang_col["A"]}:F{r}', FormulaRule(formula=[f'$E{rang_col["A"]}=0'], font=Font(color='C00000', bold=True)))
     r += 1
     cellule(rg, f'A{r}', f"Si une colonne est absente, écris dans l'onglet Attachement (ligne {R_T1}) le titre exact de la colonne de l'export, "
-            "ou un autre titre accepté ici (* remplace n'importe quels caractères : *début* trouve « Date de début intervention »).",
+            "ou un autre titre accepté ici (* remplace n'importe quels caractères : *sold* trouve « Date soldée »).",
             note, border=None)
     rg.column_dimensions['E'].width = 14
     rg.column_dimensions['F'].width = 40
@@ -286,9 +286,9 @@ def construire(sous_traitant, chemin):
     at.row_dimensions[3].height = 18
     # alerte si l'export a été collé dans cet onglet (les formules des tickets ont été effacées)
     # sinon, alerte si les dates manquent (pas de mois, pas de jours ouvrés, pas de hors forfait ni de bonif)
-    msg_deb = ("ATTENTION : la colonne « Date de début » n'est pas trouvée dans l'export : mois, jours ouvrés, hors forfait et bonif "
+    msg_deb = ("ATTENTION : la colonne « Début » n'est pas trouvée dans l'export : mois, jours ouvrés, hors forfait et bonif "
                f"ne peuvent pas être calculés. Écris en {C_DEB}{R_T1} le titre exact de cette colonne dans l'export (voir l'onglet Réglages).")
-    msg_fin = ("ATTENTION : la colonne « Clôturée » n'est pas trouvée dans l'export : la durée et la bonif ne peuvent pas être calculées. "
+    msg_fin = ("ATTENTION : la colonne « Soldée » n'est pas trouvée dans l'export : la durée et la bonif ne peuvent pas être calculées. "
                f"Écris en {C_CLO}{R_T1} le titre exact de cette colonne dans l'export (voir l'onglet Réglages).")
     msg_jours = "ATTENTION : jours ouvrés = 0. Tape le mois dans l'onglet Réglages (Mois de l'attachement, ex. 01/10/2026)."
     q = lambda t: '"' + t.replace('"', '""') + '"'
@@ -367,7 +367,7 @@ def construire(sous_traitant, chemin):
     autres = f'COUNTIF({mot},"Autre mois")'
     cellule(at, f'A{R_NOTE}',
             '="Forfait par projet : tickets classiques et travaux commencés entre "&TEXT(HDEB,"hh:mm")&" et "&TEXT(HFIN,"hh:mm")'
-            '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Un ticket de "&TEXT(BONIF,"hh:mm")&" ou plus (Clôturée - Date de début) '
+            '&IF(WE="OUI",", du lundi au vendredi hors jours fériés","")&". Un ticket de "&TEXT(BONIF,"hh:mm")&" ou plus (Soldée - Début) '
             'compte un ticket de plus par tranche de "&TEXT(BONIF,"hh:mm")&" (bonif saisie après vérification colonne O). Nombre d\'équipes = tickets retenus du projet ÷ jours ouvrés ÷ '
             'tickets demandés par jour et par équipe (arrondi au centième) ; montant forfait = nombre d\'équipes × base mensuelle. '
             'En dehors des heures, le ticket est sur devis et peut entraîner une plus-value (colonne T). Un même N° de ticket n\'est compté qu\'une fois."'
