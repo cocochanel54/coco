@@ -32,9 +32,9 @@ NOUVEAU_H = 24          # un ticket à planifier reste « nouveau » (violet sur
 # (souvent 3 mois) : c'est ce calcul qui sert pour les retards et les priorités.
 #   [4H HO] / [8H HO] dans la description : 4 ou 8 heures ouvrées
 #   « OTR 5J OUVRES » écrit dans la description : ce nombre de jours ouvrés
-#   Niveau 1 : 4 heures (24 h/24) · Niveau 2 hors RDV client : 1 jour ouvré · Niveau 3 : 6 jours ouvrés · Niveau 4 : 10 jours ouvrés
+#   Niveau 1 : 4 heures (24 h/24) · Niveau 2 hors RDV client : 1 jour ouvré · Niveau 3 : 5 jours ouvrés · Niveau 4 : 10 jours ouvrés
 #   Niveau 2 avec RDV client : pas de délai fixe, il dépend du RDV
-GTR_NIVEAU = {1: ("heures", 4), 2: ("jours ouvrés", 1), 3: ("jours ouvrés", 6), 4: ("jours ouvrés", 10)}
+GTR_NIVEAU = {1: ("heures", 4), 2: ("jours ouvrés", 1), 3: ("jours ouvrés", 5), 4: ("jours ouvrés", 10)}
 HO_DEBUT, HO_FIN = 8, 18  # heures ouvrées : de 8 h à 18 h, du lundi au vendredi hors jours fériés
 
 # Retard justifié / ticket en attente : une note Praxedo (ou la description) dit pourquoi on ne peut pas intervenir.
@@ -651,11 +651,11 @@ feuille(ws, ["Règle", "Délai compté depuis la création", "Tickets concernés
     ["[4H HO] dans la description", "4 heures ouvrées", sum(n for r, n in regles.items() if r.startswith("[4H HO]"))],
     ["[8H HO] dans la description", "8 heures ouvrées", sum(n for r, n in regles.items() if r.startswith("[8H HO]"))],
     ["« OTR xJ OUVRES » dans la description", "x jours ouvrés", sum(n for r, n in regles.items() if r.startswith("GTR écrite"))],
-    ["Niveau 1", "4 heures (24 h/24)", regles.get("Niveau 1 : 4 h", 0)],
-    ["Niveau 2 hors RDV client", "1 jour ouvré", regles.get("Niveau 2 hors RDV : 1 j ouvré", 0)],
+    ["Niveau 1", f"{GTR_NIVEAU[1][1]} heures (24 h/24)", sum(n for r, n in regles.items() if r.startswith("Niveau 1 :"))],
+    ["Niveau 2 hors RDV client", f"{GTR_NIVEAU[2][1]} jour(s) ouvré(s)", sum(n for r, n in regles.items() if r.startswith("Niveau 2 hors RDV"))],
     ["Niveau 2 avec RDV client", "Pas de délai fixe (selon le RDV)", regles.get("Niveau 2 avec RDV client : selon le RDV", 0)],
-    ["Niveau 3", "6 jours ouvrés", regles.get("Niveau 3 : 6 j ouvrés", 0)],
-    ["Niveau 4", "10 jours ouvrés", regles.get("Niveau 4 : 10 j ouvrés", 0)],
+    ["Niveau 3", f"{GTR_NIVEAU[3][1]} jours ouvrés", sum(n for r, n in regles.items() if r.startswith("Niveau 3 :"))],
+    ["Niveau 4", f"{GTR_NIVEAU[4][1]} jours ouvrés", sum(n for r, n in regles.items() if r.startswith("Niveau 4 :"))],
     ["Sans niveau (malfaçons, audits…)", "Échéance « À faire avant » de Praxedo", regles.get("Sans niveau : échéance Praxedo", 0)],
     ["", "", ""],
     ["Jours ouvrés", "Du lundi au vendredi, hors jours fériés (+ Vendredi saint et 26 décembre en Moselle)", ""],

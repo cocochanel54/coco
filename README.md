@@ -31,7 +31,7 @@ Analyse de l'export « Interventions » de Praxedo, surtout les tickets non plan
 python3 tickets-praxedo/analyse_tickets.py export_interventions.csv
 ```
 
-- **Échéances GTR** calculées depuis la création du ticket : niveau 4 = 10 jours ouvrés, niveau 3 = 6 jours ouvrés, niveau 2 hors RDV client = 1 jour ouvré, niveau 1 = 4 h, [4H HO] / [8H HO] = 4 ou 8 heures ouvrées (8 h-18 h). L'échéance « À faire avant » de Praxedo ne sert que pour les tickets sans niveau.
+- **Échéances GTR** calculées depuis la création du ticket : niveau 4 = 10 jours ouvrés, niveau 3 = 5 jours ouvrés, niveau 2 hors RDV client = 1 jour ouvré, niveau 1 = 4 h, [4H HO] / [8H HO] = 4 ou 8 heures ouvrées (8 h-18 h). L'échéance « À faire avant » de Praxedo ne sert que pour les tickets sans niveau.
 - **Nouveaux** : les tickets créés depuis moins de 24 h sont en violet sur la carte, reliés à l'intervention déjà planifiée la plus proche pour les programmer dans la foulée.
 - **Justifiés / en attente** : un ticket dont une note Praxedo (colonne Notes, Commentaire, Remarque… de l'export) ou la description dit « GTR justifiée », « poteau à remplacer », « attente Orange », « attente nacelle »… passe en gris et ne compte plus comme en retard. Les mots reconnus sont dans `RE_JUSTIF`, en haut du script.
 - **À planifier** : tickets « Qualifiée » et « Pré-planifiée », triés par priorité (échéance GTR dépassée ou proche, client coupé, déjà déplanifié…).
