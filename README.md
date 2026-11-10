@@ -31,7 +31,9 @@ Analyse de l'export « Interventions » de Praxedo, surtout les tickets non plan
 python3 tickets-praxedo/analyse_tickets.py export_interventions.csv
 ```
 
-- **À planifier** : tickets « Qualifiée » et « Pré-planifiée », triés par priorité (en retard, client coupé, déjà déplanifié…).
+- **Échéances GTR** calculées depuis la création du ticket : niveau 4 = 10 jours ouvrés, niveau 3 = 6 jours ouvrés, niveau 2 hors RDV client = 1 jour ouvré, niveau 1 = 4 h, [4H HO] / [8H HO] = 4 ou 8 heures ouvrées (8 h-18 h). L'échéance « À faire avant » de Praxedo ne sert que pour les tickets sans niveau.
+- **Nouveaux** : les tickets créés depuis moins de 24 h sont en violet sur la carte, reliés à l'intervention déjà planifiée la plus proche pour les programmer dans la foulée.
+- **À planifier** : tickets « Qualifiée » et « Pré-planifiée », triés par priorité (échéance GTR dépassée ou proche, client coupé, déjà déplanifié…).
 - **Tickets proches** : même immeuble, même boîte, même PTO ou même référence client, « suite à » un autre ticket, tickets à quelques mètres, tournées possibles, et l'intervention déjà planifiée la plus proche où caser un ticket.
 - **Incohérences** : échéance dépassée ou qui ne colle pas à la GTR, déplanifiés, planifiées après l'échéance ou un jour férié, interventions passées pas clôturées, adresses fausses ou vagues…
 - Résultat : un Excel (`Analyse_tickets_AAAA-MM-JJ.xlsx`) et une carte (`Carte_tickets_AAAA-MM-JJ.html`) à côté de l'export. Seules la rue, le code postal et la ville sont envoyés au service d'adresses de l'IGN pour placer les tickets sur la carte.
