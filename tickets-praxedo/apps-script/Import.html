@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+body{font:14px system-ui,sans-serif;margin:12px;color:#1a1a1a}
+p{margin:0 0 12px}
+#etat{margin-top:12px;font-weight:600}
+.ok{color:#1d7444}.err{color:#b00}
+</style>
+</head>
+<body>
+<p>Choisis l'export CSV des interventions de Praxedo. Il remplace l'onglet « Tickets ».</p>
+<input type="file" id="fichier" accept=".csv,text/csv">
+<div id="etat" role="status"></div>
+<script>
+var etat = document.getElementById('etat');
+document.getElementById('fichier').onchange = function (e) {
+  var f = e.target.files[0];
+  if (!f) return;
+  etat.className = ''; etat.textContent = 'Import en cours… (la première fois, les adresses sont placées sur la carte : compte une minute)';
+  var lecteur = new FileReader();
+  lecteur.onload = function () {
+    google.script.run
+      .withSuccessHandler(function (r) {
+        etat.className = 'ok';
+        etat.textContent = r.tickets + ' tickets importés' + (r.adresses ? ', ' + r.adresses + ' adresses nouvelles placées' : '') + '. Tu peux fermer cette fenêtre.';
+      })
+      .withFailureHandler(function (err) { etat.className = 'err'; etat.textContent = (err && err.message) || String(err); })
+      .importerExport(lecteur.result);
+  };
+  lecteur.readAsText(f, 'UTF-8');
+};
+</script>
+</body>
+</html>

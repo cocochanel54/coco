@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;color:#1a1a1a}
+#map{position:absolute;inset:0}
+.leg{position:absolute;z-index:1000;top:10px;right:10px;background:#fff;padding:10px 12px;border-radius:8px;box-shadow:0 1px 6px #0003;
+  width:280px;max-height:calc(100% - 40px);overflow:auto;box-sizing:border-box}
+.leg h1{font-size:15px;margin:0 0 2px}.leg label{display:block;margin:3px 0;cursor:pointer}
+.leg label.sous{margin-left:22px;cursor:default;font-size:13px}
+.leg h2{font-size:13px;margin:10px 0 4px}
+#etat{display:block;color:#555;font-size:12px}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:1px solid #0006}
+.nv{display:block;width:100%;text-align:left;font:inherit;font-size:12.5px;border:1px solid;border-radius:6px;padding:5px 7px;margin:4px 0;cursor:pointer;color:inherit}
+.nv span{display:block;color:#555}
+.nv.nouveau{background:#f4eefa;border-color:#e0d2ee}.nv.nouveau b{color:#6c2e91}
+.nv.relance{background:#fdf0e3;border-color:#f3d3b0}.nv.relance b{color:#a35208}
+.nv.termine{background:#e9f6ee;border-color:#c4e6d1}.nv.termine b{color:#1d7444}
+.nv:hover,.nv:focus-visible{border-color:#333;outline:none}
+.pop b{font-size:14px}.pop small{color:#555}.pop .foulee{color:#6c2e91;font-weight:600}.pop .fin{color:#1d7444;font-weight:600}
+#plier{float:right;border:0;background:none;font:inherit;color:#555;cursor:pointer;padding:0 0 0 8px}
+#erreur{color:#b00;font-weight:600}
+@media (max-width:560px){.leg{top:auto;bottom:10px;left:10px;right:10px;width:auto;max-height:42%}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="leg"><button id="plier" type="button" aria-expanded="true">Masquer</button><h1>Tickets Praxedo</h1>
+<small id="etat">Chargement…</small><div id="erreur"></div>
+<div id="corps">
+<label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé (mail de fin reçu) <b id="nb-termine"></b></label>
+<label><input type="checkbox" data-k="nouveau" checked><span class="dot" style="background:#8e44ad"></span>Nouveau (moins de 24 h) <b id="nb-nouveau"></b></label>
+<label><input type="checkbox" data-k="justifie" checked><span class="dot" style="background:#8b939c"></span>Justifié / en attente <b id="nb-justifie"></b></label>
+<label class="sous"><span class="dot" style="background:#8b939c;border:3px solid #e67e22;width:7px;height:7px"></span>dont à relancer ou à vérifier <b id="nb-relance"></b></label>
+<label><input type="checkbox" data-k="retard" checked><span class="dot" style="background:#d62728"></span>À planifier, prioritaire <b id="nb-retard"></b></label>
+<label><input type="checkbox" data-k="aplanifier" checked><span class="dot" style="background:#ff9f1c"></span>À planifier <b id="nb-aplanifier"></b></label>
+<label><input type="checkbox" data-k="planifie" checked><span class="dot" style="background:#1f77b4"></span>Déjà planifié <b id="nb-planifie"></b></label>
+<small>Contour rouge : nouveau prioritaire. Trait violet : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée.</small>
+<div id="listes"></div>
+</div></div>
+<?!= inclure_('Analyse') ?>
+<script>
+var C = {termine: '#2e9e5b', nouveau: '#8e44ad', justifie: '#8b939c', retard: '#d62728', aplanifier: '#ff9f1c', planifie: '#1f77b4'}, RELANCE = '#e67e22';
+var map = L.map('map'), premier = true, marqueurs = {};
+// Fond Plan IGN (Géoplateforme) : libre, sans clé.
+L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
+  {maxZoom: 19, attribution: '&copy; <a href="https://www.ign.fr/">IGN</a> Plan IGN'}).addTo(map);
+map.setView([48.69, 6.18], 11);
+var calques = {};
+['planifie', 'termine', 'justifie', 'aplanifier', 'retard', 'nouveau'].forEach(function (k) { calques[k] = L.layerGroup().addTo(map); });
+document.querySelectorAll('.leg input').forEach(function (i) {
+  i.onchange = function () { i.checked ? calques[i.dataset.k].addTo(map) : calques[i.dataset.k].remove(); };
+});
+var plier = document.getElementById('plier'), corps = document.getElementById('corps');
+plier.onclick = function () { corps.hidden = !corps.hidden; plier.textContent = corps.hidden ? 'Afficher' : 'Masquer'; plier.setAttribute('aria-expanded', String(!corps.hidden)); };
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+function court(s, n) { s = String(s || '').replace(/(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g, '[tél.]').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; }
+function heure(iso) { return iso ? fd(new Date(iso)) : '—'; }
+
+function afficher(d) {
+  var NOW = new Date(), res = analyser(d, NOW), nb = {};
+  document.getElementById('erreur').textContent = '';
+  document.getElementById('etat').textContent = 'Mis à jour à ' + fd(NOW).slice(11) + ' · export importé le ' + heure(d.importeLe) + ' · mails lus à ' + heure(d.luLe).slice(11);
+  Object.keys(calques).forEach(function (k) { calques[k].clearLayers(); nb[k] = 0; });
+  marqueurs = {};
+  var pts = [];
+  res.tickets.forEach(function (t) {
+    if (!t.geo) return;
+    var k = t.categorie, relance = k === 'justifie' && t.suivi && t.suivi.due;
+    nb[k]++;
+    pts.push([t.geo.lat, t.geo.lon]);
+    var m = L.circleMarker([t.geo.lat, t.geo.lon], {radius: k === 'planifie' || k === 'termine' ? 6 : (k === 'nouveau' ? 10 : 8),
+      color: relance ? RELANCE : k === 'nouveau' && t.prio === 1 ? C.retard : '#222', weight: relance || (k === 'nouveau' && t.prio === 1) ? 3 : 1,
+      fillColor: C[k], fillOpacity: .92});
+    var html = '<div class="pop"><b>' + esc(t.num) + '</b>' + (k === 'nouveau' ? ' <span class="foulee">· nouveau</span>' : '') +
+      '<br>' + esc(t.statut) + (t.planif && !t.deplanifie ? ' · ' + esc(fd(t.planif)) : '') + (t.tech ? ' · ' + esc(t.tech) : '') +
+      '<br>' + esc(t.adresse) + ', ' + esc(t.ville) +
+      '<br><small>Créé le ' + esc(fd(t.creee)) + ' · PM ' + esc(t.site) + ' · ' + esc(t.regle) + (t.echeance ? ' → ' + esc(fd(t.echeance)) : '') + '</small>';
+    if (t.termine) html += '<br><span class="fin">Mail de fin reçu le ' + esc(t.fin.recu) + '</span>' + (t.fin.rapport ? ' · <a href="' + esc(t.fin.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '');
+    if (t.justif) html += '<br><b style="color:#4a535c">Justifié · ' + esc(t.justif) + '</b>';
+    if (t.suivi) html += '<br><span style="color:' + (t.suivi.due ? '#a35208' : '#4a535c') + ';font-weight:600">' + (t.suivi.due ? 'À faire maintenant : ' : 'Suivi : ') + esc(t.suivi.action) + '</span>' +
+      (t.suivi.prochaine ? '<br><small>' + (t.suivi.due ? 'Relance prévue le ' : 'Prochaine relance le ') + esc(fd(t.suivi.prochaine, false)) + ' · compté depuis ' + esc(t.suivi.base) + '</small>' : '');
+    if (t.caser) html += '<br><span class="foulee">À programmer avec ' + esc(t.caser.n) + ' le ' + esc(t.caser.p) + ' · ' + esc(t.caser.tech) + ' · à ' + esc(t.caser.d) + '</span>';
+    if (t.alertes.length) html += '<br><b style="color:#b00">' + esc(t.alertes.join(' · ')) + '</b>';
+    html += '<br><small>' + esc(court(t.desc, 220)) + '</small></div>';
+    m.bindPopup(html, {maxWidth: 320});
+    m.addTo(calques[k]);
+    marqueurs[t.num] = m;
+    if (k === 'nouveau' && t.caser) L.polyline([[t.geo.lat, t.geo.lon], [t.caser.lat, t.caser.lon]], {color: C.nouveau, weight: 3, dashArray: '6 5'}).addTo(calques.nouveau);
+  });
+  Object.keys(nb).forEach(function (k) { document.getElementById('nb-' + k).textContent = '(' + nb[k] + ')'; });
+  document.getElementById('nb-relance').textContent = '(' + res.relances.length + ')';
+
+  var listes = document.getElementById('listes');
+  listes.innerHTML = '';
+  function liste(titre, couleur, classe, items, texte) {
+    if (!items.length) return;
+    var h = document.createElement('h2'); h.textContent = titre; h.style.color = couleur; listes.appendChild(h);
+    items.forEach(function (t) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'nv ' + classe;
+      b.innerHTML = '<b>' + esc(t.num) + '</b> · ' + esc(t.ville) + '<span>' + esc(texte(t)) + '</span>';
+      b.onclick = function () { if (t.geo) { map.setView([t.geo.lat, t.geo.lon], 16); marqueurs[t.num].openPopup(); } };
+      listes.appendChild(b);
+    });
+  }
+  liste("Fins d'intervention aujourd'hui", '#1d7444', 'termine', res.terminesAujourdhui, function (t) { return 'Mail reçu le ' + t.fin.recu + (t.tech ? ' · ' + t.tech : ''); });
+  liste('À relancer / à vérifier', '#a35208', 'relance', res.relances, function (t) { return t.suivi.action; });
+  liste('Nouveaux à programmer', '#6c2e91', 'nouveau', res.nouveaux, function (t) {
+    return t.caser ? 'À côté de ' + t.caser.tech + ' le ' + t.caser.p + ' (' + t.caser.d + ')' : 'Aucune intervention planifiée à côté';
+  });
+  if (res.finsHorsExport.length) {
+    var h = document.createElement('h2'); h.textContent = "Mails de fin pour des tickets absents de l'export"; listes.appendChild(h);
+    res.finsHorsExport.forEach(function (f) {
+      var p = document.createElement('div'); p.className = 'nv'; p.style.cursor = 'default';
+      p.innerHTML = '<b>' + esc(f.num) + '</b> · ' + esc(f.commune) + '<span>Reçu le ' + esc(f.recu) + '</span>';
+      listes.appendChild(p);
+    });
+  }
+  if (premier && pts.length) { map.fitBounds(pts, {padding: [30, 30]}); premier = false; }
+}
+
+function charger() {
+  google.script.run.withSuccessHandler(afficher).withFailureHandler(function (e) {
+    document.getElementById('erreur').textContent = 'Lecture impossible : ' + (e && e.message || e) + '. Nouvel essai dans 2 minutes.';
+  }).donnees();
+}
+charger();
+setInterval(charger, 2 * 60 * 1000);
+</script>
+</body>
+</html>
