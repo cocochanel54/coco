@@ -50,6 +50,12 @@ RE_JUSTIF = re.compile(r"""(
 )""", re.I | re.X)
 # Colonnes de notes de l'export, reconnues à leur nom (ajoute la colonne des notes à ton filtre Praxedo)
 RE_COL_NOTES = re.compile(r"note|comment|remarque|observ|justif", re.I)
+# Suivi des tickets justifiés : sans nouvelle date dans la note, relancer 10 jours ouvrés après la dernière date notée
+# (ou après la création du ticket). Écrire « relance Orange 10/11 » ou « remplacement prévu le 25/11 » dans la note
+# Praxedo remet le compteur à zéro ou fixe la date où vérifier si les travaux sont faits.
+RELANCE_JO = 10
+RE_DATE = re.compile(r"(?<![\d/.])(\d{1,2})[/.](\d{1,2})(?:[/.](\d{4}|\d{2}))?(?![\d/.])")
+RE_PREVU = re.compile(r"(prévu|prevu|programm|planifi|travaux|remplac|pose|passage)[^\n]{0,30}$", re.I)
 
 
 # ---------- lecture ----------
@@ -164,6 +170,63 @@ def regle_gtr(t):
 def fretard(delta):
     h = int(delta.total_seconds() // 3600)
     return f"{h} h" if h < 24 else f"{h // 24} j"
+
+
+def dates_notes(texte):
+    """[(date, annonce_de_travaux)] trouvées dans les notes : « 10/11 », « 10/11/2026 », « prévu le 25/11 »…"""
+    out = []
+    for m in RE_DATE.finditer(texte or ""):
+        j, mo, a = int(m.group(1)), int(m.group(2)), m.group(3)
+        an = (int(a) + 2000 if len(a) == 2 else int(a)) if a else NOW.year
+        try:
+            d = datetime(an, mo, j)
+        except ValueError:
+            continue
+        if not a and d > NOW + timedelta(days=120):
+            d = d.replace(year=an - 1)
+        out.append((d, bool(RE_PREVU.search(texte[max(0, m.start() - 40):m.start()]))))
+    return out
+
+
+def suivi(t):
+    """Pour un ticket justifié : qui relancer, quoi faire, quand, et si c'est à faire maintenant."""
+    texte = f"{t['notes']} {t['justif']}"
+    qui = ""
+    for motif, nom in ((r"enedis|erdf", "Enedis"), (r"orange|\bft\b|france\s*t[ée]l[ée]com", "Orange"),
+                       (r"mairie|arr[êe]t[ée]|voirie|commune", "la mairie"), (r"syndic", "le syndic"),
+                       (r"gestionnaire|bailleur", "le bailleur"), (r"client|\brdv\b", "le client")):
+        if re.search(motif, texte, re.I):
+            qui = nom
+            break
+    if not qui and re.search(r"exploitant[^\n]{0,60}orange|poteau\s+orange|\bpot\.?\s*ft\b", t["desc"], re.I):
+        qui = "Orange"
+    if re.search(r"nacelle", texte, re.I):
+        action = "Vérifier qu'une nacelle est disponible, puis planifier"
+    elif re.search(r"[ée]lagage", texte, re.I):
+        action = f"Vérifier si l'élagage est fait (relancer {qui or 'la mairie'})"
+    elif re.search(r"mat[ée]riel", texte, re.I):
+        action = "Vérifier si le matériel est arrivé, puis planifier"
+    elif qui in ("la mairie", "le syndic", "le bailleur", "le client"):
+        action = f"Relancer {qui}"
+    elif re.search(r"poteau|\bpot\b|appui|\bsig\b|signalisation", texte, re.I):
+        action = f"Relancer {qui or 'le propriétaire du poteau (Orange ou Enedis)'} et vérifier si le poteau est remplacé"
+    else:
+        action = "Vérifier si la cause du retard est levée" + (f", relancer {qui}" if qui else "")
+    ds = dates_notes(t["notes"])
+    prevus = [d for d, prevu in ds if prevu]
+    if prevus:
+        d = max(prevus)
+        if d > NOW:
+            return dict(qui=qui, action=f"Travaux annoncés le {fd(d, False)} : vérifier après cette date", base=f"travaux annoncés le {fd(d, False)}",
+                        prochaine=d + timedelta(days=1), due=False)
+        return dict(qui=qui, action=f"Vérifier si les travaux annoncés le {fd(d, False)} sont faits, puis planifier l'intervention",
+                    base=f"travaux annoncés le {fd(d, False)}", prochaine=d, due=True)
+    passees = [d for d, _ in ds if d <= NOW]
+    base, src = (max(passees), "dernière date notée") if passees else (t["creee"], "création du ticket")
+    if not base:
+        return dict(qui=qui, action=action, base="", prochaine=None, due=True)
+    prochaine = jours_ouvres(base, RELANCE_JO, t["dept"])
+    return dict(qui=qui, action=action, base=f"{src} : {fd(base, False)}", prochaine=prochaine, due=prochaine <= NOW)
 
 
 T = []
@@ -475,6 +538,11 @@ for t in A_PLANIFIER:
     t["nouveau"] = bool(t["creee"] and NOW - t["creee"] < timedelta(hours=NOUVEAU_H))
 NOUVEAUX = sorted([t for t in A_PLANIFIER if t["nouveau"] and not t["justif"]], key=lambda t: t["creee"], reverse=True)
 JUSTIFIES = [t for t in A_PLANIFIER if t["justif"]]
+for t in JUSTIFIES:
+    t["suivi"] = suivi(t)
+    if t["suivi"]["due"]:
+        t["alertes"].append("À relancer / à vérifier")
+JUSTIFIES.sort(key=lambda t: (not t["suivi"]["due"], t["suivi"]["prochaine"] or datetime.min))
 # par échéance GTR, la plus proche (ou la plus dépassée) d'abord, puis les plus anciens
 A_PLANIFIER.sort(key=lambda t: (t["prio"], t["echeance"] or datetime.max, t["creee"] or NOW))
 
@@ -498,7 +566,7 @@ wb = openpyxl.Workbook()
 H = Font(bold=True, color="FFFFFF")
 HF = PatternFill("solid", fgColor="1F4E78")
 WRAP = Alignment(wrap_text=True, vertical="top")
-COUL = {"nouveau": "E4D7F5", "justifie": "DDE1E6", 4: "DDE1E6", 1: "F8CBAD", 2: "FFE699", 3: "E2EFDA", "1 - Urgent": "F8CBAD", "2 - Important": "FFE699", "3 - À vérifier": "DDEBF7", "4 - Info": "EDEDED"}
+COUL = {"nouveau": "E4D7F5", "justifie": "DDE1E6", "relance": "FBE3CC", 4: "DDE1E6", 1: "F8CBAD", 2: "FFE699", 3: "E2EFDA", "1 - Urgent": "F8CBAD", "2 - Important": "FFE699", "3 - À vérifier": "DDEBF7", "4 - Info": "EDEDED"}
 
 
 def feuille(ws, entetes, lignes, largeurs, couleur=None):
@@ -541,6 +609,7 @@ lignes = [
     ("", ""),
     ("JUSTIFIÉS / EN ATTENTE (GTR justifiée, poteau à remplacer, attente Orange…)", len(JUSTIFIES)),
     ("dont échéance GTR dépassée (retard justifié)", sum(1 for t in JUSTIFIES if t["echeance"] and t["echeance"] < NOW)),
+    (f"dont à relancer ou à vérifier maintenant (relance tous les {RELANCE_JO} jours ouvrés)", sum(1 for t in JUSTIFIES if t["suivi"]["due"])),
     ("Colonnes de notes lues dans l'export", ", ".join(COLS_NOTES) or "aucune : seule la description est lue"),
     ("", ""),
     ("TICKETS À PLANIFIER", ""),
@@ -586,11 +655,13 @@ feuille(ws, ["N°", "Créé le", "Prio", "Niveau", "Règle GTR", "Échéance GTR
 
 # Justifiés / en attente
 ws = wb.create_sheet("Justifiés")
-feuille(ws, ["N°", "Statut", "Niveau", "Échéance GTR", "Retard", "Justification", "Ville", "Adresse", "PM (Site)", "Description"],
-        [[t["num"], t["statut"], t["niveau"] or "", fd(t["echeance"]),
+feuille(ws, ["À faire maintenant", "Action", "Qui relancer", "Prochaine relance / vérif", "Compté depuis", "N°", "Statut", "Niveau",
+             "Échéance GTR", "Retard", "Justification", "Ville", "Adresse", "PM (Site)", "Description"],
+        [["oui" if t["suivi"]["due"] else "", t["suivi"]["action"], t["suivi"]["qui"], fd(t["suivi"]["prochaine"], False),
+          t["suivi"]["base"], t["num"], t["statut"], t["niveau"] or "", fd(t["echeance"]),
           fretard(NOW - t["echeance"]) if t["echeance"] and t["echeance"] < NOW else "", t["justif"], t["ville"], t["adresse"],
           t["site"], court(t["desc"], 200)] for t in JUSTIFIES],
-        [22, 12, 8, 16, 9, 50, 22, 30, 18, 70], couleur=lambda l: "justifie")
+        [11, 45, 16, 16, 28, 22, 12, 8, 16, 9, 45, 22, 30, 18, 70], couleur=lambda l: "relance" if l[0] else "justifie")
 
 # À planifier
 ws = wb.create_sheet("À planifier")
@@ -700,6 +771,7 @@ for t in T:
               d=fdist(t["caser_d"])) if cp_ else None
     pts.append(dict(lat=t["geo"]["lat"], lon=t["geo"]["lon"], k=k, n=t["num"], s=t["statut"], ap=t["a_planifier"],
                     c=int(t["creee"].replace(tzinfo=ZoneInfo("Europe/Paris")).timestamp() * 1000) if t["creee"] else None,
+                    sv=dict(a=t["suivi"]["action"], pr=fd(t["suivi"]["prochaine"], False), due=t["suivi"]["due"], b=t["suivi"]["base"]) if t.get("suivi") else None,
                     cr=fd(t["creee"]), cs=cs, j=t["justif"] if t["statut"] in ("Qualifiée", "Pré-planifiée", "Planifiée", "Synchronisée") else "",
                     p=fd(t["planif"]) if t["planif"] else "", tech=t["tech"], av=fd(t["echeance"]), v=t["ville"], a=t["adresse"],
                     pm=t["site"], al=" · ".join(dict.fromkeys(t.get("alertes", []))), g=t.get("groupe", ""), tr=t.get("tournee", ""),
@@ -720,6 +792,8 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
   padding:5px 7px;margin:4px 0;cursor:pointer;color:inherit}
 .nv:hover,.nv:focus-visible{border-color:#8e44ad;outline:none}
 .nv b{color:#6c2e91}.nv span{display:block;color:#555}
+.leg label.sous{margin-left:22px;cursor:default;font-size:13px}
+.nv.rl{background:#fdf0e3;border-color:#f3d3b0}.nv.rl b{color:#a35208}
 .pop b{font-size:14px}.pop small{color:#555}.pop .foulee{color:#6c2e91;font-weight:600}
 #plier{float:right;border:0;background:none;font:inherit;color:#555;cursor:pointer;padding:0 0 0 8px}
 @media (max-width:560px){.leg{top:auto;bottom:10px;left:10px;right:10px;width:auto;max-height:42%}}
@@ -728,15 +802,17 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <div id="corps">
 <label><input type="checkbox" data-k="nouveau" checked><span class="dot" style="background:#8e44ad"></span>Nouveau (moins de __NOUVEAU_H__ h) <b id="nbnv"></b></label>
 <label><input type="checkbox" data-k="justifie" checked><span class="dot" style="background:#8b939c"></span>Justifié / en attente <b id="nbj"></b></label>
+<label class="sous"><span class="dot" style="background:#8b939c;border:3px solid #e67e22;width:7px;height:7px"></span>dont à relancer ou à vérifier <b id="nbr"></b></label>
 <label><input type="checkbox" data-k="retard" checked><span class="dot" style="background:#d62728"></span>À planifier, prioritaire</label>
 <label><input type="checkbox" data-k="aplanifier" checked><span class="dot" style="background:#ff9f1c"></span>À planifier</label>
 <label><input type="checkbox" data-k="planifie" checked><span class="dot" style="background:#1f77b4"></span>Déjà planifié</label>
 <small>Un nouveau prioritaire a un contour rouge. Le trait violet le relie à l'intervention déjà planifiée la plus proche (moins de __RAYON__).</small>
-<div id="nouveaux"></div>
+<div id="relances"></div><div id="nouveaux"></div>
 </div></div>
 <script>
 const P=__DATA__;
 const NOUVEAU_MS=__NOUVEAU_H__*3600e3, maintenant=Date.now();
+const RELANCE='#e67e22';
 const C={nouveau:'#8e44ad',justifie:'#8b939c',retard:'#d62728',aplanifier:'#ff9f1c',planifie:'#1f77b4'};
 const map=L.map('map');
 // Fond Plan IGN (Géoplateforme) : libre, sans clé. Les serveurs d'OpenStreetMap refusent les pages ouvertes depuis un fichier.
@@ -744,7 +820,7 @@ L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0
   {maxZoom:19,attribution:'&copy; <a href="https://www.ign.fr/">IGN</a> Plan IGN'}).addTo(map);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const layers={planifie:L.layerGroup().addTo(map),justifie:L.layerGroup().addTo(map),aplanifier:L.layerGroup().addTo(map),retard:L.layerGroup().addTo(map),nouveau:L.layerGroup().addTo(map)};
-const b=[], nouveaux=[]; let nbj=0;
+const b=[], nouveaux=[], relances=[]; let nbj=0;
 for(const p of P){
   b.push([p.lat,p.lon]);
   // « nouveau » est recalculé à l'ouverture : la couleur s'en va toute seule 24 h après la création du ticket
@@ -753,17 +829,23 @@ for(const p of P){
   const nouveau=!justifie&&p.ap&&p.c&&maintenant-p.c<NOUVEAU_MS;
   const k=justifie?'justifie':nouveau?'nouveau':p.k;
   if(justifie)nbj++;
-  const m=L.circleMarker([p.lat,p.lon],{radius:k==='planifie'?6:(nouveau?10:8),color:nouveau&&p.k==='retard'?C.retard:'#222',
-    weight:nouveau&&p.k==='retard'?3:1,fillColor:C[k],fillOpacity:.92});
+  // justifié à relancer : contour orange épais ; nouveau prioritaire : contour rouge
+  const relance=justifie&&p.sv&&p.sv.due;
+  const m=L.circleMarker([p.lat,p.lon],{radius:k==='planifie'?6:(nouveau?10:8),
+    color:relance?RELANCE:nouveau&&p.k==='retard'?C.retard:'#222',weight:relance||nouveau&&p.k==='retard'?3:1,fillColor:C[k],fillOpacity:.92});
+  const sv=justifie&&p.sv?`<br><span style="color:${p.sv.due?'#a35208':'#4a535c'};font-weight:600">${p.sv.due?'À faire maintenant : ':'Suivi : '}${esc(p.sv.a)}</span>
+    <br><small>${p.sv.pr?(p.sv.due?'Relance prévue le ':'Prochaine relance le ')+esc(p.sv.pr)+' · ':''}compté depuis ${esc(p.sv.b)}</small>`:'';
   const foulee=p.cs?`<br><span class="foulee">À programmer avec ${esc(p.cs.n)} le ${esc(p.cs.p)} · ${esc(p.cs.tech)} · à ${esc(p.cs.d)}</span>`:'';
   m.bindPopup(`<div class="pop"><b>${esc(p.n)}</b>${nouveau?' <span class="foulee">· nouveau</span>':''}<br>${esc(p.s)}${p.p?' · '+esc(p.p):''}${p.tech?' · '+esc(p.tech):''}<br>
   ${esc(p.a)}, ${esc(p.v)}<br><small>Créé le ${esc(p.cr)} · PM ${esc(p.pm)} · échéance GTR ${esc(p.av||'—')}${p.g?' · groupe G'+p.g:''}${p.tr?' · tournée T'+p.tr:''}</small>
-  ${p.j?'<br><b style="color:#4a535c">Justifié · '+esc(p.j)+'</b>':''}${foulee}${p.al?'<br><b style="color:#b00">'+esc(p.al)+'</b>':''}<br><small>${esc(p.d)}</small></div>`,{maxWidth:320});
+  ${p.j?'<br><b style="color:#4a535c">Justifié · '+esc(p.j)+'</b>':''}${sv}${foulee}${p.al?'<br><b style="color:#b00">'+esc(p.al)+'</b>':''}<br><small>${esc(p.d)}</small></div>`,{maxWidth:320});
   m.addTo(layers[k]);
   if(nouveau&&p.cs)L.polyline([[p.lat,p.lon],[p.cs.lat,p.cs.lon]],{color:C.nouveau,weight:3,dashArray:'6 5'}).addTo(layers.nouveau);
   if(k==='retard')L.circle([p.lat,p.lon],{radius:__RAYONM__,color:C.retard,weight:1,dashArray:'4 4',fill:false}).addTo(layers.retard);
   if(nouveau)nouveaux.push({p,m});
+  if(relance)relances.push({p,m});
 }
+document.getElementById('nbr').textContent='('+relances.length+')';
 document.getElementById('nbnv').textContent='('+nouveaux.length+')';
 document.getElementById('nbj').textContent='('+nbj+')';
 const liste=document.getElementById('nouveaux');
@@ -775,6 +857,16 @@ if(nouveaux.length){
     bt.innerHTML=`<b>${esc(p.n)}</b> · ${esc(p.v)}<span>${p.cs?'À côté de '+esc(p.cs.tech)+' le '+esc(p.cs.p)+' ('+esc(p.cs.d)+')':'Aucune intervention planifiée à côté'}</span>`;
     bt.onclick=()=>{map.setView([p.lat,p.lon],16);m.openPopup();};
     liste.appendChild(bt);
+  }
+}
+if(relances.length){
+  const lr=document.getElementById('relances');
+  lr.innerHTML='<h2 style="color:#a35208">À relancer / à vérifier</h2>';
+  for(const {p,m} of relances){
+    const bt=document.createElement('button');bt.type='button';bt.className='nv rl';
+    bt.innerHTML=`<b>${esc(p.n)}</b> · ${esc(p.v)}<span>${esc(p.sv.a)}</span>`;
+    bt.onclick=()=>{map.setView([p.lat,p.lon],16);m.openPopup();};
+    lr.appendChild(bt);
   }
 }
 if(b.length)map.fitBounds(b,{padding:[30,30]});else map.setView([48.69,6.18],11);
