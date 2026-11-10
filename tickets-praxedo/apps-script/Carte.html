@@ -32,7 +32,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <div class="leg"><button id="plier" type="button" aria-expanded="true">Masquer</button><h1>Tickets Praxedo</h1>
 <small id="etat">Chargement…</small><div id="erreur"></div>
 <div id="corps">
-<label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé (mail de fin reçu) <b id="nb-termine"></b></label>
+<label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé <b id="nb-termine"></b></label>
 <label><input type="checkbox" data-k="nouveau" checked><span class="dot" style="background:#8e44ad"></span>Nouveau (moins de 24 h) <b id="nb-nouveau"></b></label>
 <label><input type="checkbox" data-k="justifie" checked><span class="dot" style="background:#8b939c"></span>Justifié / en attente <b id="nb-justifie"></b></label>
 <label class="sous"><span class="dot" style="background:#8b939c;border:3px solid #e67e22;width:7px;height:7px"></span>dont à relancer ou à vérifier <b id="nb-relance"></b></label>
@@ -69,7 +69,7 @@ function afficher(d) {
   marqueurs = {};
   var pts = [];
   res.tickets.forEach(function (t) {
-    if (!t.geo) return;
+    if (!t.geo || t.categorie === 'annule') return;
     var k = t.categorie, relance = k === 'justifie' && t.suivi && t.suivi.due;
     nb[k]++;
     pts.push([t.geo.lat, t.geo.lon]);
@@ -80,7 +80,9 @@ function afficher(d) {
       '<br>' + esc(t.statut) + (t.planif && !t.deplanifie ? ' · ' + esc(fd(t.planif)) : '') + (t.tech ? ' · ' + esc(t.tech) : '') +
       '<br>' + esc(t.adresse) + ', ' + esc(t.ville) +
       '<br><small>Créé le ' + esc(fd(t.creee)) + ' · PM ' + esc(t.site) + ' · ' + esc(t.regle) + (t.echeance ? ' → ' + esc(fd(t.echeance)) : '') + '</small>';
-    if (t.termine) html += '<br><span class="fin">Mail de fin reçu le ' + esc(t.fin.recu) + '</span>' + (t.fin.rapport ? ' · <a href="' + esc(t.fin.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '');
+    if (t.fin) html += '<br><span class="fin">Mail de fin reçu le ' + esc(t.fin.recu) + '</span>' + (t.fin.rapport ? ' · <a href="' + esc(t.fin.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '');
+    else if (t.sorti) html += '<br><span class="fin">Sorti de l\'export le ' + esc(fd(t.sorti)) + ' : terminé ou annulé</span>';
+    else if (t.finStatut) html += '<br><span class="fin">' + esc(t.statut) + (t.finLe ? ' le ' + esc(fd(t.finLe)) : '') + '</span>';
     if (t.justif) html += '<br><b style="color:#4a535c">Justifié · ' + esc(t.justif) + '</b>';
     if (t.suivi) html += '<br><span style="color:' + (t.suivi.due ? '#a35208' : '#4a535c') + ';font-weight:600">' + (t.suivi.due ? 'À faire maintenant : ' : 'Suivi : ') + esc(t.suivi.action) + '</span>' +
       (t.suivi.prochaine ? '<br><small>' + (t.suivi.due ? 'Relance prévue le ' : 'Prochaine relance le ') + esc(fd(t.suivi.prochaine, false)) + ' · compté depuis ' + esc(t.suivi.base) + '</small>' : '');
@@ -107,7 +109,9 @@ function afficher(d) {
       listes.appendChild(b);
     });
   }
-  liste("Fins d'intervention aujourd'hui", '#1d7444', 'termine', res.terminesAujourdhui, function (t) { return 'Mail reçu le ' + t.fin.recu + (t.tech ? ' · ' + t.tech : ''); });
+  liste("Fins d'intervention aujourd'hui", '#1d7444', 'termine', res.terminesAujourdhui, function (t) {
+    return (t.fin ? 'Mail reçu le ' + t.fin.recu : t.sorti ? "Sorti de l'export le " + fd(t.sorti) + ' (terminé ou annulé)' : t.statut + ' le ' + fd(t.finLe)) + (t.tech ? ' · ' + t.tech : '');
+  });
   liste('À relancer / à vérifier', '#a35208', 'relance', res.relances, function (t) { return t.suivi.action; });
   liste('Nouveaux à programmer', '#6c2e91', 'nouveau', res.nouveaux, function (t) {
     return t.caser ? 'À côté de ' + t.caser.tech + ' le ' + t.caser.p + ' (' + t.caser.d + ')' : 'Aucune intervention planifiée à côté';

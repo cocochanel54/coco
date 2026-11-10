@@ -22,6 +22,10 @@ var RE_JUSTIF = new RegExp([
   'sig\\s+faite[^\\n.]{0,50}'
 ].join('|'), 'i');
 var RE_COL_NOTES = /note|comment|remarque|observ|justif/i;
+// Statuts Praxedo de fin (à ajouter au filtre de l'export) et d'annulation ; colonne de date de fin si l'export en a une
+var RE_STATUT_FIN = /termin|r[ée]alis|valid|cl[ôo]tur|ferm/i;
+var RE_STATUT_ANNULE = /annul/i;
+var RE_COL_FIN = /^(date (de )?)?(fin|r[ée]alisation|cl[ôo]ture)|(r[ée]alis[ée]e?|termin[ée]e?|cl[ôo]tur[ée]e?) le|fin r[ée]elle/i;
 var RE_PREVU = /(prévu|prevu|programm|planifi|travaux|remplac|pose|passage)[^\n]{0,30}$/i;
 
 function dt(s) {
@@ -138,6 +142,7 @@ function analyser(donnees, NOW) {
   var R = REGLAGES, TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
   var col = {}; (donnees.entetes || []).forEach(function (c, i) { col[c] = i; });
   var colsNotes = (donnees.entetes || []).filter(function (c) { return RE_COL_NOTES.test(c) && c !== 'Description'; });
+  var colFin = (donnees.entetes || []).filter(function (c) { return RE_COL_FIN.test(c); })[0];
   // fins d'intervention reçues par mail : la plus récente par n° de ticket (et par n° sans « #… »)
   var fins = {};
   (donnees.fins || []).forEach(function (f) {
@@ -167,7 +172,11 @@ function analyser(donnees, NOW) {
     };
     var fin = fins[num] || fins[t.base];
     t.fin = fin || null;
-    t.termine = !!fin;
+    t.annule = RE_STATUT_ANNULE.test(t.statut);
+    t.finStatut = !t.annule && RE_STATUT_FIN.test(t.statut);
+    // date de fin : mail, sinon colonne de fin de l'export, sinon date planifiée
+    t.finLe = fin ? dt(fin.recu) : t.finStatut ? (colFin && dt(g(colFin))) || t.planif : null;
+    t.termine = !!fin || t.finStatut;
     var ouvert = !t.termine && ['Qualifiée', 'Pré-planifiée', 'Planifiée', 'Synchronisée'].indexOf(t.statut) >= 0;
     t.aPlanifier = !t.termine && (t.statut === 'Qualifiée' || t.statut === 'Pré-planifiée');
     t.deplanifie = t.statut === 'Qualifiée' && !!t.planif;
@@ -197,15 +206,26 @@ function analyser(donnees, NOW) {
     var a = t.alertes;
     t.prio = t.justif ? 4 : a.some(function (x) { return /^Échéance (dépassée|dans moins)/.test(x); }) ? 1
            : (t.niveau === 2 || t.niveau === 3) && (t.equip === 'Service Interrompu' || t.equip === 'Service Dégradé') || t.deplanifie || t.niveau === 3 ? 2 : 3;
-    t.categorie = t.termine ? 'termine' : t.aPlanifier ? (t.justif ? 'justifie' : t.nouveau ? 'nouveau' : t.prio === 1 ? 'retard' : 'aplanifier') : 'planifie';
+    t.categorie = t.annule ? 'annule' : t.termine ? 'termine' : t.aPlanifier ? (t.justif ? 'justifie' : t.nouveau ? 'nouveau' : t.prio === 1 ? 'retard' : 'aplanifier') : 'planifie';
   });
 
   var nums = {}; T.forEach(function (t) { nums[t.num] = 1; nums[t.base] = 1; });
+  // tickets sortis du filtre depuis l'import précédent : terminés ou annulés, affichés en vert 7 jours
+  var vus = {};
+  (donnees.sortis || []).slice().reverse().forEach(function (s) {
+    var le = dt(s.le);
+    if (!s.num || nums[s.num] || vus[s.num] || !le || NOW - le > 7 * 86400e3) return;
+    vus[s.num] = 1;
+    var adr = [s.adresse, s.cp, s.ville].filter(function (x) { return x; }).join(' ');
+    T.push({ num: s.num, base: s.num.split('#')[0], statut: s.statut, planif: dt(s.planif), tech: s.tech, site: s.site, adresse: s.adresse,
+             cp: s.cp, ville: s.ville, desc: '', creee: null, regle: '', echeance: null, alertes: [], tags: [], justif: '',
+             geo: donnees.adresses ? donnees.adresses[adr] || null : null, fin: null, sorti: le, finLe: le, termine: true, categorie: 'termine' });
+  });
   return {
     tickets: T,
     nouveaux: T.filter(function (t) { return t.categorie === 'nouveau'; }).sort(function (a, b) { return (!!b.caser - !!a.caser) || (b.creee - a.creee); }),
     relances: T.filter(function (t) { return t.categorie === 'justifie' && t.suivi && t.suivi.due; }),
-    terminesAujourdhui: T.filter(function (t) { return t.termine && dt(t.fin.recu) >= TODAY; }),
+    terminesAujourdhui: T.filter(function (t) { return t.termine && t.finLe && t.finLe >= TODAY; }),
     finsHorsExport: (donnees.fins || []).filter(function (f) { return f.num && !nums[f.num] && !nums[f.num.split('#')[0]]; })
   };
 }

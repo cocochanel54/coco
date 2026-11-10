@@ -1,17 +1,19 @@
 # Installer la carte des tickets en direct (une seule fois, environ 15 minutes, sur ordinateur)
 
-La carte se met à jour toute seule : chaque mail « [FIN INTERVENTION] » passe le ticket en vert, avec le lien du rapport. Les nouveaux tickets arrivent quand tu importes un export Praxedo.
+La carte se met à jour à chaque export Praxedo que tu importes : nouveaux tickets, plannings, et interventions terminées en vert. Plus tu importes souvent, plus elle est à jour.
 
-Ça tourne dans ton compte Google, comme Journée agent. Utilise **le même compte Google** pour le Sheet et pour recevoir les mails.
+Ça tourne dans ton compte Google, comme Journée agent.
 
-## 1. Relier ta boîte Outlook à ton Gmail
+## 1. Régler le filtre Praxedo
 
-1. Dans Outlook, clic droit sur un mail **[FIN INTERVENTION]** → **Règles** → **Créer une règle**.
-2. Condition : **L'objet contient** `FIN INTERVENTION`.
-3. Action : **Rediriger vers** (ou **Transférer à**) ton adresse Gmail.
-4. Enregistre, puis vérifie que le prochain mail de fin arrive bien dans Gmail.
+Ajoute à ton filtre d'export :
 
-Si le mail n'arrive jamais dans Gmail, la DSI bloque le transfert vers l'extérieur : dis-le, une petite macro Outlook prendra le relais.
+- **Les statuts de fin** (Terminée, Réalisée, Validée… selon ce que Praxedo propose), sur les **7 derniers jours** par exemple. Ces tickets passent en vert sur la carte. S'il existe une colonne de date de fin (« Date de fin », « Réalisée le »…), ajoute-la aussi.
+- **La colonne des notes**, pour les tickets justifiés.
+
+Sans les statuts de fin, la carte se débrouille quand même : un ticket présent dans l'import précédent et absent du nouveau passe en vert « sorti de l'export : terminé ou annulé ».
+
+Les transferts automatiques vers Gmail sont bloqués par la DSI de Circet. Tu peux quand même **transférer un mail « [FIN INTERVENTION] » à la main** vers ton Gmail (un mail à la fois, pas plusieurs en pièce jointe) : le ticket passe en vert dans les 5 minutes, avec le lien du rapport.
 
 ## 2. Créer le Google Sheet et coller le code
 
@@ -26,8 +28,8 @@ Si le mail n'arrive jamais dans Gmail, la DSI bloque le transfert vers l'extéri
 ## 3. Lancer l'installation
 
 1. En haut de l'éditeur, choisis la fonction **installer** puis **Exécuter**.
-2. Google demande une autorisation : **Examiner les autorisations** → ton compte → **Paramètres avancés** → **Accéder à Carte tickets** → **Autoriser**. Le script lit les mails dont l'objet contient « FIN INTERVENTION », écrit dans ce Sheet et place les adresses sur la carte.
-3. Les onglets **Tickets**, **Fins d'intervention** et **Adresses** sont créés, et Gmail sera lu toutes les 5 minutes.
+2. Google demande une autorisation : **Examiner les autorisations** → ton compte → **Paramètres avancés** → **Accéder à Carte tickets** → **Autoriser**. Le script lit les mails dont l'objet contient « FIN INTERVENTION » (ceux que tu transfères), écrit dans ce Sheet et place les adresses sur la carte.
+3. Les onglets **Tickets**, **Fins d'intervention**, **Sortis de l'export** et **Adresses** sont créés, et Gmail sera lu toutes les 5 minutes.
 
 ## 4. Importer un export Praxedo
 
@@ -35,7 +37,7 @@ Si le mail n'arrive jamais dans Gmail, la DSI bloque le transfert vers l'extéri
 2. **Carte tickets → Importer un export Praxedo…** → choisis le CSV exporté de Praxedo (ton filtre habituel, avec la colonne des notes si tu l'as ajoutée).
 3. La première fois, compte une minute : les adresses sont placées sur la carte.
 
-Refais un import chaque fois que tu veux voir les nouveaux tickets (le matin, par exemple). Les fins d'intervention, elles, arrivent toutes seules.
+Refais un import aussi souvent que tu veux (matin, midi, soir…) : nouveaux tickets, plannings et fins d'intervention se mettent à jour à chaque fois.
 
 ## 5. Mettre la carte en ligne
 
@@ -47,11 +49,12 @@ La page se recharge toute seule toutes les 2 minutes. Toute personne qui a l'adr
 
 ## Au quotidien
 
-- **Vert** : mail de fin reçu. La liste « Fins d'intervention aujourd'hui » est dans la légende.
+- **Vert** : terminé (statut de fin dans l'export, ticket sorti de l'export, ou mail de fin transféré). La liste « Fins d'intervention aujourd'hui » est dans la légende.
 - **Violet** : nouveau depuis moins de 24 h, avec un trait vers l'intervention déjà planifiée la plus proche.
 - **Gris** : justifié / en attente. Contour orange : à relancer ou à vérifier.
 - **Rouge / orange** : à planifier (rouge = échéance GTR dépassée ou dans moins de 48 h). **Bleu** : déjà planifié.
 - Un mail de fin pour un ticket absent de l'export apparaît dans la liste « Mails de fin pour des tickets absents de l'export ».
+- Un ticket annulé n'apparaît pas sur la carte.
 - **Carte tickets → Lire les mails maintenant** : pour ne pas attendre les 5 minutes.
 
 ## Mettre à jour le code plus tard

@@ -5,7 +5,11 @@
  *   Tickets             : le dernier export Praxedo importé (menu Carte tickets → Importer un export Praxedo)
  *   Fins d'intervention : une ligne par mail « [FIN INTERVENTION] » reçu, lu dans Gmail toutes les 5 minutes
  *                         (une règle Outlook transfère ces mails vers ce Gmail)
+ *   Sortis de l'export  : les tickets présents dans l'import précédent et absents du nouveau (terminés ou annulés)
  *   Adresses            : les coordonnées des adresses (service d'adresses de l'IGN), pour ne pas les chercher deux fois
+ *
+ * Les fins d'intervention arrivent de trois façons : un statut de fin dans l'export (Terminée, Réalisée, Validée…),
+ * un ticket qui sort du filtre entre deux imports, ou un mail « [FIN INTERVENTION] » transféré à la main vers Gmail.
  *
  * La carte (Déployer → Application Web) recharge ces données toutes les 2 minutes et relit Gmail au passage.
  * Toute fonction sans « _ » à la fin peut être appelée depuis la page.
@@ -14,6 +18,8 @@
 var ONGLET_TICKETS = 'Tickets';
 var ONGLET_FINS = "Fins d'intervention";
 var ONGLET_ADRESSES = 'Adresses';
+var ONGLET_SORTIS = "Sortis de l'export";
+var ENTETES_SORTIS = ['Sorti le', 'N°', 'Statut avant', 'Planifiée', 'Technicien', 'Adresse', 'CP', 'Ville site', 'Site'];
 var ENTETES_FINS = ['Reçu le', 'N° ticket', 'Commune', 'Intervention du', 'Rapport', 'Objet du mail', 'Id du mail'];
 var ENTETES_ADRESSES = ['Adresse cherchée', 'Latitude', 'Longitude', 'Adresse trouvée', 'Score', 'Type', 'Commune', 'CP'];
 // Mails de fin d'intervention : l'objet contient « [FIN INTERVENTION] … N°BB-20261102T0761#0 - COMMUNE »
@@ -43,7 +49,7 @@ function onOpen() {
 function installer() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   [[ONGLET_TICKETS, ['Importe un export Praxedo : menu Carte tickets → Importer un export Praxedo']],
-   [ONGLET_FINS, ENTETES_FINS], [ONGLET_ADRESSES, ENTETES_ADRESSES]].forEach(function (o) {
+   [ONGLET_FINS, ENTETES_FINS], [ONGLET_SORTIS, ENTETES_SORTIS], [ONGLET_ADRESSES, ENTETES_ADRESSES]].forEach(function (o) {
     if (ss.getSheetByName(o[0])) return;
     var f = ss.insertSheet(o[0]);
     f.getRange(1, 1, 1, o[1].length).setValues([o[1]]).setFontWeight('bold');
@@ -78,7 +84,8 @@ function importerExport(texte) {
   var n = entetes.length;
   var valeurs = lignes.filter(function (l, i) { return i === 0 || l.some(function (v) { return v; }); })
     .map(function (l) { var r = l.slice(0, n); while (r.length < n) r.push(''); return r.map(texte_); });
-  var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_TICKETS);
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), f = ss.getSheetByName(ONGLET_TICKETS);
+  noterSortis_(ss, f.getDataRange().getDisplayValues(), valeurs);
   f.clear();
   f.getRange(1, 1, valeurs.length, n).setNumberFormat('@').setValues(valeurs);
   f.getRange(1, 1, 1, n).setFontWeight('bold');
@@ -89,6 +96,29 @@ function importerExport(texte) {
     return [r[c['Adresse']], r[c['CP']], r[c['Ville site']]].filter(function (x) { return x; }).join(' ');
   }));
   return { tickets: valeurs.length - 1, adresses: nouvelles };
+}
+
+/** Tickets de l'ancien import absents du nouveau : ils sont sortis du filtre (terminés ou annulés). Garde 14 jours. */
+function noterSortis_(ss, anciens, nouveaux) {
+  if (anciens.length < 2 || anciens[0].indexOf('N°') < 0) return;
+  var feuille = ss.getSheetByName(ONGLET_SORTIS) || ss.insertSheet(ONGLET_SORTIS);
+  if (feuille.getLastRow() === 0) feuille.getRange(1, 1, 1, ENTETES_SORTIS.length).setValues([ENTETES_SORTIS]).setFontWeight('bold');
+  var a = {}; anciens[0].forEach(function (c, i) { a[c] = i; });
+  var iNum = nouveaux[0].indexOf('N°'), presents = {};
+  nouveaux.slice(1).forEach(function (r) { presents[r[iNum]] = 1; });
+  var le = Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm');
+  var lignes = anciens.slice(1).filter(function (r) { return r[a['N°']] && !presents[r[a['N°']]]; }).map(function (r) {
+    var g = function (c) { return a[c] == null ? '' : r[a[c]]; };
+    return [le, g('N°'), g('Statut'), g('Planifiée'), [g('Nom technicien'), g('Prénom technicien')].join(' ').trim(),
+            g('Adresse'), g('CP'), g('Ville site'), g('Site')].map(texte_);
+  });
+  var limite = Date.now() - 14 * 86400000, garder = feuille.getDataRange().getDisplayValues().slice(1).filter(function (r) {
+    var m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(r[0]);
+    return m && new Date(+m[3], m[2] - 1, +m[1]).getTime() > limite;
+  });
+  var tout = garder.concat(lignes);
+  feuille.getRange(2, 1, Math.max(feuille.getLastRow() - 1, 1), ENTETES_SORTIS.length).clearContent();
+  if (tout.length) feuille.getRange(2, 1, tout.length, ENTETES_SORTIS.length).setNumberFormat('@').setValues(tout);
 }
 
 /** Lit les mails de fin d'intervention arrivés dans Gmail (déclencheur toutes les 5 minutes). */
@@ -141,11 +171,15 @@ function donnees() {
   var fins = ss.getSheetByName(ONGLET_FINS).getDataRange().getDisplayValues().slice(1).map(function (r) {
     return { recu: r[0], num: r[1], commune: r[2], jour: r[3], rapport: r[4] };
   });
+  var fs = ss.getSheetByName(ONGLET_SORTIS);
+  var sortis = fs ? fs.getDataRange().getDisplayValues().slice(1).map(function (r) {
+    return { le: r[0], num: r[1], statut: r[2], planif: r[3], tech: r[4], adresse: r[5], cp: r[6], ville: r[7], site: r[8] };
+  }) : [];
   var adresses = {};
   ss.getSheetByName(ONGLET_ADRESSES).getDataRange().getValues().slice(1).forEach(function (r) {
     adresses[r[0]] = r[1] === '' ? null : { lat: +r[1], lon: +r[2], label: r[3], score: +r[4], type: r[5], city: r[6], postcode: String(r[7]) };
   });
-  return { entetes: t[0], lignes: t.slice(1), fins: fins, adresses: adresses,
+  return { entetes: t[0], lignes: t.slice(1), fins: fins, sortis: sortis, adresses: adresses,
            importeLe: props.getProperty('IMPORTE_LE') || '', luLe: props.getProperty('LU_LE') || '' };
 }
 

@@ -762,8 +762,12 @@ pts = []
 for t in T:
     if not t["geo"]:
         continue
+    if re.search(r"annul", t["statut"], re.I):
+        continue
     if t["a_planifier"]:
         k = "retard" if t.get("prio") == 1 else "aplanifier"
+    elif re.search(r"termin|r[ée]alis|valid|cl[ôo]tur|ferm", t["statut"], re.I):
+        k = "termine"  # statut de fin, si le filtre de l'export les inclut
     else:
         k = "planifie"
     cp_ = t.get("caser_p")
@@ -806,6 +810,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <label><input type="checkbox" data-k="retard" checked><span class="dot" style="background:#d62728"></span>À planifier, prioritaire</label>
 <label><input type="checkbox" data-k="aplanifier" checked><span class="dot" style="background:#ff9f1c"></span>À planifier</label>
 <label><input type="checkbox" data-k="planifie" checked><span class="dot" style="background:#1f77b4"></span>Déjà planifié</label>
+<label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé</label>
 <small>Un nouveau prioritaire a un contour rouge. Le trait violet le relie à l'intervention déjà planifiée la plus proche (moins de __RAYON__).</small>
 <div id="relances"></div><div id="nouveaux"></div>
 </div></div>
@@ -813,13 +818,13 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 const P=__DATA__;
 const NOUVEAU_MS=__NOUVEAU_H__*3600e3, maintenant=Date.now();
 const RELANCE='#e67e22';
-const C={nouveau:'#8e44ad',justifie:'#8b939c',retard:'#d62728',aplanifier:'#ff9f1c',planifie:'#1f77b4'};
+const C={nouveau:'#8e44ad',justifie:'#8b939c',retard:'#d62728',aplanifier:'#ff9f1c',planifie:'#1f77b4',termine:'#2e9e5b'};
 const map=L.map('map');
 // Fond Plan IGN (Géoplateforme) : libre, sans clé. Les serveurs d'OpenStreetMap refusent les pages ouvertes depuis un fichier.
 L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
   {maxZoom:19,attribution:'&copy; <a href="https://www.ign.fr/">IGN</a> Plan IGN'}).addTo(map);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const layers={planifie:L.layerGroup().addTo(map),justifie:L.layerGroup().addTo(map),aplanifier:L.layerGroup().addTo(map),retard:L.layerGroup().addTo(map),nouveau:L.layerGroup().addTo(map)};
+const layers={termine:L.layerGroup().addTo(map),planifie:L.layerGroup().addTo(map),justifie:L.layerGroup().addTo(map),aplanifier:L.layerGroup().addTo(map),retard:L.layerGroup().addTo(map),nouveau:L.layerGroup().addTo(map)};
 const b=[], nouveaux=[], relances=[]; let nbj=0;
 for(const p of P){
   b.push([p.lat,p.lon]);
@@ -831,7 +836,7 @@ for(const p of P){
   if(justifie)nbj++;
   // justifié à relancer : contour orange épais ; nouveau prioritaire : contour rouge
   const relance=justifie&&p.sv&&p.sv.due;
-  const m=L.circleMarker([p.lat,p.lon],{radius:k==='planifie'?6:(nouveau?10:8),
+  const m=L.circleMarker([p.lat,p.lon],{radius:k==='planifie'||k==='termine'?6:(nouveau?10:8),
     color:relance?RELANCE:nouveau&&p.k==='retard'?C.retard:'#222',weight:relance||nouveau&&p.k==='retard'?3:1,fillColor:C[k],fillOpacity:.92});
   const sv=justifie&&p.sv?`<br><span style="color:${p.sv.due?'#a35208':'#4a535c'};font-weight:600">${p.sv.due?'À faire maintenant : ':'Suivi : '}${esc(p.sv.a)}</span>
     <br><small>${p.sv.pr?(p.sv.due?'Relance prévue le ':'Prochaine relance le ')+esc(p.sv.pr)+' · ':''}compté depuis ${esc(p.sv.b)}</small>`:'';
