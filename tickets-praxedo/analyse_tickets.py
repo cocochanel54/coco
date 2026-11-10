@@ -37,6 +37,20 @@ NOUVEAU_H = 24          # un ticket à planifier reste « nouveau » (violet sur
 GTR_NIVEAU = {1: ("heures", 4), 2: ("jours ouvrés", 1), 3: ("jours ouvrés", 6), 4: ("jours ouvrés", 10)}
 HO_DEBUT, HO_FIN = 8, 18  # heures ouvrées : de 8 h à 18 h, du lundi au vendredi hors jours fériés
 
+# Retard justifié / ticket en attente : une note Praxedo (ou la description) dit pourquoi on ne peut pas intervenir.
+# Ces tickets passent en gris sur la carte et ne comptent plus comme « en retard ». Liste à compléter au besoin.
+RE_JUSTIF = re.compile(r"""(
+    GTR\s+justifi\w*[^\n.]{0,60}                                                   # « GTR justifiée car poteau »
+  | justifi(?:é|e|ée|ee|cation)\b[^\n.]{0,60}                                      # « retard justifié … »
+  | (?:poteau|pot\b\.?|appui)[^\n.]{0,25}?\b(?:à|a)\s+(?:remplacer|changer|signaler|poser|redresser)\b[^\n.]{0,40}
+  | (?:en\s+)?attente\s+(?:d[eu]\s+|de\s+la\s+|d['’]\s*)?(?:orange|enedis|poteau|nacelle|autorisation|arr[êe]t[ée]|mairie
+      |[ée]lagage|mat[ée]riel|accord|syndic|gestionnaire)\b[^\n.]{0,40}            # « en attente d'Orange », « attente nacelle »
+  | signalisation[^\n.]{0,20}orange[^\n.]{0,30}                                    # « signalisation en cours vers Orange »
+  | sig\s+faite[^\n.]{0,50}
+)""", re.I | re.X)
+# Colonnes de notes de l'export, reconnues à leur nom (ajoute la colonne des notes à ton filtre Praxedo)
+RE_COL_NOTES = re.compile(r"note|comment|remarque|observ|justif", re.I)
+
 
 # ---------- lecture ----------
 
@@ -66,6 +80,7 @@ def norm(s):
 
 rows = list(csv.DictReader(open(SRC, encoding="utf-8-sig", newline=""), delimiter=";"))
 COLS = [c for c in (rows[0].keys() if rows else []) if c]
+COLS_NOTES = [c for c in COLS if RE_COL_NOTES.search(c) and c != "Description"]
 
 RE_CLS = re.compile(r"\b[A-Z]{2}\d{3}-[A-Z]{5}-\d{3}\b")
 RE_PTO = re.compile(r"\b(?:TN-[A-Z0-9]{3,5}-[A-Z0-9]{4,5}|GE-\d{4}-[A-Z0-9]{4})\b")
@@ -165,6 +180,9 @@ for r in rows:
     nom = " ".join(x for x in ((r.get("Nom technicien") or "").strip(), (r.get("Prénom technicien") or "").strip()) if x)
     base = num.split("#")[0].upper()
     info = re.search(r"Information du client\s*:\s*([A-Z0-9-]+)\s*/\s*([^\n]*)", desc, re.I)
+    notes = " · ".join(txt(r.get(c)) for c in COLS_NOTES if txt(r.get(c)))
+    mj = RE_JUSTIF.search(notes) or RE_JUSTIF.search(desc)
+    justif = (("Note : " if RE_JUSTIF.search(notes) else "Description : ") + "« " + " ".join(mj.group(0).split()).rstrip(" ,;:-") + " »") if mj else ""
     T.append(dict(
         num=num, base=base, iteration=int(num.split("#")[1]) if "#" in num and num.split("#")[1].isdigit() else 0,
         statut=(r.get("Statut") or "").strip(), type=(r.get("Type inter.") or "").strip(),
@@ -180,6 +198,7 @@ for r in rows:
         boites=sorted({b.upper() for b in RE_BOITE.findall(desc + " " + equip)}),
         refs=sorted({"BB-" + x.upper() for x in RE_REF.findall(desc)} - {base}),
         info_site=info.group(1).upper() if info else "", info_adr=info.group(2).strip() if info else "",
+        notes=notes, justif=justif,
     ))
 
 for t in T:
@@ -262,7 +281,11 @@ for t in T:
     t.setdefault("alertes", [])
     ouvert = t["statut"] in ("Qualifiée", "Pré-planifiée", "Planifiée", "Synchronisée")
     e = t["echeance"]
-    if ouvert and e and e < NOW:
+    if ouvert and e and e < NOW and t["justif"]:
+        inc("4 - Info", t, f"Retard justifié ({fretard(NOW - e)})", f"{t['justif']} · échéance GTR {fd(e)}")
+    elif ouvert and t["justif"]:
+        t["alertes"].append("Justifié / en attente")
+    elif ouvert and e and e < NOW:
         g = "1 - Urgent" if t["statut"] == "Qualifiée" else "2 - Important"
         inc(g, t, f"Échéance dépassée de {fretard(NOW - e)}",
             f"{t['regle']} · à faire avant le {fd(e)} · statut {t['statut']}" + (f" · planifiée le {fd(t['planif'])}" if t["planif"] and not t["deplanifie"] else ""))
@@ -435,8 +458,10 @@ for t in T:
 
 
 def priorite(t):
-    # 1 : en retard ou sur le point de l'être · 2 : client coupé, déplanifié, niveau 3 · 3 : le reste
+    # 1 : en retard ou sur le point de l'être · 2 : client coupé, déplanifié, niveau 3 · 3 : le reste · 4 : justifié / en attente
     a = t.get("alertes", [])
+    if t["justif"]:
+        return 4
     if any(x.startswith(("Échéance dépassée", "Échéance dans moins")) for x in a):
         return 1
     if t["niveau"] in (2, 3) and t["equip"] in ("Service Interrompu", "Service Dégradé") or t["deplanifie"] or t["niveau"] == 3:
@@ -448,7 +473,8 @@ A_PLANIFIER = [t for t in T if t["a_planifier"]]
 for t in A_PLANIFIER:
     t["prio"] = priorite(t)
     t["nouveau"] = bool(t["creee"] and NOW - t["creee"] < timedelta(hours=NOUVEAU_H))
-NOUVEAUX = sorted([t for t in A_PLANIFIER if t["nouveau"]], key=lambda t: t["creee"], reverse=True)
+NOUVEAUX = sorted([t for t in A_PLANIFIER if t["nouveau"] and not t["justif"]], key=lambda t: t["creee"], reverse=True)
+JUSTIFIES = [t for t in A_PLANIFIER if t["justif"]]
 # par échéance GTR, la plus proche (ou la plus dépassée) d'abord, puis les plus anciens
 A_PLANIFIER.sort(key=lambda t: (t["prio"], t["echeance"] or datetime.max, t["creee"] or NOW))
 
@@ -472,7 +498,7 @@ wb = openpyxl.Workbook()
 H = Font(bold=True, color="FFFFFF")
 HF = PatternFill("solid", fgColor="1F4E78")
 WRAP = Alignment(wrap_text=True, vertical="top")
-COUL = {"nouveau": "E4D7F5", 1: "F8CBAD", 2: "FFE699", 3: "E2EFDA", "1 - Urgent": "F8CBAD", "2 - Important": "FFE699", "3 - À vérifier": "DDEBF7", "4 - Info": "EDEDED"}
+COUL = {"nouveau": "E4D7F5", "justifie": "DDE1E6", 4: "DDE1E6", 1: "F8CBAD", 2: "FFE699", 3: "E2EFDA", "1 - Urgent": "F8CBAD", "2 - Important": "FFE699", "3 - À vérifier": "DDEBF7", "4 - Info": "EDEDED"}
 
 
 def feuille(ws, entetes, lignes, largeurs, couleur=None):
@@ -513,13 +539,18 @@ lignes = [
     (f"NOUVEAUX (créés depuis moins de {NOUVEAU_H} h)", len(NOUVEAUX)),
     (f"dont à moins de {fdist(CASER_M)} d'une intervention déjà planifiée : à programmer dans la foulée", sum(1 for t in NOUVEAUX if t.get("caser"))),
     ("", ""),
+    ("JUSTIFIÉS / EN ATTENTE (GTR justifiée, poteau à remplacer, attente Orange…)", len(JUSTIFIES)),
+    ("dont échéance GTR dépassée (retard justifié)", sum(1 for t in JUSTIFIES if t["echeance"] and t["echeance"] < NOW)),
+    ("Colonnes de notes lues dans l'export", ", ".join(COLS_NOTES) or "aucune : seule la description est lue"),
+    ("", ""),
     ("TICKETS À PLANIFIER", ""),
     ("Qualifiée (jamais planifiés)", sum(1 for t in qual if not t["deplanifie"])),
     ("Qualifiée mais déjà planifiés une fois (déplanifiés)", sum(1 for t in qual if t["deplanifie"])),
     ("Pré-planifiée (à confirmer)", nb.get("Pré-planifiée", 0)),
     ("dont priorité 1 (échéance GTR dépassée ou dans moins de 48 h)", sum(1 for t in A_PLANIFIER if t["prio"] == 1)),
     ("dont priorité 2 (client coupé, déjà déplanifié, niveau 3)", sum(1 for t in A_PLANIFIER if t["prio"] == 2)),
-    ("dont échéance GTR dépassée", sum(1 for t in A_PLANIFIER if t["echeance"] and t["echeance"] < NOW)),
+    ("dont justifiés / en attente (priorité 4)", sum(1 for t in A_PLANIFIER if t["prio"] == 4)),
+    ("dont échéance GTR dépassée sans justification", sum(1 for t in A_PLANIFIER if t["echeance"] and t["echeance"] < NOW and not t["justif"])),
     ("dont créés il y a plus de 60 jours", sum(1 for t in A_PLANIFIER if t["creee"] and (NOW - t["creee"]).days > AGE_VIEUX_J)),
     ("dont RDV client à prendre", sum(1 for t in A_PLANIFIER if t["rdv"])),
     ("dont avec nacelle", sum(1 for t in A_PLANIFIER if t["nacelle"])),
@@ -553,19 +584,27 @@ feuille(ws, ["N°", "Créé le", "Prio", "Niveau", "Règle GTR", "Échéance GTR
           " · ".join(dict.fromkeys(t.get("alertes", []))), court(t["desc"], 200)] for t in NOUVEAUX],
         [22, 16, 6, 8, 26, 16, 22, 30, 18, 45, 30, 40, 60], couleur=lambda l: "nouveau")
 
+# Justifiés / en attente
+ws = wb.create_sheet("Justifiés")
+feuille(ws, ["N°", "Statut", "Niveau", "Échéance GTR", "Retard", "Justification", "Ville", "Adresse", "PM (Site)", "Description"],
+        [[t["num"], t["statut"], t["niveau"] or "", fd(t["echeance"]),
+          fretard(NOW - t["echeance"]) if t["echeance"] and t["echeance"] < NOW else "", t["justif"], t["ville"], t["adresse"],
+          t["site"], court(t["desc"], 200)] for t in JUSTIFIES],
+        [22, 12, 8, 16, 9, 50, 22, 30, 18, 70], couleur=lambda l: "justifie")
+
 # À planifier
 ws = wb.create_sheet("À planifier")
 feuille(ws, ["Prio", "N°", "Nouveau", "Statut", "Niveau", "Échéance GTR", "Retard", "Règle GTR", "Échéance Praxedo", "Âge (j)", "Ville", "Adresse", "PM (Site)", "Immeuble",
-             "Boîte(s)", "Équipement", "Ancienne date planifiée", "Alertes", "Tickets liés (groupe)", "Tout proches (< 300 m)",
+             "Boîte(s)", "Équipement", "Ancienne date planifiée", "Justification", "Alertes", "Tickets liés (groupe)", "Tout proches (< 300 m)",
              "À caser avec (intervention déjà planifiée)", "Tournée", "Description"],
         [[t["prio"], t["num"], "oui" if t["nouveau"] else "", t["statut"], t["niveau"] or "", fd(t["echeance"]),
           fretard(NOW - t["echeance"]) if t["echeance"] and t["echeance"] < NOW else "", t["regle"], fd(t["avant"]),
           (NOW - t["creee"]).days if t["creee"] else "",
           t["ville"], t["adresse"], t["site"], t["immeuble"], ", ".join(t["boites"]), t["equip"],
-          fd(t["planif"]) if t["deplanifie"] else "", " · ".join(dict.fromkeys(t.get("alertes", []))),
+          fd(t["planif"]) if t["deplanifie"] else "", t["justif"], " · ".join(dict.fromkeys(t.get("alertes", []))),
           f"G{t['groupe']} : {t['groupe_raisons']}" if t.get("groupe") else "", t.get("voisins", ""), t.get("caser", ""),
           f"T{t['tournee']}" if t.get("tournee") else "", court(t["desc"])] for t in A_PLANIFIER],
-        [6, 22, 9, 12, 8, 16, 9, 26, 16, 8, 22, 30, 18, 18, 22, 16, 16, 45, 30, 30, 40, 9, 70], couleur=lambda l: l[0])
+        [6, 22, 9, 12, 8, 16, 9, 26, 16, 8, 22, 30, 18, 18, 22, 16, 16, 40, 45, 30, 30, 40, 9, 70], couleur=lambda l: l[0])
 
 # Tickets liés
 ws = wb.create_sheet("Tickets liés")
@@ -661,7 +700,7 @@ for t in T:
               d=fdist(t["caser_d"])) if cp_ else None
     pts.append(dict(lat=t["geo"]["lat"], lon=t["geo"]["lon"], k=k, n=t["num"], s=t["statut"], ap=t["a_planifier"],
                     c=int(t["creee"].replace(tzinfo=ZoneInfo("Europe/Paris")).timestamp() * 1000) if t["creee"] else None,
-                    cr=fd(t["creee"]), cs=cs,
+                    cr=fd(t["creee"]), cs=cs, j=t["justif"] if t["statut"] in ("Qualifiée", "Pré-planifiée", "Planifiée", "Synchronisée") else "",
                     p=fd(t["planif"]) if t["planif"] else "", tech=t["tech"], av=fd(t["echeance"]), v=t["ville"], a=t["adresse"],
                     pm=t["site"], al=" · ".join(dict.fromkeys(t.get("alertes", []))), g=t.get("groupe", ""), tr=t.get("tournee", ""),
                     d=court(t["desc"], 220)))
@@ -688,6 +727,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <div class="leg" id="leg"><button id="plier" type="button" aria-expanded="true">Masquer</button><h1>Tickets Praxedo</h1><small>__DATE__</small>
 <div id="corps">
 <label><input type="checkbox" data-k="nouveau" checked><span class="dot" style="background:#8e44ad"></span>Nouveau (moins de __NOUVEAU_H__ h) <b id="nbnv"></b></label>
+<label><input type="checkbox" data-k="justifie" checked><span class="dot" style="background:#8b939c"></span>Justifié / en attente <b id="nbj"></b></label>
 <label><input type="checkbox" data-k="retard" checked><span class="dot" style="background:#d62728"></span>À planifier, prioritaire</label>
 <label><input type="checkbox" data-k="aplanifier" checked><span class="dot" style="background:#ff9f1c"></span>À planifier</label>
 <label><input type="checkbox" data-k="planifie" checked><span class="dot" style="background:#1f77b4"></span>Déjà planifié</label>
@@ -697,31 +737,35 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <script>
 const P=__DATA__;
 const NOUVEAU_MS=__NOUVEAU_H__*3600e3, maintenant=Date.now();
-const C={nouveau:'#8e44ad',retard:'#d62728',aplanifier:'#ff9f1c',planifie:'#1f77b4'};
+const C={nouveau:'#8e44ad',justifie:'#8b939c',retard:'#d62728',aplanifier:'#ff9f1c',planifie:'#1f77b4'};
 const map=L.map('map');
 // Fond Plan IGN (Géoplateforme) : libre, sans clé. Les serveurs d'OpenStreetMap refusent les pages ouvertes depuis un fichier.
 L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
   {maxZoom:19,attribution:'&copy; <a href="https://www.ign.fr/">IGN</a> Plan IGN'}).addTo(map);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const layers={planifie:L.layerGroup().addTo(map),aplanifier:L.layerGroup().addTo(map),retard:L.layerGroup().addTo(map),nouveau:L.layerGroup().addTo(map)};
-const b=[], nouveaux=[];
+const layers={planifie:L.layerGroup().addTo(map),justifie:L.layerGroup().addTo(map),aplanifier:L.layerGroup().addTo(map),retard:L.layerGroup().addTo(map),nouveau:L.layerGroup().addTo(map)};
+const b=[], nouveaux=[]; let nbj=0;
 for(const p of P){
   b.push([p.lat,p.lon]);
   // « nouveau » est recalculé à l'ouverture : la couleur s'en va toute seule 24 h après la création du ticket
-  const nouveau=p.ap&&p.c&&maintenant-p.c<NOUVEAU_MS;
-  const k=nouveau?'nouveau':p.k;
+  // un ticket justifié (note « GTR justifiée », « poteau à remplacer »…) passe en gris, même s'il est nouveau ou en retard
+  const justifie=p.ap&&!!p.j;
+  const nouveau=!justifie&&p.ap&&p.c&&maintenant-p.c<NOUVEAU_MS;
+  const k=justifie?'justifie':nouveau?'nouveau':p.k;
+  if(justifie)nbj++;
   const m=L.circleMarker([p.lat,p.lon],{radius:k==='planifie'?6:(nouveau?10:8),color:nouveau&&p.k==='retard'?C.retard:'#222',
     weight:nouveau&&p.k==='retard'?3:1,fillColor:C[k],fillOpacity:.92});
   const foulee=p.cs?`<br><span class="foulee">À programmer avec ${esc(p.cs.n)} le ${esc(p.cs.p)} · ${esc(p.cs.tech)} · à ${esc(p.cs.d)}</span>`:'';
   m.bindPopup(`<div class="pop"><b>${esc(p.n)}</b>${nouveau?' <span class="foulee">· nouveau</span>':''}<br>${esc(p.s)}${p.p?' · '+esc(p.p):''}${p.tech?' · '+esc(p.tech):''}<br>
   ${esc(p.a)}, ${esc(p.v)}<br><small>Créé le ${esc(p.cr)} · PM ${esc(p.pm)} · échéance GTR ${esc(p.av||'—')}${p.g?' · groupe G'+p.g:''}${p.tr?' · tournée T'+p.tr:''}</small>
-  ${foulee}${p.al?'<br><b style="color:#b00">'+esc(p.al)+'</b>':''}<br><small>${esc(p.d)}</small></div>`,{maxWidth:320});
+  ${p.j?'<br><b style="color:#4a535c">Justifié · '+esc(p.j)+'</b>':''}${foulee}${p.al?'<br><b style="color:#b00">'+esc(p.al)+'</b>':''}<br><small>${esc(p.d)}</small></div>`,{maxWidth:320});
   m.addTo(layers[k]);
   if(nouveau&&p.cs)L.polyline([[p.lat,p.lon],[p.cs.lat,p.cs.lon]],{color:C.nouveau,weight:3,dashArray:'6 5'}).addTo(layers.nouveau);
   if(k==='retard')L.circle([p.lat,p.lon],{radius:__RAYONM__,color:C.retard,weight:1,dashArray:'4 4',fill:false}).addTo(layers.retard);
   if(nouveau)nouveaux.push({p,m});
 }
 document.getElementById('nbnv').textContent='('+nouveaux.length+')';
+document.getElementById('nbj').textContent='('+nbj+')';
 const liste=document.getElementById('nouveaux');
 if(nouveaux.length){
   liste.innerHTML='<h2>Nouveaux à programmer</h2>';
