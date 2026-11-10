@@ -183,8 +183,26 @@ function ligneMail_(objet, corps, recu, id) {
   if (/^(N\/?A|NC|-)?$/i.test(commune)) commune = '';  // « - NA » : commune pas renseignée
   var jour = type === 'Fin' ? /faite ce jour\s+(\d{2}\/\d{2}\/\d{4})/i.exec(corps) : null;
   var lien = /https?:\/\/[^\s<>"]*praxedo[^\s<>"]*\/render/i.exec(corps) || /https?:\/\/[^\s<>"]*praxedo[^\s<>"]*/i.exec(corps);
+  // Mail transféré à la main : on garde l'heure d'arrivée du mail d'origine (« Envoyé : mardi 10 novembre 2026 18:41 »).
+  var origine = dateTransfert_(corps);
+  if (origine && origine <= recu && recu - origine < 60 * 24 * 3600e3) recu = origine;
   return [Utilities.formatDate(recu, 'Europe/Paris', 'dd/MM/yyyy HH:mm'), type, m[1].toUpperCase(), commune,
           jour ? jour[1] : '', lien ? lien[0].replace(/[.,;:)\]]+$/, '') : '', objet, id];
+}
+
+/** Date du mail d'origine dans l'en-tête d'un transfert Outlook (« Envoyé : » ou « Date : »), ou null. */
+function dateTransfert_(corps) {
+  var m = /^[\s*>]*(?:Envoyé|Envoye|Date)\s*:\s*\**\s*(?:[a-zéû]+\.?,?\s+)?(\d{1,2})(?:\s+([a-zéûè]+)\.?\s+|\/(\d{1,2})\/)(\d{4})(?:,?\s+(?:à\s+)?(\d{1,2})[:h](\d{2}))?/im.exec(corps || '');
+  if (!m) return null;
+  var mois = m[3] ? +m[3] - 1 : -1;
+  if (m[2]) {
+    var noms = [['janv', 0], ['jan', 0], ['fév', 1], ['fev', 1], ['mars', 2], ['avr', 3], ['mai', 4], ['juin', 5], ['juil', 6],
+                ['aoû', 7], ['aou', 7], ['sep', 8], ['oct', 9], ['nov', 10], ['déc', 11], ['dec', 11]];
+    for (var i = 0; i < noms.length; i++) if (m[2].toLowerCase().indexOf(noms[i][0]) === 0) { mois = noms[i][1]; break; }
+  }
+  if (mois < 0 || mois > 11) return null;
+  var d = new Date(+m[4], mois, +m[1], +(m[5] || 0), +(m[6] || 0));
+  return d.getDate() === +m[1] ? d : null;
 }
 
 /** Cherche les adresses inconnues avec le service d'adresses de l'IGN (rue, CP, ville : rien d'autre n'est envoyé). */

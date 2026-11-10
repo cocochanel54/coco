@@ -4,26 +4,18 @@ La carte se met à jour toute seule : chaque mail « [CREATION INTERVENTION] » 
 
 Ça tourne dans ton compte Google, comme Journée agent. Utilise **le même compte Google** pour le Sheet et pour recevoir les mails.
 
-## 1. Relier ta boîte Outlook à ton Gmail
+## 1. Envoyer les mails Praxedo vers ton Gmail
 
-Une seule règle pour les deux sortes de mails.
+Chez Circet, la DSI bloque les règles qui transfèrent automatiquement vers l'extérieur : on transfère donc à la main.
 
-**Nouvel Outlook ou Outlook sur le web**
-1. Engrenage **Paramètres** → **Courrier** → **Règles** → **+ Ajouter une nouvelle règle**.
-2. Nom : `Praxedo vers Gmail`.
-3. Condition : **L'objet inclut** → tape `FIN INTERVENTION`, puis ajoute une deuxième valeur `CREATION INTERVENTION` (sans accent, comme dans l'objet). Deux valeurs dans la même condition = l'une **ou** l'autre.
-4. Action : **Transférer et rediriger** → **Rediriger vers** → ton adresse Gmail.
-5. Laisse « Exécuter la règle maintenant » décoché, puis **Enregistrer**.
+1. Si tu as créé la règle « Praxedo vers Gmail », supprime-la ou désactive-la (**Paramètres → Courrier → Règles**) : sinon tu reçois un mail d'erreur à chaque fois.
+2. Pour chaque mail **[CREATION INTERVENTION]** ou **[FIN INTERVENTION]** : **Transférer** → ton adresse Gmail → **Envoyer**. Rien à écrire, et laisse l'objet tel quel (le « TR: » ajouté ne gêne pas).
+3. **Un mail à la fois** : si tu sélectionnes plusieurs mails et les transfères d'un coup, Outlook les met en pièces jointes et le script ne peut pas les lire.
+4. Pas besoin de transférer à la seconde : la carte affiche l'heure du mail d'origine (lue dans la ligne « Envoyé : » du transfert).
 
-**Outlook classique (logiciel Windows)**
-1. **Accueil** → **Règles** → **Gérer les règles et les alertes** → **Nouvelle règle…** → **Appliquer la règle aux messages que je reçois** → **Suivant**.
-2. Coche **comprenant des mots spécifiques dans l'objet**, clique sur le lien bleu, ajoute `FIN INTERVENTION` puis `CREATION INTERVENTION` (**Ajouter** après chaque) → **OK** → **Suivant**.
-3. Coche **le rediriger vers des personnes ou une liste publique**, clique sur le lien bleu, tape ton Gmail dans **À** → **OK** → **Suivant** → **Suivant**.
-4. Nomme la règle `Praxedo vers Gmail` → **Terminer**.
+Pour aller plus vite, si ton Outlook le propose : une **étape rapide** « Transférer à » avec ton Gmail déjà rempli.
 
-**Rediriger** plutôt que transférer : le mail arrive dans Gmail tel quel (même objet, même expéditeur). Vérifie que le prochain mail de création ou de fin arrive bien dans Gmail (regarde aussi les **Spams** : le script les lit quand même, mais tu peux cliquer « Non spam »).
-
-Si le mail n'arrive jamais dans Gmail, ou si tu reçois une erreur « transfert externe non autorisé » / « 550 5.7.520 », la DSI bloque le transfert vers l'extérieur : dis-le, une petite macro Outlook prendra le relais.
+Dans Gmail, regarde aussi les **Spams** la première fois : le script les lit quand même, mais tu peux cliquer « Non spam ».
 
 ## 2. Créer le Google Sheet et coller le code
 
@@ -47,7 +39,7 @@ Si le mail n'arrive jamais dans Gmail, ou si tu reçois une erreur « transfert 
 2. **Carte tickets → Importer un export Praxedo…** → choisis le CSV exporté de Praxedo (ton filtre habituel, avec la colonne des notes si tu l'as ajoutée).
 3. La première fois, compte une minute : les adresses sont placées sur la carte.
 
-Les créations et les fins d'intervention arrivent toutes seules par mail. Refais un import de temps en temps (le matin, par exemple) pour avoir l'adresse exacte, la GTR et les tickets planifiés.
+Les créations et les fins d'intervention arrivent par les mails que tu transfères. Refais un import de temps en temps (le matin, par exemple) pour avoir l'adresse exacte, la GTR et les tickets planifiés.
 
 ## 5. Mettre la carte en ligne
 
