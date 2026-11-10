@@ -611,7 +611,9 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 const P=__DATA__;
 const C={retard:'#d62728',aplanifier:'#ff9f1c',planifie:'#1f77b4'};
 const map=L.map('map');
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+// Fond Plan IGN (Géoplateforme) : libre, sans clé. Les serveurs d'OpenStreetMap refusent les pages ouvertes depuis un fichier.
+L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
+  {maxZoom:19,attribution:'&copy; <a href="https://www.ign.fr/">IGN</a> Plan IGN'}).addTo(map);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const layers={retard:L.layerGroup().addTo(map),aplanifier:L.layerGroup().addTo(map),planifie:L.layerGroup().addTo(map)};
 const b=[];
