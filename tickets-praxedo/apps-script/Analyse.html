@@ -22,6 +22,7 @@ var RE_JUSTIF = new RegExp([
   'sig\\s+faite[^\\n.]{0,50}'
 ].join('|'), 'i');
 var RE_COL_NOTES = /note|comment|remarque|observ|justif/i;
+var PREFIXE_COMMUNE = 'Commune : ';  // même clé que dans Code.gs (onglet Adresses)
 var RE_PREVU = /(prévu|prevu|programm|planifi|travaux|remplac|pose|passage)[^\n]{0,30}$/i;
 
 function dt(s) {
@@ -138,12 +139,20 @@ function analyser(donnees, NOW) {
   var R = REGLAGES, TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
   var col = {}; (donnees.entetes || []).forEach(function (c, i) { col[c] = i; });
   var colsNotes = (donnees.entetes || []).filter(function (c) { return RE_COL_NOTES.test(c) && c !== 'Description'; });
-  // fins d'intervention reçues par mail : la plus récente par n° de ticket (et par n° sans « #… »)
-  var fins = {};
+  // fins d'intervention reçues par mail : la plus récente par n° exact (BB-…#1) et par n° sans « #… »
+  var fins = {}, finsBase = {};
+  function garder(table, k, f) { if (!table[k] || dt(f.recu) > dt(table[k].recu)) table[k] = f; }
   (donnees.fins || []).forEach(function (f) {
     if (!f.num) return;
-    [f.num, f.num.split('#')[0]].forEach(function (k) { if (!fins[k] || dt(f.recu) > dt(fins[k].recu)) fins[k] = f; });
+    garder(fins, f.num, f);
+    garder(finsBase, f.num.split('#')[0], f);
   });
+  // « #0 », « #1 »… : une nouvelle intervention sur le même ticket. La fin du #0 ne termine pas le #1,
+  // et une fin reçue avant la création d'une intervention ne peut pas être la sienne.
+  function finDe(num, creee) {
+    var f = fins[num] || (num.indexOf('#') < 0 ? finsBase[num] : fins[num.split('#')[0]]);
+    return f && (!creee || dt(f.recu) >= creee) ? f : null;
+  }
   var T = (donnees.lignes || []).map(function (r) {
     var g = function (c) { return col[c] == null ? '' : String(r[col[c]] == null ? '' : r[col[c]]).trim(); };
     var num = g('N°');
@@ -165,8 +174,8 @@ function analyser(donnees, NOW) {
       dept: cp ? cp.slice(0, 2) : (msite ? msite[1] : '54'),
       geo: donnees.adresses ? donnees.adresses[adr] || null : null, alertes: []
     };
-    var fin = fins[num] || fins[t.base];
-    t.fin = fin || null;
+    var fin = finDe(num, t.creee);
+    t.fin = fin;
     t.termine = !!fin;
     var ouvert = !t.termine && ['Qualifiée', 'Pré-planifiée', 'Planifiée', 'Synchronisée'].indexOf(t.statut) >= 0;
     t.aPlanifier = !t.termine && (t.statut === 'Qualifiée' || t.statut === 'Pré-planifiée');
@@ -200,10 +209,31 @@ function analyser(donnees, NOW) {
     t.categorie = t.termine ? 'termine' : t.aPlanifier ? (t.justif ? 'justifie' : t.nouveau ? 'nouveau' : t.prio === 1 ? 'retard' : 'aplanifier') : 'planifie';
   });
 
-  var nums = {}; T.forEach(function (t) { nums[t.num] = 1; nums[t.base] = 1; });
+  var nums = {}, exacts = {}; T.forEach(function (t) { nums[t.num] = 1; nums[t.base] = 1; exacts[t.num] = 1; });
+  // L'export a ce n° (ou le même ticket sans « #… ») : la création de cette intervention y est déjà.
+  function dansExport(num) { var b = num.split('#')[0]; return !!(exacts[num] || exacts[b] || (num === b && nums[b])); }
+
+  // Mails de création pour une intervention absente de l'export et pas encore finie : nouveaux tickets,
+  // placés au centre de leur commune en attendant le prochain import. Un mail reçu plus d'1 h avant l'import
+  // aurait dû être dans l'export (ticket hors de ton filtre, annulé…) : il n'est plus affiché, ni après 7 jours.
+  var importe = donnees.importeLe ? new Date(donnees.importeLe) : null, creations = {};
+  (donnees.creations || []).forEach(function (c) {
+    var recu = dt(c.recu);
+    if (!c.num || !recu || dansExport(c.num) || finDe(c.num, recu)) return;
+    if ((importe && recu < importe - 3600e3) || NOW - recu > 7 * 24 * 3600e3) return;
+    if (creations[c.num] && dt(creations[c.num].recu) >= recu) return;
+    creations[c.num] = c;
+  });
+  var nouveauxParMail = Object.keys(creations).map(function (k) {
+    var c = creations[k];
+    return { parMail: true, num: c.num, ville: c.commune, recu: c.recu, lien: c.lien, creee: dt(c.recu),
+             geo: c.commune && donnees.adresses ? donnees.adresses[PREFIXE_COMMUNE + c.commune] || null : null };
+  }).sort(function (a, b) { return b.creee - a.creee; });
+
   return {
     tickets: T,
     nouveaux: T.filter(function (t) { return t.categorie === 'nouveau'; }).sort(function (a, b) { return (!!b.caser - !!a.caser) || (b.creee - a.creee); }),
+    nouveauxParMail: nouveauxParMail,
     relances: T.filter(function (t) { return t.categorie === 'justifie' && t.suivi && t.suivi.due; }),
     terminesAujourdhui: T.filter(function (t) { return t.termine && dt(t.fin.recu) >= TODAY; }),
     finsHorsExport: (donnees.fins || []).filter(function (f) { return f.num && !nums[f.num] && !nums[f.num.split('#')[0]]; })

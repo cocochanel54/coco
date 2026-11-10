@@ -1,17 +1,29 @@
 # Installer la carte des tickets en direct (une seule fois, environ 15 minutes, sur ordinateur)
 
-La carte se met à jour toute seule : chaque mail « [FIN INTERVENTION] » passe le ticket en vert, avec le lien du rapport. Les nouveaux tickets arrivent quand tu importes un export Praxedo.
+La carte se met à jour toute seule : chaque mail « [CREATION INTERVENTION] » ajoute le ticket en violet (au centre de sa commune, en attendant le prochain export), et chaque mail « [FIN INTERVENTION] » passe le ticket en vert, avec le lien du rapport. L'adresse exacte et la GTR arrivent quand tu importes un export Praxedo.
 
 Ça tourne dans ton compte Google, comme Journée agent. Utilise **le même compte Google** pour le Sheet et pour recevoir les mails.
 
 ## 1. Relier ta boîte Outlook à ton Gmail
 
-1. Dans Outlook, clic droit sur un mail **[FIN INTERVENTION]** → **Règles** → **Créer une règle**.
-2. Condition : **L'objet contient** `FIN INTERVENTION`.
-3. Action : **Rediriger vers** (ou **Transférer à**) ton adresse Gmail.
-4. Enregistre, puis vérifie que le prochain mail de fin arrive bien dans Gmail.
+Une seule règle pour les deux sortes de mails.
 
-Si le mail n'arrive jamais dans Gmail, la DSI bloque le transfert vers l'extérieur : dis-le, une petite macro Outlook prendra le relais.
+**Nouvel Outlook ou Outlook sur le web**
+1. Engrenage **Paramètres** → **Courrier** → **Règles** → **+ Ajouter une nouvelle règle**.
+2. Nom : `Praxedo vers Gmail`.
+3. Condition : **L'objet inclut** → tape `FIN INTERVENTION`, puis ajoute une deuxième valeur `CREATION INTERVENTION` (sans accent, comme dans l'objet). Deux valeurs dans la même condition = l'une **ou** l'autre.
+4. Action : **Transférer et rediriger** → **Rediriger vers** → ton adresse Gmail.
+5. Laisse « Exécuter la règle maintenant » décoché, puis **Enregistrer**.
+
+**Outlook classique (logiciel Windows)**
+1. **Accueil** → **Règles** → **Gérer les règles et les alertes** → **Nouvelle règle…** → **Appliquer la règle aux messages que je reçois** → **Suivant**.
+2. Coche **comprenant des mots spécifiques dans l'objet**, clique sur le lien bleu, ajoute `FIN INTERVENTION` puis `CREATION INTERVENTION` (**Ajouter** après chaque) → **OK** → **Suivant**.
+3. Coche **le rediriger vers des personnes ou une liste publique**, clique sur le lien bleu, tape ton Gmail dans **À** → **OK** → **Suivant** → **Suivant**.
+4. Nomme la règle `Praxedo vers Gmail` → **Terminer**.
+
+**Rediriger** plutôt que transférer : le mail arrive dans Gmail tel quel (même objet, même expéditeur). Vérifie que le prochain mail de création ou de fin arrive bien dans Gmail (regarde aussi les **Spams** : le script les lit quand même, mais tu peux cliquer « Non spam »).
+
+Si le mail n'arrive jamais dans Gmail, ou si tu reçois une erreur « transfert externe non autorisé » / « 550 5.7.520 », la DSI bloque le transfert vers l'extérieur : dis-le, une petite macro Outlook prendra le relais.
 
 ## 2. Créer le Google Sheet et coller le code
 
@@ -26,8 +38,8 @@ Si le mail n'arrive jamais dans Gmail, la DSI bloque le transfert vers l'extéri
 ## 3. Lancer l'installation
 
 1. En haut de l'éditeur, choisis la fonction **installer** puis **Exécuter**.
-2. Google demande une autorisation : **Examiner les autorisations** → ton compte → **Paramètres avancés** → **Accéder à Carte tickets** → **Autoriser**. Le script lit les mails dont l'objet contient « FIN INTERVENTION », écrit dans ce Sheet et place les adresses sur la carte.
-3. Les onglets **Tickets**, **Fins d'intervention** et **Adresses** sont créés, et Gmail sera lu toutes les 5 minutes.
+2. Google demande une autorisation : **Examiner les autorisations** → ton compte → **Paramètres avancés** → **Accéder à Carte tickets** → **Autoriser**. Le script lit les mails dont l'objet contient « CREATION INTERVENTION » ou « FIN INTERVENTION », écrit dans ce Sheet et place les adresses sur la carte.
+3. Les onglets **Tickets**, **Mails Praxedo** et **Adresses** sont créés, et Gmail sera lu toutes les 5 minutes.
 
 ## 4. Importer un export Praxedo
 
@@ -35,7 +47,7 @@ Si le mail n'arrive jamais dans Gmail, la DSI bloque le transfert vers l'extéri
 2. **Carte tickets → Importer un export Praxedo…** → choisis le CSV exporté de Praxedo (ton filtre habituel, avec la colonne des notes si tu l'as ajoutée).
 3. La première fois, compte une minute : les adresses sont placées sur la carte.
 
-Refais un import chaque fois que tu veux voir les nouveaux tickets (le matin, par exemple). Les fins d'intervention, elles, arrivent toutes seules.
+Les créations et les fins d'intervention arrivent toutes seules par mail. Refais un import de temps en temps (le matin, par exemple) pour avoir l'adresse exacte, la GTR et les tickets planifiés.
 
 ## 5. Mettre la carte en ligne
 
@@ -49,6 +61,7 @@ La page se recharge toute seule toutes les 2 minutes. Toute personne qui a l'adr
 
 - **Vert** : mail de fin reçu. La liste « Fins d'intervention aujourd'hui » est dans la légende.
 - **Violet** : nouveau depuis moins de 24 h, avec un trait vers l'intervention déjà planifiée la plus proche.
+- **Violet à contour pointillé blanc** : ticket reçu par mail de création, pas encore dans l'export, placé au centre de sa commune. Liste « Nouveaux reçus par mail » dans la légende (si l'objet dit « - NA », la commune est inconnue : le ticket est seulement dans la liste).
 - **Gris** : justifié / en attente. Contour orange : à relancer ou à vérifier.
 - **Rouge / orange** : à planifier (rouge = échéance GTR dépassée ou dans moins de 48 h). **Bleu** : déjà planifié.
 - Un mail de fin pour un ticket absent de l'export apparaît dans la liste « Mails de fin pour des tickets absents de l'export ».

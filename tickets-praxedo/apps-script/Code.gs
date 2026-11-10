@@ -3,8 +3,8 @@
  *
  * Onglets (créés par installer()) :
  *   Tickets             : le dernier export Praxedo importé (menu Carte tickets → Importer un export Praxedo)
- *   Fins d'intervention : une ligne par mail « [FIN INTERVENTION] » reçu, lu dans Gmail toutes les 5 minutes
- *                         (une règle Outlook transfère ces mails vers ce Gmail)
+ *   Mails Praxedo       : une ligne par mail « [CREATION INTERVENTION] » ou « [FIN INTERVENTION] » reçu,
+ *                         lu dans Gmail toutes les 5 minutes (une règle Outlook redirige ces mails vers ce Gmail)
  *   Adresses            : les coordonnées des adresses (service d'adresses de l'IGN), pour ne pas les chercher deux fois
  *
  * La carte (Déployer → Application Web) recharge ces données toutes les 2 minutes et relit Gmail au passage.
@@ -12,13 +12,22 @@
  */
 
 var ONGLET_TICKETS = 'Tickets';
-var ONGLET_FINS = "Fins d'intervention";
+var ONGLET_MAILS = 'Mails Praxedo';
 var ONGLET_ADRESSES = 'Adresses';
-var ENTETES_FINS = ['Reçu le', 'N° ticket', 'Commune', 'Intervention du', 'Rapport', 'Objet du mail', 'Id du mail'];
+var ENTETES_MAILS = ['Reçu le', 'Type', 'N° ticket', 'Commune', 'Intervention du', 'Lien Praxedo', 'Objet du mail', 'Id du mail'];
+var COL_ID_MAIL = 8;
 var ENTETES_ADRESSES = ['Adresse cherchée', 'Latitude', 'Longitude', 'Adresse trouvée', 'Score', 'Type', 'Commune', 'CP'];
-// Mails de fin d'intervention : l'objet contient « [FIN INTERVENTION] … N°BB-20261102T0761#0 - COMMUNE »
-var RECHERCHE_GMAIL = 'subject:"FIN INTERVENTION" newer_than:30d';
+// Objets des mails Praxedo :
+//   « [CIRCET 54][Maintenance réseau][CREATION INTERVENTION] Ticket Exploitation - Réseau N°BB-20261026T1839#1 - NA »
+//   « [CIRCET NANCY (RES) ][FIN INTERVENTION] Ticket Exploitation - Réseau N°BB-20261102T0761#0 - JARVILLE LA MALGRANGE »
+// in:anywhere -in:trash : les mails redirigés que Gmail range dans les spams sont lus aussi.
+var RECHERCHE_GMAIL = 'subject:("FIN INTERVENTION" OR "CREATION INTERVENTION" OR "CRÉATION INTERVENTION") in:anywhere -in:trash newer_than:30d';
 var RE_NUM = /N°\s*([A-Z]{2,4}-\d{8}T\d{4}(?:#\d+)?|\d{5,})/i;
+var RE_FIN = /\bFIN\s+INTERVENTION/i;
+var RE_CREATION = /CR[EÉ]ATION\s+INTERVENTION/i;
+// Une commune est cherchée au centre de la commune, de préférence autour de Nancy (homonymes ailleurs en France).
+var PREFIXE_COMMUNE = 'Commune : ';
+var CENTRE_RECHERCHE = { lat: 48.69, lon: 6.18 };
 
 /** La carte. */
 function doGet() {
@@ -43,7 +52,7 @@ function onOpen() {
 function installer() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   [[ONGLET_TICKETS, ['Importe un export Praxedo : menu Carte tickets → Importer un export Praxedo']],
-   [ONGLET_FINS, ENTETES_FINS], [ONGLET_ADRESSES, ENTETES_ADRESSES]].forEach(function (o) {
+   [ONGLET_MAILS, ENTETES_MAILS], [ONGLET_ADRESSES, ENTETES_ADRESSES]].forEach(function (o) {
     if (ss.getSheetByName(o[0])) return;
     var f = ss.insertSheet(o[0]);
     f.getRange(1, 1, 1, o[1].length).setValues([o[1]]).setFontWeight('bold');
@@ -91,24 +100,25 @@ function importerExport(texte) {
   return { tickets: valeurs.length - 1, adresses: nouvelles };
 }
 
-/** Lit les mails de fin d'intervention arrivés dans Gmail (déclencheur toutes les 5 minutes). */
+/** Lit les mails de création et de fin d'intervention arrivés dans Gmail (déclencheur toutes les 5 minutes). */
 function lireMails() {
   var verrou = LockService.getScriptLock();
   if (!verrou.tryLock(20000)) return 0;
   try {
-    var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_FINS);
+    var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_MAILS);
     var vus = {};
-    if (f.getLastRow() > 1) f.getRange(2, 7, f.getLastRow() - 1, 1).getValues().forEach(function (r) { vus[r[0]] = 1; });
+    if (f.getLastRow() > 1) f.getRange(2, COL_ID_MAIL, f.getLastRow() - 1, 1).getValues().forEach(function (r) { vus[r[0]] = 1; });
     var ajout = [];
     GmailApp.search(RECHERCHE_GMAIL, 0, 100).forEach(function (fil) {
       fil.getMessages().forEach(function (m) {
         if (vus[m.getId()]) return;
-        var l = ligneFin_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
-        if (l) { ajout.push(l); vus[m.getId()] = 1; }
+        var l = ligneMail_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
+        if (l) { ajout.push(l.map(texte_)); vus[m.getId()] = 1; }
       });
     });
-    if (ajout.length) f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_FINS.length).setNumberFormat('@').setValues(ajout);
+    if (ajout.length) f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_MAILS.length).setNumberFormat('@').setValues(ajout);
     PropertiesService.getScriptProperties().setProperty('LU_LE', maintenant_());
+    placerCommunes_(ajout);
     return ajout.length;
   } finally {
     verrou.releaseLock();
@@ -121,12 +131,19 @@ function doPost(e) {
   if (!d.cle || d.cle !== PropertiesService.getScriptProperties().getProperty('CLE_MACRO')) {
     return ContentService.createTextOutput('cle refusee');
   }
-  var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_FINS);
+  var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_MAILS);
   var id = 'outlook:' + d.id;
-  var deja = f.getLastRow() > 1 && f.getRange(2, 7, f.getLastRow() - 1, 1).getValues().some(function (r) { return r[0] === id; });
-  var l = deja ? null : ligneFin_(d.objet || '', d.corps || '', d.recu ? new Date(d.recu) : new Date(), id);
-  if (l) f.appendRow(l.map(texte_));
+  var deja = f.getLastRow() > 1 && f.getRange(2, COL_ID_MAIL, f.getLastRow() - 1, 1).getValues().some(function (r) { return r[0] === id; });
+  var l = deja ? null : ligneMail_(d.objet || '', d.corps || '', d.recu ? new Date(d.recu) : new Date(), id);
+  if (l) { l = l.map(texte_); f.appendRow(l); placerCommunes_([l]); }
   return ContentService.createTextOutput(l ? 'ok' : 'ignore');
+}
+
+/** Les tickets créés par mail ne sont pas encore dans l'export : on les place au centre de leur commune. */
+function placerCommunes_(lignes) {
+  var communes = lignes.filter(function (l) { return l[1] === 'Création' && l[3]; }).map(function (l) { return PREFIXE_COMMUNE + l[3]; });
+  if (!communes.length) return;
+  try { geocoder_(communes); } catch (err) { console.warn(err); }  // réessayé à la prochaine création dans la même commune
 }
 
 /** Tout ce dont la carte a besoin. Relit Gmail si la dernière lecture date de plus de 2 minutes. */
@@ -138,28 +155,36 @@ function donnees() {
   }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var t = ss.getSheetByName(ONGLET_TICKETS).getDataRange().getDisplayValues();
-  var fins = ss.getSheetByName(ONGLET_FINS).getDataRange().getDisplayValues().slice(1).map(function (r) {
-    return { recu: r[0], num: r[1], commune: r[2], jour: r[3], rapport: r[4] };
+  var fins = [], creations = [];
+  ss.getSheetByName(ONGLET_MAILS).getDataRange().getDisplayValues().slice(1).forEach(function (r) {
+    var m = { recu: r[0], num: r[2], commune: r[3], jour: r[4], lien: r[5] };
+    if (r[1] === 'Fin') { m.rapport = r[5]; fins.push(m); }
+    else if (r[1] === 'Création') creations.push(m);
   });
   var adresses = {};
   ss.getSheetByName(ONGLET_ADRESSES).getDataRange().getValues().slice(1).forEach(function (r) {
     adresses[r[0]] = r[1] === '' ? null : { lat: +r[1], lon: +r[2], label: r[3], score: +r[4], type: r[5], city: r[6], postcode: String(r[7]) };
   });
-  return { entetes: t[0], lignes: t.slice(1), fins: fins, adresses: adresses,
+  return { entetes: t[0], lignes: t.slice(1), fins: fins, creations: creations, adresses: adresses,
            importeLe: props.getProperty('IMPORTE_LE') || '', luLe: props.getProperty('LU_LE') || '' };
 }
 
 // ---------- outils ----------
 
-/** [reçu le, N°, commune, intervention du, rapport, objet, id] ou null si l'objet n'a pas de n° de ticket. */
-function ligneFin_(objet, corps, recu, id) {
+/**
+ * [reçu le, type (Création / Fin), N°, commune, intervention du, lien Praxedo, objet, id]
+ * ou null si ce n'est pas un mail de création ou de fin, ou si l'objet n'a pas de n° de ticket.
+ */
+function ligneMail_(objet, corps, recu, id) {
+  var type = RE_FIN.test(objet) ? 'Fin' : RE_CREATION.test(objet) ? 'Création' : '';
   var m = RE_NUM.exec(objet);
-  if (!m) return null;
-  var apres = objet.slice(m.index + m[0].length).replace(/^\s*-\s*/, '').trim();
-  var jour = /faite ce jour\s+(\d{2}\/\d{2}\/\d{4})/i.exec(corps);
-  var lien = /https?:\/\/\S*praxedo\S*\/render/i.exec(corps);
-  return [Utilities.formatDate(recu, 'Europe/Paris', 'dd/MM/yyyy HH:mm'), m[1].toUpperCase(), apres,
-          jour ? jour[1] : '', lien ? lien[0] : '', objet, id];
+  if (!type || !m) return null;
+  var commune = objet.slice(m.index + m[0].length).replace(/^\s*-\s*/, '').trim();
+  if (/^(N\/?A|NC|-)?$/i.test(commune)) commune = '';  // « - NA » : commune pas renseignée
+  var jour = type === 'Fin' ? /faite ce jour\s+(\d{2}\/\d{2}\/\d{4})/i.exec(corps) : null;
+  var lien = /https?:\/\/[^\s<>"]*praxedo[^\s<>"]*\/render/i.exec(corps) || /https?:\/\/[^\s<>"]*praxedo[^\s<>"]*/i.exec(corps);
+  return [Utilities.formatDate(recu, 'Europe/Paris', 'dd/MM/yyyy HH:mm'), type, m[1].toUpperCase(), commune,
+          jour ? jour[1] : '', lien ? lien[0].replace(/[.,;:)\]]+$/, '') : '', objet, id];
 }
 
 /** Cherche les adresses inconnues avec le service d'adresses de l'IGN (rue, CP, ville : rien d'autre n'est envoyé). */
@@ -172,6 +197,10 @@ function geocoder_(adresses) {
   for (var i = 0; i < aChercher.length; i += 20) {
     var lot = aChercher.slice(i, i + 20);
     var reponses = UrlFetchApp.fetchAll(lot.map(function (q) {
+      if (q.indexOf(PREFIXE_COMMUNE) === 0) {
+        return { url: 'https://data.geopf.fr/geocodage/search?limit=1&type=municipality&lat=' + CENTRE_RECHERCHE.lat + '&lon=' + CENTRE_RECHERCHE.lon +
+                      '&q=' + encodeURIComponent(q.slice(PREFIXE_COMMUNE.length)), muteHttpExceptions: true };
+      }
       var cp = /\b(\d{5})\b/.exec(q);
       return { url: 'https://data.geopf.fr/geocodage/search?limit=1&q=' + encodeURIComponent(q) + (cp ? '&postcode=' + cp[1] : ''),
                muteHttpExceptions: true };

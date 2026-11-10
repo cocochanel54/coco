@@ -34,6 +34,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <div id="corps">
 <label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé (mail de fin reçu) <b id="nb-termine"></b></label>
 <label><input type="checkbox" data-k="nouveau" checked><span class="dot" style="background:#8e44ad"></span>Nouveau (moins de 24 h) <b id="nb-nouveau"></b></label>
+<label class="sous"><span class="dot" style="background:#8e44ad;border:2px dashed #fff;outline:1px solid #8e44ad"></span>dont reçus par mail, pas encore dans l'export <b id="nb-parmail"></b></label>
 <label><input type="checkbox" data-k="justifie" checked><span class="dot" style="background:#8b939c"></span>Justifié / en attente <b id="nb-justifie"></b></label>
 <label class="sous"><span class="dot" style="background:#8b939c;border:3px solid #e67e22;width:7px;height:7px"></span>dont à relancer ou à vérifier <b id="nb-relance"></b></label>
 <label><input type="checkbox" data-k="retard" checked><span class="dot" style="background:#d62728"></span>À planifier, prioritaire <b id="nb-retard"></b></label>
@@ -92,7 +93,21 @@ function afficher(d) {
     marqueurs[t.num] = m;
     if (k === 'nouveau' && t.caser) L.polyline([[t.geo.lat, t.geo.lon], [t.caser.lat, t.caser.lon]], {color: C.nouveau, weight: 3, dashArray: '6 5'}).addTo(calques.nouveau);
   });
+  // Tickets créés par mail, pas encore dans l'export : au centre de la commune (position approximative).
+  res.nouveauxParMail.forEach(function (t) {
+    nb.nouveau++;
+    if (!t.geo) return;
+    pts.push([t.geo.lat, t.geo.lon]);
+    var m = L.circleMarker([t.geo.lat, t.geo.lon], {radius: 10, color: '#fff', weight: 2, dashArray: '3 3', fillColor: C.nouveau, fillOpacity: .92});
+    m.bindPopup('<div class="pop"><b>' + esc(t.num) + '</b> <span class="foulee">· nouveau, reçu par mail</span>' +
+      '<br>Mail de création reçu le ' + esc(t.recu) + '<br>' + esc(t.ville) +
+      '<br><small>Pas encore dans l\'export : placé au centre de la commune. Importe un export pour voir l\'adresse et la GTR.</small>' +
+      (t.lien ? '<br><a href="' + esc(t.lien) + '" target="_blank" rel="noopener">voir dans Praxedo</a>' : '') + '</div>', {maxWidth: 320});
+    m.addTo(calques.nouveau);
+    marqueurs[t.num] = m;
+  });
   Object.keys(nb).forEach(function (k) { document.getElementById('nb-' + k).textContent = '(' + nb[k] + ')'; });
+  document.getElementById('nb-parmail').textContent = '(' + res.nouveauxParMail.length + ')';
   document.getElementById('nb-relance').textContent = '(' + res.relances.length + ')';
 
   var listes = document.getElementById('listes');
@@ -102,11 +117,17 @@ function afficher(d) {
     var h = document.createElement('h2'); h.textContent = titre; h.style.color = couleur; listes.appendChild(h);
     items.forEach(function (t) {
       var b = document.createElement('button'); b.type = 'button'; b.className = 'nv ' + classe;
-      b.innerHTML = '<b>' + esc(t.num) + '</b> · ' + esc(t.ville) + '<span>' + esc(texte(t)) + '</span>';
-      b.onclick = function () { if (t.geo) { map.setView([t.geo.lat, t.geo.lon], 16); marqueurs[t.num].openPopup(); } };
+      b.innerHTML = '<b>' + esc(t.num) + '</b> · ' + esc(t.ville || 'commune inconnue') + '<span>' + esc(texte(t)) + '</span>';
+      b.onclick = function () {
+        if (t.geo && marqueurs[t.num]) { map.setView([t.geo.lat, t.geo.lon], t.parMail ? 13 : 16); marqueurs[t.num].openPopup(); }
+        else if (t.lien) window.open(t.lien, '_blank', 'noopener');
+      };
       listes.appendChild(b);
     });
   }
+  liste('Nouveaux reçus par mail', '#6c2e91', 'nouveau', res.nouveauxParMail, function (t) {
+    return 'Mail de création reçu le ' + t.recu + (t.geo ? ' · pas encore dans l\'export' : ' · pas encore dans l\'export, pas placé sur la carte');
+  });
   liste("Fins d'intervention aujourd'hui", '#1d7444', 'termine', res.terminesAujourdhui, function (t) { return 'Mail reçu le ' + t.fin.recu + (t.tech ? ' · ' + t.tech : ''); });
   liste('À relancer / à vérifier', '#a35208', 'relance', res.relances, function (t) { return t.suivi.action; });
   liste('Nouveaux à programmer', '#6c2e91', 'nouveau', res.nouveaux, function (t) {
