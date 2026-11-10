@@ -22,3 +22,16 @@ Appli de saisie pour les techniciens, faite à partir du classeur `Journee_agent
 - La même page fonctionne aussi en artifact claude.ai (saisies partagées entre comptes claude.ai) ou ouverte directement (saisies gardées sur l'appareil).
 
 Les sources sont `app.src.html`, `apps-script/Code.src.gs` et `data.json`. Après modification, lancer `python3 journee-agent/build.py` pour régénérer `index.html`, `apps-script/Index.html` et `apps-script/Code.gs`.
+
+# Tickets Praxedo (`tickets-praxedo/`)
+
+Analyse de l'export « Interventions » de Praxedo, surtout les tickets non planifiés :
+
+```
+python3 tickets-praxedo/analyse_tickets.py export_interventions.csv
+```
+
+- **À planifier** : tickets « Qualifiée » et « Pré-planifiée », triés par priorité (en retard, client coupé, déjà déplanifié…).
+- **Tickets proches** : même immeuble, même boîte, même PTO ou même référence client, « suite à » un autre ticket, tickets à quelques mètres, tournées possibles, et l'intervention déjà planifiée la plus proche où caser un ticket.
+- **Incohérences** : échéance dépassée ou qui ne colle pas à la GTR, déplanifiés, planifiées après l'échéance ou un jour férié, interventions passées pas clôturées, adresses fausses ou vagues…
+- Résultat : un Excel (`Analyse_tickets_AAAA-MM-JJ.xlsx`) et une carte (`Carte_tickets_AAAA-MM-JJ.html`) à côté de l'export. Seules la rue, le code postal et la ville sont envoyés au service d'adresses de l'IGN pour placer les tickets sur la carte.

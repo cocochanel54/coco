@@ -1,0 +1,5 @@
+# Les exports Praxedo et les résultats contiennent des noms et téléphones de clients : ils restent hors du dépôt.
+*.csv
+*.xlsx
+*.html
+geocodage_cache.json
