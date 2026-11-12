@@ -8,6 +8,9 @@
  *   Sortis de l'export  : les tickets présents dans l'import précédent et absents du nouveau (terminés ou annulés)
  *   Adresses            : les coordonnées des adresses (service d'adresses de l'IGN), pour ne pas les chercher deux fois
  *
+ * Import automatique : un mail reçu dans Gmail avec l'export Praxedo en pièce jointe (.csv) est importé tout seul
+ * dans les 5 minutes (export programmé par Praxedo, ou export que tu t'envoies par mail).
+ *
  * Les fins d'intervention arrivent de trois façons : un statut de fin dans l'export (Terminée, Réalisée, Validée…),
  * un ticket qui sort du filtre entre deux imports, ou un mail « [FIN INTERVENTION] » transféré à la main vers Gmail.
  *
@@ -25,6 +28,8 @@ var ENTETES_ADRESSES = ['Adresse cherchée', 'Latitude', 'Longitude', 'Adresse t
 // Mails de fin d'intervention : l'objet contient « [FIN INTERVENTION] … N°BB-20261102T0761#0 - COMMUNE »
 var RECHERCHE_GMAIL = 'subject:"FIN INTERVENTION" newer_than:30d';
 var RE_NUM = /N°\s*([A-Z]{2,4}-\d{8}T\d{4}(?:#\d+)?|\d{5,})/i;
+// Exports Praxedo reçus par mail : toute pièce jointe .csv avec une colonne « N° » (les autres CSV sont ignorés)
+var RECHERCHE_EXPORTS = 'has:attachment filename:csv newer_than:7d';
 
 /** La carte. */
 function doGet() {
@@ -138,11 +143,43 @@ function lireMails() {
       });
     });
     if (ajout.length) f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_FINS.length).setNumberFormat('@').setValues(ajout);
+    try { importerDepuisGmail_(); } catch (err) { console.warn('Import par mail : ' + err); }
     PropertiesService.getScriptProperties().setProperty('LU_LE', maintenant_());
     return ajout.length;
   } finally {
     verrou.releaseLock();
   }
+}
+
+/**
+ * Importe le plus récent export Praxedo reçu en pièce jointe, s'il est plus récent que le dernier import.
+ * Chaque mail n'est regardé qu'une fois ; un CSV qui n'est pas un export d'interventions est ignoré.
+ */
+function importerDepuisGmail_() {
+  var props = PropertiesService.getScriptProperties();
+  var vus = JSON.parse(props.getProperty('EXPORTS_VUS') || '[]');
+  var dernier = props.getProperty('IMPORTE_LE') ? new Date(props.getProperty('IMPORTE_LE')) : new Date(0);
+  var candidats = [];
+  GmailApp.search(RECHERCHE_EXPORTS, 0, 20).forEach(function (fil) {
+    fil.getMessages().forEach(function (m) {
+      if (vus.indexOf(m.getId()) >= 0) return;
+      vus.push(m.getId());
+      if (m.getDate() <= dernier) return;
+      m.getAttachments().forEach(function (pj) {
+        if (/\.csv$/i.test(pj.getName())) candidats.push({ date: m.getDate(), pj: pj });
+      });
+    });
+  });
+  props.setProperty('EXPORTS_VUS', JSON.stringify(vus.slice(-200)));
+  candidats.sort(function (x, y) { return y.date - x.date; });
+  for (var i = 0; i < candidats.length; i++) {
+    var texte = candidats[i].pj.getDataAsString('UTF-8');
+    if (!/(^|;|")N°("|;)/.test(texte.slice(0, 2000))) continue;  // autre CSV : ignoré
+    var r = importerExport(texte);
+    props.setProperty('IMPORTE_PAR_MAIL', candidats[i].pj.getName() + ' (mail du ' + Utilities.formatDate(candidats[i].date, 'Europe/Paris', 'dd/MM/yyyy HH:mm') + ')');
+    return r;
+  }
+  return null;
 }
 
 /** Pour la macro Outlook, si la DSI bloque le transfert vers Gmail : reçoit l'objet et le texte d'un mail. */

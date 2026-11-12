@@ -39,6 +39,11 @@ Sans les statuts de fin, la carte se débrouille quand même : un ticket présen
 
 Refais un import aussi souvent que tu veux (matin, midi, soir…) : nouveaux tickets, plannings et fins d'intervention se mettent à jour à chaque fois.
 
+**Import automatique par mail** : tout mail qui arrive dans ton Gmail avec l'export Praxedo en pièce jointe (fichier .csv) est importé tout seul dans les 5 minutes. Le script prend le plus récent, ignore les autres CSV (ceux qui n'ont pas de colonne « N° ») et n'importe jamais deux fois le même mail.
+
+- Si Praxedo peut **envoyer l'export par mail à heure fixe** (export programmé ou planifié), fais-le envoyer à ton Gmail (ou à ton Outlook, avec une règle de transfert vers Gmail pour les mails qui ont un .csv) : la carte est alors 100 % automatique.
+- Sinon, exporte depuis Praxedo et **envoie-toi le CSV par mail** : même depuis le téléphone, la carte se met à jour sans ouvrir le Sheet.
+
 ## 5. Mettre la carte en ligne
 
 1. Dans l'éditeur : **Déployer → Nouveau déploiement** → roue dentée → **Application Web**.
