@@ -7,32 +7,69 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;color:#1a1a1a}
+[hidden]{display:none!important}
 #map{position:absolute;inset:0}
 .leg{position:absolute;z-index:1000;top:10px;right:10px;background:#fff;padding:10px 12px;border-radius:8px;box-shadow:0 1px 6px #0003;
-  width:280px;max-height:calc(100% - 40px);overflow:auto;box-sizing:border-box}
+  width:290px;max-height:calc(100% - 40px);overflow:auto;box-sizing:border-box}
 .leg h1{font-size:15px;margin:0 0 2px}.leg label{display:block;margin:3px 0;cursor:pointer}
 .leg label.sous{margin-left:22px;cursor:default;font-size:13px}
 .leg h2{font-size:13px;margin:10px 0 4px}
 #etat{display:block;color:#555;font-size:12px}
 .dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:1px solid #0006}
-.nv{display:block;width:100%;text-align:left;font:inherit;font-size:12.5px;border:1px solid;border-radius:6px;padding:5px 7px;margin:4px 0;cursor:pointer;color:inherit}
+.nv{display:block;width:100%;text-align:left;font:inherit;font-size:12.5px;border:1px solid #ddd;border-radius:6px;padding:5px 7px;margin:4px 0;cursor:pointer;color:inherit;background:#fff}
 .nv span{display:block;color:#555}
 .nv.nouveau{background:#f4eefa;border-color:#e0d2ee}.nv.nouveau b{color:#6c2e91}
 .nv.relance{background:#fdf0e3;border-color:#f3d3b0}.nv.relance b{color:#a35208}
 .nv.termine{background:#e9f6ee;border-color:#c4e6d1}.nv.termine b{color:#1d7444}
+.nv.moi{background:#eef3fb;border-color:#c9d8f0}.nv.moi b{color:#174a8b}
 .nv:hover,.nv:focus-visible{border-color:#333;outline:none}
 .pop b{font-size:14px}.pop small{color:#555}.pop .foulee{color:#6c2e91;font-weight:600}.pop .fin{color:#1d7444;font-weight:600}
-#plier{float:right;border:0;background:none;font:inherit;color:#555;cursor:pointer;padding:0 0 0 8px}
+.lien{border:0;background:none;font:inherit;color:#555;cursor:pointer;padding:0;text-decoration:underline}
+#plier{float:right;text-decoration:none;padding-left:8px}
 #erreur{color:#b00;font-weight:600}
-@media (max-width:560px){.leg{top:auto;bottom:10px;left:10px;right:10px;width:auto;max-height:42%}}
+.bouton{display:block;width:100%;margin:8px 0 2px;padding:7px 8px;font:inherit;font-weight:600;border:0;border-radius:6px;background:#1f4e78;color:#fff;cursor:pointer}
+.bouton:focus-visible{outline:2px solid #000;outline-offset:2px}
+#blocMoi select{width:100%;font:inherit;padding:4px;margin-top:2px}
+/* écran du code */
+#acces{position:fixed;inset:0;z-index:3000;background:#eef2f6;display:flex;align-items:center;justify-content:center;padding:16px}
+#acces form{background:#fff;border-radius:10px;box-shadow:0 2px 12px #0002;padding:22px;width:100%;max-width:340px;box-sizing:border-box}
+#acces h1{font-size:18px;margin:0 0 6px}#acces p{margin:0 0 14px;color:#444}
+#acces input{width:100%;box-sizing:border-box;font-size:20px;letter-spacing:4px;padding:8px 10px;border:1px solid #bbb;border-radius:6px}
+#acces .msg{color:#b00;font-weight:600;min-height:1.3em;margin-top:8px}
+/* listes de contrôle (conduite d'activité) */
+#controles{position:absolute;z-index:1100;left:10px;bottom:10px;width:calc(100% - 330px);max-height:55%;background:#fff;border-radius:8px;
+  box-shadow:0 1px 8px #0004;display:flex;flex-direction:column;box-sizing:border-box}
+#controles header{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid #e3e3e3}
+#controles header button.onglet{font:inherit;padding:4px 10px;border:1px solid #c9d1da;border-radius:14px;background:#f5f7fa;cursor:pointer}
+#controles header button.onglet[aria-selected="true"]{background:#1f4e78;color:#fff;border-color:#1f4e78}
+#controles header select{font:inherit;padding:3px}
+#controles .fermer{margin-left:auto}
+#controles .tableau{overflow:auto}
+#controles table{border-collapse:collapse;font-size:12.5px;width:100%}
+#controles th{position:sticky;top:0;background:#1f4e78;color:#fff;text-align:left;padding:5px 6px;font-weight:600}
+#controles td{padding:4px 6px;border-bottom:1px solid #eee;vertical-align:top}
+#controles tr.cliquable{cursor:pointer}#controles tr.cliquable:hover td{outline:1px solid #8aa}
+.g1{background:#f8cbad}.g2{background:#ffe699}.g3{background:#ddebf7}.g4{background:#ededed}
+@media (max-width:760px){#controles{width:auto;right:10px;max-height:50%}}
+@media (max-width:560px){.leg{top:auto;bottom:10px;left:10px;right:10px;width:auto;max-height:42%}#controles{top:10px;bottom:auto;max-height:45%}}
 </style>
 </head>
 <body>
 <div id="map"></div>
-<div class="leg"><button id="plier" type="button" aria-expanded="true">Masquer</button><h1>Tickets Praxedo</h1>
+<div id="acces">
+  <form id="formAcces">
+    <h1>Carte des tickets</h1>
+    <p>Tape le code d'accès qu'on t'a donné. Il est gardé sur cet appareil.</p>
+    <label for="code" style="display:block;font-weight:600;margin-bottom:4px">Code d'accès</label>
+    <input id="code" type="password" inputmode="numeric" autocomplete="off" required>
+    <button class="bouton" type="submit">Ouvrir la carte</button>
+    <div class="msg" id="msgAcces" role="alert"></div>
+  </form>
+</div>
+<div class="leg"><button id="plier" class="lien" type="button" aria-expanded="true">Masquer</button><h1>Tickets Praxedo</h1>
 <small id="etat">Chargement…</small><div id="erreur"></div>
 <div id="corps">
-<label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé <b id="nb-termine"></b></label>
+<label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé aujourd'hui <b id="nb-termine"></b></label>
 <label><input type="checkbox" data-k="nouveau" checked><span class="dot" style="background:#8e44ad"></span>Nouveau (moins de 24 h) <b id="nb-nouveau"></b></label>
 <label><input type="checkbox" data-k="justifie" checked><span class="dot" style="background:#8b939c"></span>Justifié / en attente <b id="nb-justifie"></b></label>
 <label class="sous"><span class="dot" style="background:#8b939c;border:3px solid #e67e22;width:7px;height:7px"></span>dont à relancer ou à vérifier <b id="nb-relance"></b></label>
@@ -40,43 +77,129 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <label><input type="checkbox" data-k="aplanifier" checked><span class="dot" style="background:#ff9f1c"></span>À planifier <b id="nb-aplanifier"></b></label>
 <label><input type="checkbox" data-k="planifie" checked><span class="dot" style="background:#1f77b4"></span>Déjà planifié <b id="nb-planifie"></b></label>
 <small>Contour rouge : nouveau prioritaire. Trait violet : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée.</small>
+<div id="blocMoi" hidden><h2>Mes interventions</h2>
+  <label for="moi" style="cursor:default">Mon nom dans Praxedo</label>
+  <select id="moi"><option value="">— choisir —</option></select>
+  <small>Tes interventions ont un contour noir épais.</small>
+</div>
+<button id="ouvrirControles" class="bouton" type="button" hidden>Listes de contrôle</button>
 <div id="listes"></div>
+<p style="margin:10px 0 0"><button id="changerCode" class="lien" type="button">Changer de code</button></p>
 </div></div>
+<div id="controles" hidden role="dialog" aria-label="Listes de contrôle">
+  <header>
+    <button class="onglet" type="button" data-o="incoherences" aria-selected="true">Incohérences</button>
+    <button class="onglet" type="button" data-o="lies" aria-selected="false">Tickets liés</button>
+    <button class="onglet" type="button" data-o="pm" aria-selected="false">PM chargés</button>
+    <label for="filtreGravite">Gravité</label>
+    <select id="filtreGravite"><option value="">Toutes</option><option>1 - Urgent</option><option>2 - Important</option><option>3 - À vérifier</option><option>4 - Info</option></select>
+    <button class="lien fermer" type="button" id="fermerControles">Fermer</button>
+  </header>
+  <div class="tableau" id="tableau"></div>
+</div>
 <?!= inclure_('Analyse') ?>
 <script>
 var C = {termine: '#2e9e5b', nouveau: '#8e44ad', justifie: '#8b939c', retard: '#d62728', aplanifier: '#ff9f1c', planifie: '#1f77b4'}, RELANCE = '#e67e22';
-var map = L.map('map'), premier = true, marqueurs = {};
+var map = L.map('map'), premier = true, marqueurs = {}, dernier = null, role = null, ongletCtrl = 'incoherences', minuterie = null;
+function lire(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+function ecrire(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) { /* stockage indisponible */ } }
+var code = lire('carteCode');
 // Fond Plan IGN (Géoplateforme) : libre, sans clé.
 L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
   {maxZoom: 19, attribution: '&copy; <a href="https://www.ign.fr/">IGN</a> Plan IGN'}).addTo(map);
 map.setView([48.69, 6.18], 11);
 var calques = {};
 ['planifie', 'termine', 'justifie', 'aplanifier', 'retard', 'nouveau'].forEach(function (k) { calques[k] = L.layerGroup().addTo(map); });
-document.querySelectorAll('.leg input').forEach(function (i) {
+document.querySelectorAll('.leg input[data-k]').forEach(function (i) {
   i.onchange = function () { i.checked ? calques[i.dataset.k].addTo(map) : calques[i.dataset.k].remove(); };
 });
 var plier = document.getElementById('plier'), corps = document.getElementById('corps');
 plier.onclick = function () { corps.hidden = !corps.hidden; plier.textContent = corps.hidden ? 'Afficher' : 'Masquer'; plier.setAttribute('aria-expanded', String(!corps.hidden)); };
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
-function court(s, n) { s = String(s || '').replace(/(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g, '[tél.]').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; }
 function heure(iso) { return iso ? fd(new Date(iso)) : '—'; }
+function aller(num) { var m = marqueurs[num]; if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); } }
 
+// ---------- accès ----------
+var acces = document.getElementById('acces'), msgAcces = document.getElementById('msgAcces');
+document.getElementById('formAcces').onsubmit = function (e) {
+  e.preventDefault();
+  code = document.getElementById('code').value.trim();
+  msgAcces.textContent = 'Vérification…';
+  charger();
+};
+document.getElementById('changerCode').onclick = function () {
+  ecrire('carteCode', ''); code = ''; role = null;
+  if (minuterie) { clearInterval(minuterie); minuterie = null; }
+  document.getElementById('code').value = ''; msgAcces.textContent = ''; acces.hidden = false;
+};
+
+// ---------- mes interventions (techniciens) ----------
+var selMoi = document.getElementById('moi');
+selMoi.onchange = function () { ecrire('carteMoi', selMoi.value); if (dernier) afficher(dernier.d); };
+
+// ---------- listes de contrôle (conduite d'activité) ----------
+var panneau = document.getElementById('controles'), filtreG = document.getElementById('filtreGravite');
+document.getElementById('ouvrirControles').onclick = function () { panneau.hidden = false; tableauControles(); };
+document.getElementById('fermerControles').onclick = function () { panneau.hidden = true; };
+document.querySelectorAll('#controles .onglet').forEach(function (b) {
+  b.onclick = function () {
+    ongletCtrl = b.dataset.o;
+    document.querySelectorAll('#controles .onglet').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); });
+    filtreG.hidden = ongletCtrl !== 'incoherences'; document.querySelector('label[for="filtreGravite"]').hidden = filtreG.hidden;
+    tableauControles();
+  };
+});
+filtreG.onchange = function () { tableauControles(); };
+function tableauControles() {
+  if (!dernier || panneau.hidden) return;
+  var c = controles(dernier.res, dernier.NOW), defs = {
+    incoherences: [['Gravité', 'N°', 'Statut', 'Problème', 'Détail', 'Technicien', 'Ville'], c.incoherences.filter(function (l) { return !filtreG.value || l[0] === filtreG.value; }), 1],
+    lies: [['Groupe', 'Pourquoi liés', 'N°', 'Statut', 'Planifiée', 'Technicien', 'Ville', 'Adresse'], c.lies.map(function (l) { return l.slice(0, 9).filter(function (_, i) { return i !== 6; }); }), 2],
+    pm: [['PM (Site)', 'Tickets ouverts', 'dont à planifier', 'Communes', 'Créés entre', 'Équipement', 'Tickets'], c.pm, -1]
+  }[ongletCtrl];
+  var h = '<table><thead><tr>' + defs[0].map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  defs[1].forEach(function (l) {
+    var num = defs[2] >= 0 ? l[defs[2]] : '', g = ongletCtrl === 'incoherences' ? ' g' + l[0].charAt(0) : '';
+    h += '<tr class="' + (num && marqueurs[num] ? 'cliquable' : '') + g + '" data-num="' + esc(num) + '">' + l.slice(0, defs[0].length).map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>';
+  });
+  h += '</tbody></table>' + (defs[1].length ? '' : '<p style="padding:10px">Rien à signaler.</p>');
+  var t = document.getElementById('tableau');
+  t.innerHTML = h;
+  t.querySelectorAll('tr.cliquable').forEach(function (tr) { tr.onclick = function () { aller(tr.dataset.num); }; });
+}
+
+// ---------- carte ----------
 function afficher(d) {
   var NOW = new Date(), res = analyser(d, NOW), nb = {};
+  dernier = {d: d, res: res, NOW: NOW};
+  role = d.role;
+  acces.hidden = true; msgAcces.textContent = '';
+  ecrire('carteCode', code);
   document.getElementById('erreur').textContent = '';
-  document.getElementById('etat').textContent = 'Mis à jour à ' + fd(NOW).slice(11) + ' · export importé le ' + heure(d.importeLe) + ' · mails lus à ' + heure(d.luLe).slice(11);
+  document.getElementById('etat').textContent = (role === 'ca' ? "Conduite d'activité" : 'Techniciens') + ' · mis à jour à ' + fd(NOW).slice(11) +
+    ' · export du ' + heure(d.importeLe) + ' · mails lus à ' + heure(d.luLe).slice(11);
+  document.getElementById('ouvrirControles').hidden = role !== 'ca';
+  if (role !== 'ca') panneau.hidden = true;
+  document.getElementById('blocMoi').hidden = role !== 'tech';
+  // liste des noms de techniciens présents dans les tickets
+  var moi = lire('carteMoi'), noms = uniques(res.tickets.map(function (t) { return t.tech; }).filter(function (x) { return x; }));
+  selMoi.innerHTML = '<option value="">— choisir —</option>' + noms.map(function (n) { return '<option' + (n === moi ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('');
+  if (noms.indexOf(moi) < 0) moi = '';
+  if (role !== 'tech') moi = '';
+
   Object.keys(calques).forEach(function (k) { calques[k].clearLayers(); nb[k] = 0; });
   marqueurs = {};
   var pts = [];
   res.tickets.forEach(function (t) {
     if (!t.geo || t.categorie === 'annule') return;
-    var k = t.categorie, relance = k === 'justifie' && t.suivi && t.suivi.due;
+    var k = t.categorie, relance = k === 'justifie' && t.suivi && t.suivi.due, mien = moi && t.tech === moi;
     nb[k]++;
     pts.push([t.geo.lat, t.geo.lon]);
-    var m = L.circleMarker([t.geo.lat, t.geo.lon], {radius: k === 'planifie' || k === 'termine' ? 6 : (k === 'nouveau' ? 10 : 8),
-      color: relance ? RELANCE : k === 'nouveau' && t.prio === 1 ? C.retard : '#222', weight: relance || (k === 'nouveau' && t.prio === 1) ? 3 : 1,
-      fillColor: C[k], fillOpacity: .92});
+    var m = L.circleMarker([t.geo.lat, t.geo.lon], {radius: mien ? 9 : (k === 'planifie' || k === 'termine' ? 6 : (k === 'nouveau' ? 10 : 8)),
+      color: mien ? '#000' : relance ? RELANCE : k === 'nouveau' && t.prio === 1 ? C.retard : '#222',
+      weight: mien ? 4 : relance || (k === 'nouveau' && t.prio === 1) ? 3 : 1, fillColor: C[k], fillOpacity: .92});
     var html = '<div class="pop"><b>' + esc(t.num) + '</b>' + (k === 'nouveau' ? ' <span class="foulee">· nouveau</span>' : '') +
+      (t.prio && t.aPlanifier ? ' <small>· priorité ' + t.prio + '</small>' : '') +
       '<br>' + esc(t.statut) + (t.planif && !t.deplanifie ? ' · ' + esc(fd(t.planif)) : '') + (t.tech ? ' · ' + esc(t.tech) : '') +
       '<br>' + esc(t.adresse) + ', ' + esc(t.ville) +
       '<br><small>Créé le ' + esc(fd(t.creee)) + ' · PM ' + esc(t.site) + ' · ' + esc(t.regle) + (t.echeance ? ' → ' + esc(fd(t.echeance)) : '') + '</small>';
@@ -87,7 +210,7 @@ function afficher(d) {
     if (t.suivi) html += '<br><span style="color:' + (t.suivi.due ? '#a35208' : '#4a535c') + ';font-weight:600">' + (t.suivi.due ? 'À faire maintenant : ' : 'Suivi : ') + esc(t.suivi.action) + '</span>' +
       (t.suivi.prochaine ? '<br><small>' + (t.suivi.due ? 'Relance prévue le ' : 'Prochaine relance le ') + esc(fd(t.suivi.prochaine, false)) + ' · compté depuis ' + esc(t.suivi.base) + '</small>' : '');
     if (t.caser) html += '<br><span class="foulee">À programmer avec ' + esc(t.caser.n) + ' le ' + esc(t.caser.p) + ' · ' + esc(t.caser.tech) + ' · à ' + esc(t.caser.d) + '</span>';
-    if (t.alertes.length) html += '<br><b style="color:#b00">' + esc(t.alertes.join(' · ')) + '</b>';
+    if (t.alertes && t.alertes.length) html += '<br><b style="color:#b00">' + esc(t.alertes.join(' · ')) + '</b>';
     html += '<br><small>' + esc(court(t.desc, 220)) + '</small></div>';
     m.bindPopup(html, {maxWidth: 320});
     m.addTo(calques[k]);
@@ -96,6 +219,7 @@ function afficher(d) {
   });
   Object.keys(nb).forEach(function (k) { document.getElementById('nb-' + k).textContent = '(' + nb[k] + ')'; });
   document.getElementById('nb-relance').textContent = '(' + res.relances.length + ')';
+  if (role === 'ca') document.getElementById('ouvrirControles').textContent = 'Listes de contrôle (' + controles(res, NOW).incoherences.length + ' incohérences)';
 
   var listes = document.getElementById('listes');
   listes.innerHTML = '';
@@ -105,9 +229,15 @@ function afficher(d) {
     items.forEach(function (t) {
       var b = document.createElement('button'); b.type = 'button'; b.className = 'nv ' + classe;
       b.innerHTML = '<b>' + esc(t.num) + '</b> · ' + esc(t.ville) + '<span>' + esc(texte(t)) + '</span>';
-      b.onclick = function () { if (t.geo) { map.setView([t.geo.lat, t.geo.lon], 16); marqueurs[t.num].openPopup(); } };
+      b.onclick = function () { aller(t.num); };
       listes.appendChild(b);
     });
+  }
+  if (moi) {
+    var miens = res.tickets.filter(function (t) { return t.tech === moi && !t.termine && t.planif && !t.deplanifie; }).sort(function (a, b) { return a.planif - b.planif; });
+    liste('Mes interventions (' + miens.length + ')', '#174a8b', 'moi', miens, function (t) { return fd(t.planif) + ' · ' + t.adresse; });
+    var aCote = res.tickets.filter(function (t) { return t.caser && t.caser.tech === moi; });
+    liste('À côté de mes interventions', '#6c2e91', 'nouveau', aCote, function (t) { return 'Près de ' + t.caser.n + ' (' + t.caser.p + ', ' + t.caser.d + ') · ' + t.regle; });
   }
   liste("Fins d'intervention aujourd'hui", '#1d7444', 'termine', res.terminesAujourdhui, function (t) {
     return (t.fin ? 'Mail reçu le ' + t.fin.recu : t.sorti ? "Sorti de l'export le " + fd(t.sorti) + ' (terminé ou annulé)' : t.statut + ' le ' + fd(t.finLe)) + (t.tech ? ' · ' + t.tech : '');
@@ -125,15 +255,26 @@ function afficher(d) {
     });
   }
   if (premier && pts.length) { map.fitBounds(pts, {padding: [30, 30]}); premier = false; }
+  tableauControles();
+  if (!minuterie) minuterie = setInterval(charger, 2 * 60 * 1000);
 }
 
 function charger() {
+  if (!code) { acces.hidden = false; return; }
   google.script.run.withSuccessHandler(afficher).withFailureHandler(function (e) {
-    document.getElementById('erreur').textContent = 'Lecture impossible : ' + (e && e.message || e) + '. Nouvel essai dans 2 minutes.';
-  }).donnees();
+    var m = (e && e.message) || String(e);
+    if (/Code incorrect/.test(m)) {
+      ecrire('carteCode', ''); code = ''; acces.hidden = false;
+      msgAcces.textContent = 'Code incorrect. Vérifie-le ou demande le bon code.';
+      if (minuterie) { clearInterval(minuterie); minuterie = null; }
+    } else if (!acces.hidden) {
+      msgAcces.textContent = 'Connexion impossible : ' + m + '. Réessaie dans un instant.';
+    } else {
+      document.getElementById('erreur').textContent = 'Lecture impossible : ' + m + '. Nouvel essai dans 2 minutes.';
+    }
+  }).donnees(code);
 }
 charger();
-setInterval(charger, 2 * 60 * 1000);
 </script>
 </body>
 </html>

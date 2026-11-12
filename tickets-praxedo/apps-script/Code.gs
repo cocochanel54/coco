@@ -10,6 +10,7 @@
  *   Sortis de l'export  : les tickets présents dans l'import précédent et absents du nouveau (terminés ou annulés)
  *   Incohérences, Tickets liés, PM chargés : les listes de contrôle de l'Excel, refaites à chaque import,
  *                         à chaque mail de création ou de fin, et au moins une fois par heure
+ *   Accès               : les codes à taper pour ouvrir la carte (techniciens, conduite d'activité)
  *   Adresses            : les coordonnées des adresses (service d'adresses de l'IGN), pour ne pas les chercher deux fois
  *
  * Import automatique : un mail reçu dans Gmail avec l'export Praxedo en pièce jointe (.csv) est importé tout seul
@@ -19,7 +20,8 @@
  * un ticket qui sort du filtre entre deux imports, ou un mail « [FIN INTERVENTION] » transféré à la main vers Gmail.
  *
  * La carte (Déployer → Application Web) recharge ces données toutes les 2 minutes et relit Gmail au passage.
- * Toute fonction sans « _ » à la fin peut être appelée depuis la page.
+ * Elle demande un code (onglet Accès) et ne permet de rien modifier. Toute fonction sans « _ » à la fin peut être
+ * appelée depuis la page : celles qui modifient le Sheet vérifient que c'est son propriétaire qui les lance.
  */
 
 var ONGLET_TICKETS = 'Tickets';
@@ -28,6 +30,7 @@ var ONGLET_ADRESSES = 'Adresses';
 var ONGLET_SORTIS = "Sortis de l'export";
 var ONGLET_CREATIONS = 'Créations';
 var ONGLET_INCOHERENCES = 'Incohérences', ONGLET_LIES = 'Tickets liés', ONGLET_PM = 'PM chargés';
+var ONGLET_ACCES = 'Accès';
 var COULEURS_GRAVITE = { '1 - Urgent': '#F8CBAD', '2 - Important': '#FFE699', '3 - À vérifier': '#DDEBF7', '4 - Info': '#EDEDED' };
 var ENTETES_CREATIONS = ['Reçu le', 'N° ticket', 'Type', 'Commune (objet)', 'Adresse', 'CP', 'Ville', 'Nom client', 'Description', 'Id du mail'];
 var RECHERCHE_CREATIONS = 'subject:"CREATION INTERVENTION" newer_than:30d';
@@ -56,12 +59,14 @@ function onOpen() {
     .addItem('Importer un export Praxedo…', 'ouvrirImport')
     .addItem('Lire les mails maintenant', 'lireMails')
     .addItem('Mettre à jour les onglets de contrôle', 'mettreAJourControles')
+    .addItem("Codes d'accès à la carte", 'afficherCodes')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
     .addToUi();
 }
 
 /** À lancer une fois depuis l'éditeur : crée les onglets et la lecture des mails toutes les 5 minutes. */
 function installer() {
+  proprietaire_();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   [[ONGLET_TICKETS, ['Importe un export Praxedo : menu Carte tickets → Importer un export Praxedo']],
    [ONGLET_FINS, ENTETES_FINS], [ONGLET_CREATIONS, ENTETES_CREATIONS], [ONGLET_SORTIS, ENTETES_SORTIS], [ONGLET_ADRESSES, ENTETES_ADRESSES]].forEach(function (o) {
@@ -78,7 +83,14 @@ function installer() {
   }
   var props = PropertiesService.getScriptProperties();
   if (!props.getProperty('CLE_MACRO')) props.setProperty('CLE_MACRO', Utilities.getUuid());
+  acces_();
   lireMails();
+}
+
+function afficherCodes() {
+  var a = acces_();
+  SpreadsheetApp.getUi().alert("Codes pour ouvrir la carte :\n\nConduite d'activité : " + a.ca + '\nTechniciens : ' + a.tech +
+    "\n\nPour les changer (et couper l'accès à ceux qui ont l'ancien), modifie-les dans l'onglet « Accès ».");
 }
 
 function ouvrirImport() {
@@ -90,8 +102,13 @@ function afficherCle() {
   SpreadsheetApp.getUi().alert('Clé à coller dans la macro Outlook :\n\n' + PropertiesService.getScriptProperties().getProperty('CLE_MACRO'));
 }
 
-/** Remplace l'onglet Tickets par l'export (texte du CSV) et cherche les adresses nouvelles. */
+/** Remplace l'onglet Tickets par l'export (texte du CSV) et cherche les adresses nouvelles. Réservé au propriétaire. */
 function importerExport(texte) {
+  proprietaire_();
+  return importerExport_(texte);
+}
+
+function importerExport_(texte) {
   var lignes = lireCsv_(texte);
   if (lignes.length < 2 || lignes[0].indexOf('N°') < 0) throw new Error("Ce fichier n'est pas un export d'interventions Praxedo (pas de colonne « N° »).");
   var entetes = lignes[0];
@@ -110,7 +127,7 @@ function importerExport(texte) {
   var nouvelles = geocoder_(valeurs.slice(1).map(function (r) {
     return [r[c['Adresse']], r[c['CP']], r[c['Ville site']]].filter(function (x) { return x; }).join(' ');
   }));
-  try { mettreAJourControles(); } catch (err) { console.warn('Contrôles : ' + err); }
+  try { majControles_(); } catch (err) { console.warn('Contrôles : ' + err); }
   return { tickets: valeurs.length - 1, adresses: nouvelles };
 }
 
@@ -160,7 +177,7 @@ function lireMails() {
     // l'import refait déjà les contrôles ; sinon, après un mail de fin ou de création, et au moins une fois par heure
     var faits = props.getProperty('CONTROLES_LE');
     if (!importe && (ajout.length || creees || !faits || Date.now() - new Date(faits).getTime() > 3600 * 1000)) {
-      try { mettreAJourControles(); } catch (err) { console.warn('Contrôles : ' + err); }
+      try { majControles_(); } catch (err) { console.warn('Contrôles : ' + err); }
     }
     props.setProperty('LU_LE', maintenant_());
     return ajout.length;
@@ -212,7 +229,7 @@ function importerDepuisGmail_() {
   for (var i = 0; i < candidats.length; i++) {
     var texte = candidats[i].pj.getDataAsString('UTF-8');
     if (!/(^|;|")N°("|;)/.test(texte.slice(0, 2000))) continue;  // autre CSV : ignoré
-    var r = importerExport(texte);
+    var r = importerExport_(texte);
     props.setProperty('IMPORTE_PAR_MAIL', candidats[i].pj.getName() + ' (mail du ' + Utilities.formatDate(candidats[i].date, 'Europe/Paris', 'dd/MM/yyyy HH:mm') + ')');
     return r;
   }
@@ -233,14 +250,22 @@ function doPost(e) {
   return ContentService.createTextOutput(l ? 'ok' : 'ignore');
 }
 
-/** Tout ce dont la carte a besoin. Relit Gmail si la dernière lecture date de plus de 2 minutes. */
-function donnees() {
+/**
+ * Tout ce dont la carte a besoin, si le code est bon (onglet Accès) : rôle « ca » (conduite d'activité) ou « tech ».
+ * Relit Gmail si la dernière lecture date de plus de 2 minutes.
+ */
+function donnees(code) {
+  var a = acces_(), c = String(code || '').trim();
+  var role = c && c === a.ca ? 'ca' : c && c === a.tech ? 'tech' : null;
+  if (!role) { Utilities.sleep(1000); throw new Error('Code incorrect'); }
   var props = PropertiesService.getScriptProperties();
   var lu = props.getProperty('LU_LE');
   if (!lu || Date.now() - new Date(lu).getTime() > 2 * 60 * 1000) {
     try { lireMails(); } catch (err) { console.warn(err); }
   }
-  return lireDonnees_();
+  var d = lireDonnees_();
+  d.role = role;
+  return d;
 }
 
 function lireDonnees_() {
@@ -266,11 +291,17 @@ function lireDonnees_() {
            importeLe: props.getProperty('IMPORTE_LE') || '', luLe: props.getProperty('LU_LE') || '' };
 }
 
+/** Menu « Mettre à jour les onglets de contrôle ». Réservé au propriétaire. */
+function mettreAJourControles() {
+  proprietaire_();
+  return majControles_();
+}
+
 /**
  * Refait les onglets Incohérences, Tickets liés et PM chargés, avec la même analyse que la carte
  * (fichier Analyse : mêmes règles que l'Excel d'analyse_tickets.py).
  */
-function mettreAJourControles() {
+function majControles_() {
   var src = HtmlService.createHtmlOutputFromFile('Analyse').getContent().replace(/^\s*<script>/, '').replace(/<\/script>\s*$/, '');
   var a = new Function(src + '\nreturn { analyser: analyser, controles: controles };')();
   var NOW = new Date(), c = a.controles(a.analyser(lireDonnees_(), NOW), NOW);
@@ -302,6 +333,27 @@ function ecrireOnglet_(nom, entetes, lignes, couleur, largeurs) {
 }
 
 // ---------- outils ----------
+
+/** Codes d'accès à la carte, dans l'onglet Accès (créés au hasard la première fois, modifiables). */
+function acces_() {
+  var f = feuille_(ONGLET_ACCES, ['Qui', 'Code', 'Ce qu\'ils voient']);
+  if (f.getLastRow() < 3) {
+    var code = function () { return String(Math.floor(100000 + Math.random() * 900000)); };
+    f.getRange(2, 1, 2, 3).setNumberFormat('@').setValues([
+      ["Conduite d'activité", code(), 'La carte (tickets, priorités, nouveaux, terminés) et les listes Incohérences, Tickets liés, PM chargés. Rien à modifier.'],
+      ['Techniciens', code(), 'La carte (tickets, priorités, nouveaux, terminés) et leurs interventions. Rien à modifier.']]);
+    f.setColumnWidth(1, 160); f.setColumnWidth(2, 100); f.setColumnWidth(3, 600);
+  }
+  var v = f.getRange(2, 2, 2, 1).getDisplayValues();
+  return { ca: v[0][0].trim(), tech: v[1][0].trim() };
+}
+
+/** Bloque les fonctions qui modifient le Sheet quand elles ne sont pas lancées par son propriétaire (depuis le Sheet ou l'éditeur). */
+function proprietaire_() {
+  var actif = '', moi = '';
+  try { actif = Session.getActiveUser().getEmail(); moi = Session.getEffectiveUser().getEmail(); } catch (err) { /* inconnu : refusé */ }
+  if (!actif || actif !== moi) throw new Error('Réservé au propriétaire du Google Sheet.');
+}
 
 /** [reçu le, N°, commune, intervention du, rapport, objet, id] ou null si l'objet n'a pas de n° de ticket. */
 function ligneFin_(objet, corps, recu, id) {

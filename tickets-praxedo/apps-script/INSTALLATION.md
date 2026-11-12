@@ -52,7 +52,16 @@ Refais un import aussi souvent que tu veux (matin, midi, soir…) : nouveaux tic
 2. **Exécuter en tant que : Moi**. **Qui a accès : Tout le monde**.
 3. **Déployer**, puis copie l'**URL de l'application Web** (elle finit par `/exec`). Ouvre-la sur ordinateur ou téléphone.
 
-La page se recharge toute seule toutes les 2 minutes. Toute personne qui a l'adresse voit la carte (adresses et descriptions des tickets) : ne la donne qu'à l'équipe.
+La page se recharge toute seule toutes les 2 minutes.
+
+## 6. Donner l'accès aux techniciens et à la conduite d'activité
+
+La carte demande un **code** à la première ouverture (gardé ensuite sur le téléphone ou le PC). Il y en a deux, dans l'onglet **Accès** du Sheet (ou menu **Carte tickets → Codes d'accès à la carte**) :
+
+- **Conduite d'activité** : la carte, et le bouton **Listes de contrôle** (Incohérences, Tickets liés, PM chargés, filtrables par gravité ; un clic sur une ligne montre le ticket sur la carte).
+- **Techniciens** : la carte (tickets, priorités, nouveaux, terminés). Chacun choisit son nom dans **Mes interventions** : ses interventions ont un contour noir, et la liste montre aussi les tickets à côté des siennes.
+
+Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte : l'import et les mises à jour ne marchent que pour toi, depuis le Sheet. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
 
 ## Au quotidien
 
