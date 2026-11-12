@@ -29,7 +29,7 @@ Sans les statuts de fin, la carte se débrouille quand même : un ticket présen
 
 1. En haut de l'éditeur, choisis la fonction **installer** puis **Exécuter**.
 2. Google demande une autorisation : **Examiner les autorisations** → ton compte → **Paramètres avancés** → **Accéder à Carte tickets** → **Autoriser**. Le script lit les mails dont l'objet contient « FIN INTERVENTION » (ceux que tu transfères), écrit dans ce Sheet et place les adresses sur la carte.
-3. Les onglets **Tickets**, **Fins d'intervention**, **Sortis de l'export** et **Adresses** sont créés, et Gmail sera lu toutes les 5 minutes.
+3. Les onglets **Tickets**, **Fins d'intervention**, **Créations**, **Sortis de l'export** et **Adresses** sont créés, et Gmail sera lu toutes les 5 minutes.
 
 ## 4. Importer un export Praxedo
 
@@ -38,6 +38,8 @@ Sans les statuts de fin, la carte se débrouille quand même : un ticket présen
 3. La première fois, compte une minute : les adresses sont placées sur la carte.
 
 Refais un import aussi souvent que tu veux (matin, midi, soir…) : nouveaux tickets, plannings et fins d'intervention se mettent à jour à chaque fois.
+
+**Mails de création** : chaque mail « [CREATION INTERVENTION] » qui arrive dans Gmail ajoute le ticket à la carte dans les 5 minutes, en violet « nouveau », avec sa GTR (lue dans la description : [04h HO], [Niveau 3]…) et l'adresse du client final. Le prochain export le remplace par sa ligne complète ; s'il n'y est pas, il disparaît (sorti du filtre).
 
 **Import automatique par mail** : tout mail qui arrive dans ton Gmail avec l'export Praxedo en pièce jointe (fichier .csv) est importé tout seul dans les 5 minutes. Le script prend le plus récent, ignore les autres CSV (ceux qui n'ont pas de colonne « N° ») et n'importe jamais deux fois le même mail.
 
@@ -55,7 +57,7 @@ La page se recharge toute seule toutes les 2 minutes. Toute personne qui a l'adr
 ## Au quotidien
 
 - **Vert** : terminé aujourd'hui (mail de fin, statut de fin dans l'export, ou ticket sorti de l'export). Il disparaît de la carte le lendemain. La liste « Fins d'intervention aujourd'hui » est dans la légende.
-- **Violet** : nouveau depuis moins de 24 h, avec un trait vers l'intervention déjà planifiée la plus proche.
+- **Violet** : nouveau depuis moins de 24 h (export ou mail de création), avec un trait vers l'intervention déjà planifiée la plus proche.
 - **Gris** : justifié / en attente. Contour orange : à relancer ou à vérifier.
 - **Rouge / orange** : à planifier (rouge = échéance GTR dépassée ou dans moins de 48 h). **Bleu** : déjà planifié.
 - Un mail de fin pour un ticket absent de l'export apparaît dans la liste « Mails de fin pour des tickets absents de l'export ».

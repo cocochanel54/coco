@@ -84,7 +84,7 @@ function regleGtr(t) {
   var c = t.creee, R = REGLAGES, m;
   for (var i = 0; i < t.tags.length; i++) {
     m = /^(\d+)\s*H\s*HO$/.exec(t.tags[i]);
-    if (m) return ['[' + t.tags[i] + '] : ' + m[1] + ' h ouvrées', c && heuresOuvrees(c, +m[1], t.dept)];
+    if (m) return ['[' + t.tags[i] + '] : ' + (+m[1]) + ' h ouvrées', c && heuresOuvrees(c, +m[1], t.dept)];
   }
   m = /OTR\s*(\d+)\s*J\s*OUVR/i.exec(t.desc);
   if (m) return ['GTR écrite « OTR ' + m[1] + 'J » : ' + m[1] + ' j ouvrés', c && joursOuvres(c, +m[1], t.dept)];
@@ -140,16 +140,31 @@ function suivi(t, NOW) {
 /** donnees = { entetes, lignes, fins, adresses } (voir donnees() dans Code.gs). */
 function analyser(donnees, NOW) {
   var R = REGLAGES, TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
-  var col = {}; (donnees.entetes || []).forEach(function (c, i) { col[c] = i; });
-  var colsNotes = (donnees.entetes || []).filter(function (c) { return RE_COL_NOTES.test(c) && c !== 'Description'; });
-  var colFin = (donnees.entetes || []).filter(function (c) { return RE_COL_FIN.test(c); })[0];
+  var entetes = (donnees.entetes || []).indexOf('N°') >= 0 ? donnees.entetes : ['N°', 'Statut', 'Type inter.', 'Créée', 'Adresse', 'CP', 'Ville site', 'Description'];
+  var col = {}; entetes.forEach(function (c, i) { col[c] = i; });
+  var colsNotes = entetes.filter(function (c) { return RE_COL_NOTES.test(c) && c !== 'Description'; });
+  var colFin = entetes.filter(function (c) { return RE_COL_FIN.test(c); })[0];
+  // tickets créés par mail depuis le dernier import et pas encore dans l'export : ajoutés comme « Qualifiée » (à planifier).
+  // Un import fait après le mail qui ne contient pas le ticket l'enlève (il est sorti du filtre).
+  var lignes = (donnees.entetes || []).indexOf('N°') >= 0 ? (donnees.lignes || []).slice() : [], dansExport = {}, parMail = {};
+  lignes.forEach(function (r) { var n = String(r[col['N°']] || '').trim(); dansExport[n] = 1; dansExport[n.split('#')[0]] = 1; });
+  var importe = donnees.importeLe ? new Date(donnees.importeLe) : null;
+  (donnees.creations || []).forEach(function (c) {
+    var recu = dt(c.recu);
+    if (!c.num || dansExport[c.num] || dansExport[c.num.split('#')[0]] || parMail[c.num] || !recu || (importe && recu <= importe)) return;
+    parMail[c.num] = 1;
+    var r = entetes.map(function () { return ''; }), mettre = function (k, v) { if (col[k] != null) r[col[k]] = v; };
+    mettre('N°', c.num); mettre('Statut', 'Qualifiée'); mettre('Type inter.', c.type); mettre('Créée', c.recu);
+    mettre('Adresse', c.adresse); mettre('CP', c.cp); mettre('Ville site', c.ville); mettre('Description', c.desc);
+    lignes.push(r);
+  });
   // fins d'intervention reçues par mail : la plus récente par n° de ticket (et par n° sans « #… »)
   var fins = {};
   (donnees.fins || []).forEach(function (f) {
     if (!f.num) return;
     [f.num, f.num.split('#')[0]].forEach(function (k) { if (!fins[k] || dt(f.recu) > dt(fins[k].recu)) fins[k] = f; });
   });
-  var T = (donnees.lignes || []).map(function (r) {
+  var T = lignes.map(function (r) {
     var g = function (c) { return col[c] == null ? '' : String(r[col[c]] == null ? '' : r[col[c]]).trim(); };
     var num = g('N°');
     if (!num) return null;
@@ -180,6 +195,7 @@ function analyser(donnees, NOW) {
     var ouvert = !t.termine && ['Qualifiée', 'Pré-planifiée', 'Planifiée', 'Synchronisée'].indexOf(t.statut) >= 0;
     t.aPlanifier = !t.termine && (t.statut === 'Qualifiée' || t.statut === 'Pré-planifiée');
     t.deplanifie = t.statut === 'Qualifiée' && !!t.planif;
+    if (parMail[num]) { t.parMail = true; t.statut = "Reçu par mail de création (pas encore dans l'export)"; }
     var rg = regleGtr(t); t.regle = rg[0]; t.echeance = rg[1] || null;
     var e = t.echeance;
     if (ouvert && e && e < NOW && t.justif) t.alertes.push('Retard justifié (' + fretard(NOW - e) + ')');

@@ -5,6 +5,8 @@
  *   Tickets             : le dernier export Praxedo importé (menu Carte tickets → Importer un export Praxedo)
  *   Fins d'intervention : une ligne par mail « [FIN INTERVENTION] » reçu, lu dans Gmail toutes les 5 minutes
  *                         (une règle Outlook transfère ces mails vers ce Gmail)
+ *   Créations           : une ligne par mail « [CREATION INTERVENTION] » : le ticket apparaît sur la carte
+ *                         (en violet, avec sa GTR) jusqu'à ce qu'un export le contienne
  *   Sortis de l'export  : les tickets présents dans l'import précédent et absents du nouveau (terminés ou annulés)
  *   Adresses            : les coordonnées des adresses (service d'adresses de l'IGN), pour ne pas les chercher deux fois
  *
@@ -22,6 +24,9 @@ var ONGLET_TICKETS = 'Tickets';
 var ONGLET_FINS = "Fins d'intervention";
 var ONGLET_ADRESSES = 'Adresses';
 var ONGLET_SORTIS = "Sortis de l'export";
+var ONGLET_CREATIONS = 'Créations';
+var ENTETES_CREATIONS = ['Reçu le', 'N° ticket', 'Type', 'Commune (objet)', 'Adresse', 'CP', 'Ville', 'Nom client', 'Description', 'Id du mail'];
+var RECHERCHE_CREATIONS = 'subject:"CREATION INTERVENTION" newer_than:30d';
 var ENTETES_SORTIS = ['Sorti le', 'N°', 'Statut avant', 'Planifiée', 'Technicien', 'Adresse', 'CP', 'Ville site', 'Site'];
 var ENTETES_FINS = ['Reçu le', 'N° ticket', 'Commune', 'Intervention du', 'Rapport', 'Objet du mail', 'Id du mail'];
 var ENTETES_ADRESSES = ['Adresse cherchée', 'Latitude', 'Longitude', 'Adresse trouvée', 'Score', 'Type', 'Commune', 'CP'];
@@ -54,7 +59,7 @@ function onOpen() {
 function installer() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   [[ONGLET_TICKETS, ['Importe un export Praxedo : menu Carte tickets → Importer un export Praxedo']],
-   [ONGLET_FINS, ENTETES_FINS], [ONGLET_SORTIS, ENTETES_SORTIS], [ONGLET_ADRESSES, ENTETES_ADRESSES]].forEach(function (o) {
+   [ONGLET_FINS, ENTETES_FINS], [ONGLET_CREATIONS, ENTETES_CREATIONS], [ONGLET_SORTIS, ENTETES_SORTIS], [ONGLET_ADRESSES, ENTETES_ADRESSES]].forEach(function (o) {
     if (ss.getSheetByName(o[0])) return;
     var f = ss.insertSheet(o[0]);
     f.getRange(1, 1, 1, o[1].length).setValues([o[1]]).setFontWeight('bold');
@@ -143,12 +148,32 @@ function lireMails() {
       });
     });
     if (ajout.length) f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_FINS.length).setNumberFormat('@').setValues(ajout);
+    try { lireCreations_(); } catch (err) { console.warn('Créations : ' + err); }
     try { importerDepuisGmail_(); } catch (err) { console.warn('Import par mail : ' + err); }
     PropertiesService.getScriptProperties().setProperty('LU_LE', maintenant_());
     return ajout.length;
   } finally {
     verrou.releaseLock();
   }
+}
+
+/** Mails « [CREATION INTERVENTION] » : une ligne par ticket créé, et son adresse placée sur la carte. */
+function lireCreations_() {
+  var f = feuille_(ONGLET_CREATIONS, ENTETES_CREATIONS);
+  var vus = {};
+  if (f.getLastRow() > 1) f.getRange(2, 10, f.getLastRow() - 1, 1).getValues().forEach(function (r) { vus[r[0]] = 1; });
+  var ajout = [];
+  GmailApp.search(RECHERCHE_CREATIONS, 0, 100).forEach(function (fil) {
+    fil.getMessages().forEach(function (m) {
+      if (vus[m.getId()]) return;
+      var l = ligneCreation_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
+      if (l) { ajout.push(l.map(texte_)); vus[m.getId()] = 1; }
+    });
+  });
+  if (!ajout.length) return 0;
+  f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_CREATIONS.length).setNumberFormat('@').setValues(ajout);
+  geocoder_(ajout.map(function (l) { return [l[4], l[5], l[6]].filter(function (x) { return x; }).join(' '); }));
+  return ajout.length;
 }
 
 /**
@@ -208,6 +233,10 @@ function donnees() {
   var fins = ss.getSheetByName(ONGLET_FINS).getDataRange().getDisplayValues().slice(1).map(function (r) {
     return { recu: r[0], num: r[1], commune: r[2], jour: r[3], rapport: r[4] };
   });
+  var fc = ss.getSheetByName(ONGLET_CREATIONS);
+  var creations = fc ? fc.getDataRange().getDisplayValues().slice(1).map(function (r) {
+    return { recu: r[0], num: r[1], type: r[2], commune: r[3], adresse: r[4], cp: r[5], ville: r[6], client: r[7], desc: r[8] };
+  }) : [];
   var fs = ss.getSheetByName(ONGLET_SORTIS);
   var sortis = fs ? fs.getDataRange().getDisplayValues().slice(1).map(function (r) {
     return { le: r[0], num: r[1], statut: r[2], planif: r[3], tech: r[4], adresse: r[5], cp: r[6], ville: r[7], site: r[8] };
@@ -216,7 +245,7 @@ function donnees() {
   ss.getSheetByName(ONGLET_ADRESSES).getDataRange().getValues().slice(1).forEach(function (r) {
     adresses[r[0]] = r[1] === '' ? null : { lat: +r[1], lon: +r[2], label: r[3], score: +r[4], type: r[5], city: r[6], postcode: String(r[7]) };
   });
-  return { entetes: t[0], lignes: t.slice(1), fins: fins, sortis: sortis, adresses: adresses,
+  return { entetes: t[0], lignes: t.slice(1), fins: fins, creations: creations, sortis: sortis, adresses: adresses,
            importeLe: props.getProperty('IMPORTE_LE') || '', luLe: props.getProperty('LU_LE') || '' };
 }
 
@@ -231,6 +260,46 @@ function ligneFin_(objet, corps, recu, id) {
   var lien = /https?:\/\/\S*praxedo\S*\/render/i.exec(corps);
   return [Utilities.formatDate(recu, 'Europe/Paris', 'dd/MM/yyyy HH:mm'), m[1].toUpperCase(), apres,
           jour ? jour[1] : '', lien ? lien[0] : '', objet, id];
+}
+
+/**
+ * [reçu le, N°, type, commune de l'objet, adresse, CP, ville, nom client, description, id] d'un mail de création.
+ * Le texte du mail a deux blocs : « info ticket : » (la description Praxedo, avec [04h HO], [Niveau 2]…)
+ * et « info Client : » (nom client, Adresse, Ville). Quand l'adresse vaut « 00 voir coordonnées GPS »,
+ * on prend celle écrite dans la description (« 3 RUE …, 54000, NANCY » ou « … / 52 AVENUE DE METZ 54320 MAXEVILLE »).
+ */
+function ligneCreation_(objet, corps, recu, id) {
+  var m = RE_NUM.exec(objet);
+  if (!m) return null;
+  var commune = objet.slice(m.index + m[0].length).replace(/^\s*-\s*/, '').trim();
+  var type = (/\]\s*Ticket\s+(.+?)\s+N°/i.exec(objet) || [])[1] || '';
+  var texte = String(corps).replace(/\r/g, '').replace(/<[^>\n]*>/g, '');  // le texte brut ajoute les liens en <https://…>
+  var bloc = /info ticket\s*:?[ \t]*\n([\s\S]*?)(?:\n\s*info client\s*:|$)/i.exec(texte);
+  var desc = bloc ? bloc[1].replace(/\n{3,}/g, '\n\n').trim() : '';
+  var champ = function (nom) {
+    var r = new RegExp('^\\s*' + nom + '\\s*:\\s*(.*)$', 'im').exec(texte), v = r ? r[1].trim() : '';
+    return /voir coordonn|^0+(\s|$)|^NA$/i.test(v) ? '' : v;
+  };
+  var adresse = champ('Adresse'), ville = champ('Ville'), cp = '';
+  var a = /^\s*(\d+[^,\n]*?),\s*(\d{5}),?\s*([^\n,]+?)\s*$/m.exec(desc) || /\/\s*(\d+[^\n\/]*?)\s+(\d{5})\s+([^\n\/]+?)\s*$/m.exec(desc);
+  if (a && (!adresse || !ville)) { adresse = a[1].trim(); cp = a[2]; ville = a[3].trim(); }
+  else if (a && a[3].trim().toUpperCase() === ville.toUpperCase()) cp = a[2];  // même ville : on garde le CP de la description
+  if (!ville && commune && !/^NA$/i.test(commune)) ville = commune;
+  var cpm = /\b(\d{5})\b/.exec(adresse + ' ' + ville);
+  if (!cp && cpm) cp = cpm[1];
+  return [Utilities.formatDate(recu, 'Europe/Paris', 'dd/MM/yyyy HH:mm'), m[1].toUpperCase(), type, commune,
+          adresse, cp, ville, champ('nom client'), desc, id];
+}
+
+function feuille_(nom, entetes) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), f = ss.getSheetByName(nom);
+  if (!f) {
+    f = ss.insertSheet(nom);
+    f.getRange(1, 1, 1, entetes.length).setValues([entetes]).setFontWeight('bold');
+    f.setFrozenRows(1);
+    f.getRange('A:Z').setNumberFormat('@');
+  }
+  return f;
 }
 
 /** Cherche les adresses inconnues avec le service d'adresses de l'IGN (rue, CP, ville : rien d'autre n'est envoyé). */
