@@ -13,7 +13,7 @@ Ajoute à ton filtre d'export :
 
 Sans les statuts de fin, la carte se débrouille quand même : un ticket présent dans l'import précédent et absent du nouveau passe en vert « sorti de l'export : terminé ou annulé ».
 
-Les transferts automatiques vers Gmail sont bloqués par la DSI de Circet. Tu peux quand même **transférer un mail « [FIN INTERVENTION] » à la main** vers ton Gmail (un mail à la fois, pas plusieurs en pièce jointe) : le ticket passe en vert dans les 5 minutes, avec le lien du rapport.
+**Les mails « [FIN INTERVENTION] »** : dès qu'ils arrivent dans ton Gmail (transfert automatique quand la DSI l'autorise, ou à la main, un mail à la fois et pas plusieurs en pièce jointe), le script les lit toutes les 5 minutes et le ticket passe en vert avec le lien du rapport. Rien d'autre à régler : le n° du ticket est lu dans l'objet, même avec « TR: » devant.
 
 ## 2. Créer le Google Sheet et coller le code
 
