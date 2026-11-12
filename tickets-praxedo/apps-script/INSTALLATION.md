@@ -11,7 +11,7 @@ Ajoute à ton filtre d'export :
 - **Les statuts de fin** (Terminée, Réalisée, Validée… selon ce que Praxedo propose), sur les **7 derniers jours** par exemple. Ces tickets passent en vert sur la carte. S'il existe une colonne de date de fin (« Date de fin », « Réalisée le »…), ajoute-la aussi.
 - **La colonne des notes**, pour les tickets justifiés.
 
-Sans les statuts de fin, la carte se débrouille quand même : un ticket présent dans l'import précédent et absent du nouveau passe en vert « sorti de l'export : terminé ou annulé ».
+Sans les statuts de fin, la carte se débrouille quand même : un ticket présent dans l'import précédent et absent du nouveau passe en vert « sorti de l'export : terminé ou annulé » jusqu'au soir.
 
 **Les mails « [FIN INTERVENTION] »** : dès qu'ils arrivent dans ton Gmail (transfert automatique quand la DSI l'autorise, ou à la main, un mail à la fois et pas plusieurs en pièce jointe), le script les lit toutes les 5 minutes et le ticket passe en vert avec le lien du rapport. Rien d'autre à régler : le n° du ticket est lu dans l'objet, même avec « TR: » devant.
 
@@ -54,7 +54,7 @@ La page se recharge toute seule toutes les 2 minutes. Toute personne qui a l'adr
 
 ## Au quotidien
 
-- **Vert** : terminé (statut de fin dans l'export, ticket sorti de l'export, ou mail de fin transféré). La liste « Fins d'intervention aujourd'hui » est dans la légende.
+- **Vert** : terminé aujourd'hui (mail de fin, statut de fin dans l'export, ou ticket sorti de l'export). Il disparaît de la carte le lendemain. La liste « Fins d'intervention aujourd'hui » est dans la légende.
 - **Violet** : nouveau depuis moins de 24 h, avec un trait vers l'intervention déjà planifiée la plus proche.
 - **Gris** : justifié / en attente. Contour orange : à relancer ou à vérifier.
 - **Rouge / orange** : à planifier (rouge = échéance GTR dépassée ou dans moins de 48 h). **Bleu** : déjà planifié.

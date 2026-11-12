@@ -210,19 +210,21 @@ function analyser(donnees, NOW) {
   });
 
   var nums = {}; T.forEach(function (t) { nums[t.num] = 1; nums[t.base] = 1; });
-  // tickets sortis du filtre depuis l'import précédent : terminés ou annulés, affichés en vert 7 jours
+  // tickets sortis du filtre depuis l'import précédent : terminés ou annulés, en vert le jour même
   var vus = {};
   (donnees.sortis || []).slice().reverse().forEach(function (s) {
     var le = dt(s.le);
-    if (!s.num || nums[s.num] || vus[s.num] || !le || NOW - le > 7 * 86400e3) return;
+    if (!s.num || nums[s.num] || vus[s.num] || !le || le < TODAY) return;
     vus[s.num] = 1;
     var adr = [s.adresse, s.cp, s.ville].filter(function (x) { return x; }).join(' ');
     T.push({ num: s.num, base: s.num.split('#')[0], statut: s.statut, planif: dt(s.planif), tech: s.tech, site: s.site, adresse: s.adresse,
              cp: s.cp, ville: s.ville, desc: '', creee: null, regle: '', echeance: null, alertes: [], tags: [], justif: '',
              geo: donnees.adresses ? donnees.adresses[adr] || null : null, fin: null, sorti: le, finLe: le, termine: true, categorie: 'termine' });
   });
+  // un ticket terminé reste en vert le jour de sa fin, puis disparaît de la carte le lendemain
+  var visibles = T.filter(function (t) { return !t.termine || (t.finLe && t.finLe >= TODAY); });
   return {
-    tickets: T,
+    tickets: visibles,
     nouveaux: T.filter(function (t) { return t.categorie === 'nouveau'; }).sort(function (a, b) { return (!!b.caser - !!a.caser) || (b.creee - a.creee); }),
     relances: T.filter(function (t) { return t.categorie === 'justifie' && t.suivi && t.suivi.due; }),
     terminesAujourdhui: T.filter(function (t) { return t.termine && t.finLe && t.finLe >= TODAY; }),
