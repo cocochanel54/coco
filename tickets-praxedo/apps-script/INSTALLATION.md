@@ -66,6 +66,16 @@ La carte demande un **code** à la première ouverture (gardé ensuite sur le t�
 
 Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte : l'import et les mises à jour ne marchent que pour toi, depuis le Sheet. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
 
+## Là où le lien est bloqué : le fichier « carte du jour »
+
+Sur les PC où la sécurité de l'entreprise bloque le lien de la carte, utilise le fichier « carte du jour » :
+
+1. Dans le Sheet : **Carte tickets → Fichier « carte du jour » (pour Teams)…**
+2. Clique **Télécharger Carte_du_jour_….html** (ou **Me l'envoyer aussi par mail** : il arrive en pièce jointe dans ton Gmail).
+3. Dépose le fichier dans Teams. Tes collègues le **téléchargent puis l'ouvrent** dans leur navigateur.
+
+C'est la carte complète (zoom, fiches des tickets, couleurs, listes de contrôle), sans lien Google et sans code, mais c'est une **photo** : les données sont celles du moment où tu as fabriqué le fichier. Refais-le quand tu veux une version à jour. Les numéros de téléphone des descriptions y sont masqués. Il contient les adresses et les descriptions des tickets : ne le dépose que dans l'équipe.
+
 ## Au quotidien
 
 **Les onglets de contrôle** du Sheet remplacent l'Excel d'analyse et se refont tout seuls (à chaque import, à chaque mail de création ou de fin, et au moins une fois par heure) :

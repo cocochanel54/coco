@@ -67,6 +67,7 @@ function onOpen() {
     .addItem('Importer un export Praxedo…', 'ouvrirImport')
     .addItem('Lire les mails maintenant', 'lireMailsMaintenant')
     .addItem('Mettre à jour les onglets de contrôle', 'mettreAJourControles')
+    .addItem('Fichier « carte du jour » (pour Teams)…', 'ouvrirCarteDuJour')
     .addItem("Codes d'accès à la carte", 'afficherCodes')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
     .addToUi();
@@ -104,6 +105,70 @@ function afficherCodes() {
 function ouvrirImport() {
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutputFromFile('Import').setWidth(420).setHeight(220), 'Importer un export Praxedo');
+}
+
+/**
+ * « Carte du jour » : la carte complète dans un seul fichier HTML, pour les postes où le lien Google est bloqué.
+ * Le fichier contient les données du moment (vue conduite d'activité) et ne se met pas à jour.
+ */
+function ouvrirCarteDuJour() {
+  var page = '<style>[hidden]{display:none!important}body{font:14px system-ui,sans-serif;margin:12px;color:#1a1a1a}p{margin:0 0 10px}' +
+    '#etat{font-weight:600}a,button{font:inherit}button{padding:6px 10px}</style>' +
+    '<p>La carte complète dans un seul fichier, à déposer dans Teams. Tes collègues le téléchargent et l\'ouvrent : pas de lien Google, pas de code. ' +
+    'C\'est une photo des données de maintenant, elle ne se met pas à jour.</p>' +
+    '<p id="etat" role="status">Préparation du fichier…</p><p><a id="lien" hidden></a></p><p><button id="mail" type="button" hidden>Me l\'envoyer aussi par mail</button></p>' +
+    '<script>var etat=document.getElementById("etat"),lien=document.getElementById("lien"),mail=document.getElementById("mail");' +
+    'function rate(e){etat.textContent=(e&&e.message)||String(e);mail.disabled=false;}' +
+    'google.script.run.withSuccessHandler(function(r){var b=new Blob([r.html],{type:"text/html"});lien.href=URL.createObjectURL(b);lien.download=r.nom;' +
+    'lien.textContent="Télécharger "+r.nom;lien.hidden=false;mail.hidden=false;etat.textContent="Fichier prêt ("+Math.round(b.size/1024)+" Ko). Clique sur le lien pour le télécharger.";})' +
+    '.withFailureHandler(rate).carteDuJour();' +
+    'mail.onclick=function(){mail.disabled=true;etat.textContent="Envoi…";google.script.run.withSuccessHandler(function(a){etat.textContent="Envoyé à "+a+".";}).withFailureHandler(rate).envoyerCarteDuJour();};' +
+    '</' + 'script>';
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(page).setWidth(460).setHeight(250), 'Fichier « carte du jour »');
+}
+
+/** Pour la fenêtre : le nom et le contenu du fichier. Réservé au propriétaire. */
+function carteDuJour() {
+  proprietaire_();
+  return { nom: nomCarteDuJour_(), html: construireCarteDuJour_() };
+}
+
+/** Envoie le fichier en pièce jointe à l'adresse Gmail du propriétaire (et à personne d'autre). */
+function envoyerCarteDuJour() {
+  proprietaire_();
+  var moi = Session.getEffectiveUser().getEmail(), nom = nomCarteDuJour_();
+  GmailApp.sendEmail(moi, 'Carte du jour des tickets, ' + Utilities.formatDate(new Date(), 'Europe/Paris', "dd/MM/yyyy 'à' HH:mm"),
+    'En pièce jointe : la carte du jour. Télécharge le fichier puis ouvre-le dans un navigateur.',
+    { attachments: [Utilities.newBlob(construireCarteDuJour_(), 'text/html', nom)] });
+  return moi;
+}
+
+function nomCarteDuJour_() {
+  return 'Carte_du_jour_' + Utilities.formatDate(new Date(), 'Europe/Paris', "yyyy-MM-dd_HH'h'mm") + '.html';
+}
+
+/**
+ * La page de la carte avec les données dedans (rôle conduite d'activité) et Leaflet recopié dans le fichier, pour
+ * qu'il s'ouvre sans rien charger d'autre que le fond de carte de l'IGN. Les n° de téléphone sont masqués.
+ */
+function construireCarteDuJour_() {
+  var d = lireDonnees_(), tel = /(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g;
+  d.role = 'ca';
+  d.photoLe = maintenant_();
+  d.lignes = d.lignes.map(function (r) { return r.map(function (v) { return String(v).replace(tel, '[tél.]'); }); });
+  d.creations.forEach(function (c) { c.desc = String(c.desc || '').replace(tel, '[tél.]'); });
+  var page = HtmlService.createTemplateFromFile('Carte').evaluate().getContent();
+  try {
+    var css = UrlFetchApp.fetch('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css').getContentText();
+    var js = UrlFetchApp.fetch('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js').getContentText();
+    // remplacements par fonction : le texte inséré peut contenir des « $ »
+    page = page.replace('<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">', function () { return '<style>' + css + '</style>'; })
+               .replace('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></' + 'script>', function () { return '<script>' + js.replace(/<\/script/gi, '<\\/script') + '</' + 'script>'; });
+  } catch (err) {
+    console.warn('Leaflet non recopié dans le fichier : ' + err);  // le fichier ira alors le chercher sur unpkg.com à l'ouverture
+  }
+  var donnees = JSON.stringify(d).replace(/</g, '\\u003c');
+  return page.replace('<div id="map"></div>', function () { return '<script>window.CARTE_DU_JOUR = ' + donnees + ';</' + 'script><div id="map"></div>'; });
 }
 
 function afficherCle() {

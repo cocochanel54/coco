@@ -3,6 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
+<title>Carte des tickets</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -110,6 +111,8 @@ var map = L.map('map'), premier = true, marqueurs = {}, dernier = null, role = n
 function lire(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
 function ecrire(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) { /* stockage indisponible */ } }
 var code = lire('carteCode');
+// « Carte du jour » : fichier fabriqué depuis le Sheet, avec les données dedans (voir construireCarteDuJour_ dans Code.gs)
+var PHOTO = window.CARTE_DU_JOUR || null;
 // Fond Plan IGN (Géoplateforme) : libre, sans clé.
 L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
   {maxZoom: 19, attribution: '&copy; <a href="https://www.ign.fr/">IGN</a> Plan IGN'}).addTo(map);
@@ -185,13 +188,17 @@ function afficher(d) {
   dernier = {d: d, res: res, NOW: NOW};
   role = d.role;
   acces.hidden = true; msgAcces.textContent = '';
-  ecrire('carteCode', code);
+  if (!PHOTO) ecrire('carteCode', code);
+  document.getElementById('changerCode').hidden = !!PHOTO;
   document.getElementById('erreur').textContent = '';
   var av = document.getElementById('avert');
-  av.hidden = !res.avertissements.length || role === 'tech';
-  av.innerHTML = res.avertissements.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('');
-  document.getElementById('etat').textContent = (role === 'ca' ? "Conduite d'activité" : 'Techniciens') + ' · mis à jour à ' + fd(NOW).slice(11) +
-    ' · export du ' + heure(d.importeLe) + ' · mails lus à ' + heure(d.luLe).slice(11);
+  var messages = (role === 'tech' ? [] : res.avertissements).slice();
+  if (PHOTO) messages.unshift('Carte du jour : données du ' + heure(d.photoLe) + '. Ce fichier ne se met pas à jour.');
+  av.hidden = !messages.length;
+  av.innerHTML = messages.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('');
+  document.getElementById('etat').textContent = (role === 'ca' ? "Conduite d'activité" : 'Techniciens') + (PHOTO
+    ? ' · carte du jour du ' + heure(d.photoLe) + ' · export du ' + heure(d.importeLe)
+    : ' · mis à jour à ' + fd(NOW).slice(11) + ' · export du ' + heure(d.importeLe) + ' · mails lus à ' + heure(d.luLe).slice(11));
   document.getElementById('ouvrirControles').hidden = role !== 'ca';
   if (role !== 'ca') panneau.hidden = true;
   document.getElementById('blocMoi').hidden = role !== 'tech';
@@ -286,10 +293,11 @@ function afficher(d) {
   }
   if (premier && pts.length) { map.fitBounds(pts, {padding: [30, 30]}); premier = false; }
   tableauControles();
-  if (!minuterie) minuterie = setInterval(charger, 2 * 60 * 1000);
+  if (!minuterie && !PHOTO) minuterie = setInterval(charger, 2 * 60 * 1000);
 }
 
 function charger() {
+  if (PHOTO) { afficher(JSON.parse(JSON.stringify(PHOTO))); return; }
   if (!code) { acces.hidden = false; return; }
   google.script.run.withSuccessHandler(afficher).withFailureHandler(function (e) {
     var m = (e && e.message) || String(e);
