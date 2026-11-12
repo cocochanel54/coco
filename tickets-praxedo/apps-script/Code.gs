@@ -225,7 +225,7 @@ function geocoder_(adresses) {
 
 /** CSV de Praxedo : séparateur « ; », guillemets, retours à la ligne dans les cellules. */
 function lireCsv_(texte) {
-  texte = String(texte).replace(/^﻿/, '');
+  texte = String(texte).replace(/^\uFEFF/, '');
   var lignes = [], ligne = [], champ = '', guil = false;
   for (var i = 0; i < texte.length; i++) {
     var ch = texte[i];
