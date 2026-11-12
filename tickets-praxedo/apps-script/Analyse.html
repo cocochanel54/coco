@@ -27,6 +27,14 @@ var RE_STATUT_FIN = /termin|r[ée]alis|valid|cl[ôo]tur|ferm/i;
 var RE_STATUT_ANNULE = /annul/i;
 var RE_COL_FIN = /^(date (de )?)?(fin|r[ée]alisation|cl[ôo]ture)|(r[ée]alis[ée]e?|termin[ée]e?|cl[ôo]tur[ée]e?) le|fin r[ée]elle/i;
 var RE_PREVU = /(prévu|prevu|programm|planifi|travaux|remplac|pose|passage)[^\n]{0,30}$/i;
+// Repères dans la description, pour relier les tickets entre eux (mêmes motifs que analyse_tickets.py)
+var RE_CLS = /\b[A-Z]{2}\d{3}-[A-Z]{5}-\d{3}\b/g;
+var RE_PTO = /\b(?:TN-[A-Z0-9]{3,5}-[A-Z0-9]{4,5}|GE-\d{4}-[A-Z0-9]{4})\b/g;
+var RE_BOITE = /\b(?:GNY-(?:BPI|BPE)-[A-Z0-9]{4,6}(?:-\d{2})?|(?:PBO|BPE|BPI|PEC|PEO)-\d{2}-\d{3}-\d{3}-[A-Z0-9]{4}(?:-\d)?)\b/gi;
+var RE_REF = /(?:BB-)?\b(20\d{6}T\d{4})\b/gi;
+var RE_IMMEUBLE = /^(?:GNY-SITE-|IMB-|TN-BAT-)/i;
+var RE_INFO_SITE = /Information du client\s*:\s*([A-Z0-9-]+)\s*\/\s*([^\n]*)/i;
+var STATUTS_OUVERTS = ['Qualifiée', 'Pré-planifiée', 'Planifiée', 'Synchronisée'];
 
 function dt(s) {
   var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/.exec(String(s || '').trim());
@@ -39,6 +47,22 @@ function fd(d, heure) {
 }
 function plusJours(d, n) { var x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
 function fretard(ms) { var h = Math.floor(ms / 3600e3); return h < 24 ? h + ' h' : Math.floor(h / 24) + ' j'; }
+function trouver(texte, re, groupe) {
+  var out = [], m; re.lastIndex = 0;
+  while ((m = re.exec(texte))) out.push(m[groupe || 0]);
+  return out;
+}
+function uniques(l) { return l.filter(function (x, i) { return l.indexOf(x) === i; }).sort(); }
+function norm(s) {
+  s = String(s || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  s = s.replace(/\b(RUE|R)\b/g, 'RUE').replace(/\b(AVENUE|AV|AVE)\b/g, 'AVENUE').replace(/\b(BOULEVARD|BD|BLD)\b/g, 'BOULEVARD')
+       .replace(/\bST\b/g, 'SAINT').replace(/\bSTE\b/g, 'SAINTE');
+  return s.replace(/[^A-Z0-9]+/g, ' ').trim();
+}
+function court(s, n) {
+  s = String(s || '').replace(/\s+/g, ' ').replace(/(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g, '[tél.]').trim();
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
 function fdist(m) { return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1).replace('.', ',') + ' km'; }
 
 var _feries = {};
@@ -183,8 +207,18 @@ function analyser(donnees, NOW) {
       rdv: tags.indexOf('RDVCLI') >= 0, nacelle: /nacelle/i.test(desc), notes: notes,
       justif: mj ? (RE_JUSTIF.exec(notes) ? 'Note : « ' : 'Description : « ') + mj[0].replace(/\s+/g, ' ').trim().replace(/[\s,;:-]+$/, '') + ' »' : '',
       dept: cp ? cp.slice(0, 2) : (msite ? msite[1] : '54'),
-      geo: donnees.adresses ? donnees.adresses[adr] || null : null, alertes: []
+      geo: donnees.adresses ? donnees.adresses[adr] || null : null, alertes: [],
+      statutExport: g('Statut'), client: g('Client'), contact: g('Contact'),
+      geoCherche: !!donnees.adresses && Object.prototype.hasOwnProperty.call(donnees.adresses, adr)
     };
+    t.immeuble = RE_IMMEUBLE.test(t.contact) ? t.contact.toUpperCase() : '';
+    t.cls = uniques(trouver(desc + ' ' + t.client, RE_CLS));
+    t.pto = uniques(trouver(desc, RE_PTO));
+    t.boites = uniques(trouver(desc + ' ' + t.equip, RE_BOITE).map(function (x) { return x.toUpperCase(); }));
+    t.refs = uniques(trouver(desc, RE_REF, 1).map(function (x) { return 'BB-' + x.toUpperCase(); })).filter(function (x) { return x !== t.base.toUpperCase(); });
+    var info = RE_INFO_SITE.exec(desc);
+    t.infoSite = info ? info[1].toUpperCase() : '';
+    t.iteration = /#(\d+)$/.test(num) ? +/#(\d+)$/.exec(num)[1] : 0;
     var fin = fins[num] || fins[t.base];
     t.fin = fin || null;
     t.annule = RE_STATUT_ANNULE.test(t.statut);
@@ -192,11 +226,12 @@ function analyser(donnees, NOW) {
     // date de fin : mail, sinon colonne de fin de l'export, sinon date planifiée
     t.finLe = fin ? dt(fin.recu) : t.finStatut ? (colFin && dt(g(colFin))) || t.planif : null;
     t.termine = !!fin || t.finStatut;
-    var ouvert = !t.termine && ['Qualifiée', 'Pré-planifiée', 'Planifiée', 'Synchronisée'].indexOf(t.statut) >= 0;
+    var ouvert = !t.termine && STATUTS_OUVERTS.indexOf(t.statut) >= 0;
+    t.ouvert = ouvert;
     t.aPlanifier = !t.termine && (t.statut === 'Qualifiée' || t.statut === 'Pré-planifiée');
     t.deplanifie = t.statut === 'Qualifiée' && !!t.planif;
     if (parMail[num]) { t.parMail = true; t.statut = "Reçu par mail de création (pas encore dans l'export)"; }
-    var rg = regleGtr(t); t.regle = rg[0]; t.echeance = rg[1] || null;
+    var rg = regleGtr(t); t.regle = rg[0]; t.echeance = rg[1] || null; t.echGtr = !/^Sans niveau/.test(t.regle);
     var e = t.echeance;
     if (ouvert && e && e < NOW && t.justif) t.alertes.push('Retard justifié (' + fretard(NOW - e) + ')');
     else if (ouvert && t.justif) t.alertes.push('Justifié / en attente');
@@ -240,11 +275,154 @@ function analyser(donnees, NOW) {
   // un ticket terminé reste en vert le jour de sa fin, puis disparaît de la carte le lendemain
   var visibles = T.filter(function (t) { return !t.termine || (t.finLe && t.finLe >= TODAY); });
   return {
+    tous: T,
     tickets: visibles,
     nouveaux: T.filter(function (t) { return t.categorie === 'nouveau'; }).sort(function (a, b) { return (!!b.caser - !!a.caser) || (b.creee - a.creee); }),
     relances: T.filter(function (t) { return t.categorie === 'justifie' && t.suivi && t.suivi.due; }),
     terminesAujourdhui: T.filter(function (t) { return t.termine && t.finLe && t.finLe >= TODAY; }),
     finsHorsExport: (donnees.fins || []).filter(function (f) { return f.num && !nums[f.num] && !nums[f.num.split('#')[0]]; })
+  };
+}
+
+/**
+ * Les trois listes de contrôle de l'Excel (onglets du Google Sheet) : incohérences, tickets liés, PM chargés.
+ * res = analyser(donnees, NOW). Les tickets terminés ou annulés sont laissés de côté.
+ */
+function controles(res, NOW) {
+  var TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
+  var T = res.tous.filter(function (t) { return !t.termine && !t.annule && !t.sorti; });
+  var INC = [];
+  function inc(g, t, probleme, detail) { INC.push([g, t, probleme, detail || '']); }
+  T.forEach(function (t) {
+    var e = t.echeance, st = t.statutExport;
+    if (t.ouvert && e && e < NOW && t.justif) inc('4 - Info', t, 'Retard justifié (' + fretard(NOW - e) + ')', t.justif + ' · échéance GTR ' + fd(e));
+    else if (t.ouvert && t.justif) { /* justifié, pas encore en retard */ }
+    else if (t.ouvert && e && e < NOW) inc(st === 'Qualifiée' ? '1 - Urgent' : '2 - Important', t, 'Échéance dépassée de ' + fretard(NOW - e),
+      t.regle + ' · à faire avant le ' + fd(e) + ' · statut ' + st + (t.planif && !t.deplanifie ? ' · planifiée le ' + fd(t.planif) : ''));
+    else if (t.aPlanifier && e && e < plusJours(NOW, 2)) inc('1 - Urgent', t, 'Échéance dans moins de 48 h et pas planifié', t.regle + ' · à faire avant le ' + fd(e));
+    if (t.echGtr && e && t.avant && Math.abs(t.avant - e) > 2 * 86400e3) inc('3 - À vérifier', t, 'Échéance Praxedo différente de la GTR', t.regle + ' → ' + fd(e) + ' · Praxedo : ' + fd(t.avant));
+    if (t.ouvert && !e && !t.rdv) inc('3 - À vérifier', t, "Pas d'échéance (ni niveau, ni « À faire avant »)");
+    if (t.deplanifie) inc('2 - Important', t, 'Déplanifié : revenu en « Qualifiée »',
+      'Était planifié le ' + fd(t.planif) + ", n'a plus de technicien" + (e && t.planif > e ? ' · déjà en retard à cette date' : ''));
+    if ((st === 'Planifiée' || st === 'Synchronisée') && t.planif) {
+      if (t.planif < TODAY) inc('2 - Important', t, 'Date planifiée passée, intervention pas clôturée', 'Prévue le ' + fd(t.planif) + ' (' + t.tech + '), toujours « ' + st + ' »');
+      if (e && t.planif > e) inc('2 - Important', t, "Planifiée après l'échéance", 'Prévue le ' + fd(t.planif) + ', à faire avant le ' + fd(e) + ' (' + t.regle + ')');
+    }
+    if (st === 'Pré-planifiée' && t.planif && e && t.planif > e) inc('2 - Important', t, "Pré-planifiée après l'échéance", 'Prévue le ' + fd(t.planif) + ', à faire avant le ' + fd(e) + ' (' + t.regle + ')');
+    if (t.planif && !t.deplanifie) {
+      var jf = feries(t.planif.getFullYear(), t.dept)[fd(t.planif, false)];
+      if (jf) inc('3 - À vérifier', t, 'Planifiée un jour férié (' + jf + ')', fd(t.planif) + ' · ' + t.tech);
+      else if (t.planif.getDay() === 0 || t.planif.getDay() === 6) inc('3 - À vérifier', t, 'Planifiée un week-end', fd(t.planif) + ' · ' + t.tech);
+    }
+    if (['Planifiée', 'Synchronisée', 'Pré-planifiée'].indexOf(st) >= 0 && !t.tech) inc('2 - Important', t, 'Planifiée sans technicien');
+    if (t.aPlanifier && t.creee && Math.floor((NOW - t.creee) / 86400e3) > 60) inc('2 - Important', t, 'Vieux ticket : créé il y a ' + Math.floor((NOW - t.creee) / 86400e3) + ' j', 'Créé le ' + fd(t.creee, false));
+    if (!t.cp) inc('3 - À vérifier', t, 'Code postal vide', /\b\d{5}\b/.test(t.adresse) ? 'Le code postal est écrit dans la colonne Adresse' : '');
+    var g = t.geo;
+    if (!g && t.geoCherche && (t.adresse || t.ville)) inc('3 - À vérifier', t, 'Adresse introuvable', t.adresse + ' ' + t.cp + ' ' + t.ville);
+    else if (g) {
+      var nc = norm(g.city), nv = norm(t.ville);
+      if (nc !== nv && nc.indexOf(nv) < 0 && nv.indexOf(nc) < 0) inc('3 - À vérifier', t, 'Adresse trouvée dans une autre commune', 'Praxedo : ' + t.adresse + ' ' + t.cp + ' ' + t.ville + ' · trouvée : ' + g.label);
+      else if (t.cp && g.postcode && String(g.postcode) !== t.cp) inc('3 - À vérifier', t, 'Code postal qui ne correspond pas à la ville', 'Praxedo : ' + t.cp + ' ' + t.ville + ' · officiel : ' + g.postcode);
+      else if ((g.score || 0) < 0.5 || g.type === 'municipality') inc('3 - À vérifier', t, 'Adresse imprécise (placée au centre de la commune)', t.adresse + ' ' + t.cp + ' ' + t.ville);
+    }
+    if (/L'incident concerne\s*:\s*undefined|Localisation la plus proche communiquée\s*:\s*0\b/i.test(t.desc))
+      inc('3 - À vérifier', t, 'Localisation vague dans la description', "« undefined » ou numéro « 0 » : repérer le lieu exact avant d'envoyer quelqu'un");
+    if (t.infoSite && t.immeuble && t.infoSite !== t.immeuble && t.infoSite !== t.site.toUpperCase())
+      inc('3 - À vérifier', t, 'Site de la description ≠ champ Contact', 'Description : ' + t.infoSite + ' · Contact : ' + t.immeuble);
+    if (t.client && /^[A-Z]{2}\d{3}-[A-Z]{5}-\d{3}$/.test(t.client)) inc('4 - Info', t, 'Champ Client rempli avec la référence client au lieu de la commune', t.client);
+    if (t.iteration >= 2) inc('4 - Info', t, 'Ticket rouvert ' + t.iteration + ' fois (#' + t.iteration + ')');
+  });
+  // même technicien : même créneau, ou deux interventions trop loin l'une de l'autre pour l'écart de temps
+  var parTech = {};
+  T.forEach(function (t) { if (t.tech && t.planif && !t.deplanifie) (parTech[t.tech] = parTech[t.tech] || []).push(t); });
+  Object.keys(parTech).forEach(function (tech) {
+    var L = parTech[tech].sort(function (a, b) { return a.planif - b.planif; });
+    for (var i = 1; i < L.length; i++) {
+      var a = L[i - 1], b = L[i], ecart = (b.planif - a.planif) / 60000;
+      if (ecart === 0) inc('2 - Important', b, 'Même technicien, même créneau', tech + ' : ' + a.num + ' et ' + b.num + ' le ' + fd(a.planif));
+      else {
+        var d = distance(a, b);
+        if (d && fd(a.planif, false) === fd(b.planif, false) && ecart <= 60 && d > 20000)
+          inc('3 - À vérifier', b, 'Trajet serré entre deux interventions', tech + ' : ' + a.num + ' (' + a.ville + ') à ' + fd(a.planif).slice(11) + ' puis ' + b.num + ' (' + b.ville + ') à ' + fd(b.planif).slice(11) + ', ' + fdist(d) + " à vol d'oiseau");
+      }
+    }
+  });
+
+  // tickets liés : même immeuble, adresse, référence client, PTO, boîte, « suite de », ou au même endroit
+  var parent = {}, liens = {};
+  T.forEach(function (t) { parent[t.num] = t.num; });
+  function racine(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+  function lier(a, b, raison) {
+    if (a === b) return;
+    var k = [a.num, b.num].sort().join('|');
+    (liens[k] = liens[k] || {})[raison] = 1;
+    parent[racine(a.num)] = racine(b.num);
+  }
+  [[function (t) { return t.immeuble ? [t.immeuble] : []; }, 'même immeuble'],
+   [function (t) { return /^\s*[1-9]/.test(t.adresse) ? [norm(t.adresse) + '|' + norm(t.ville)] : []; }, 'même adresse'],
+   [function (t) { return t.cls; }, 'même référence client'], [function (t) { return t.pto; }, 'même PTO'],
+   [function (t) { return t.boites; }, 'même boîte']].forEach(function (x) {
+    var idx = {};
+    T.forEach(function (t) { x[0](t).forEach(function (k) { (idx[k] = idx[k] || []).push(t); }); });
+    Object.keys(idx).forEach(function (k) { for (var i = 1; i < idx[k].length; i++) lier(idx[k][0], idx[k][i], x[1]); });
+  });
+  var parBase = {}; T.forEach(function (t) { parBase[t.base.toUpperCase()] = t; });
+  T.forEach(function (t) { t.refs.forEach(function (r) { if (parBase[r]) lier(t, parBase[r], 'suite de ' + r); }); });
+  T.forEach(function (t) {
+    T.forEach(function (u) {
+      if (t.num < u.num && (t.aPlanifier || u.aPlanifier)) {
+        var d = distance(t, u);
+        if (d != null && d < 30 && (t.immeuble !== u.immeuble || !t.immeuble)) lier(t, u, 'même endroit (< 30 m)');
+      }
+    });
+  });
+  var groupes = {}, ordre = [];
+  T.forEach(function (t) { var r = racine(t.num); if (!groupes[r]) { groupes[r] = []; ordre.push(r); } groupes[r].push(t); });
+  var G = ordre.map(function (r) { return groupes[r]; })
+    .filter(function (g) { return g.length > 1 && g.some(function (x) { return x.aPlanifier; }); })
+    .sort(function (a, b) {
+      var na = a.filter(function (x) { return x.aPlanifier; }).length, nb = b.filter(function (x) { return x.aPlanifier; }).length;
+      var ca = Math.min.apply(null, a.map(function (x) { return x.creee ? +x.creee : +NOW; })), cb = Math.min.apply(null, b.map(function (x) { return x.creee ? +x.creee : +NOW; }));
+      return (nb - na) || (ca - cb);
+    });
+  var lies = [];
+  G.forEach(function (g, i) {
+    var raisons = {};
+    g.forEach(function (a) { g.forEach(function (b) { var l = liens[a.num + '|' + b.num]; if (l) Object.keys(l).forEach(function (r) { raisons[r] = 1; }); }); });
+    var texte = Object.keys(raisons).sort().join(', ');
+    g.slice().sort(function (a, b) { return (a.creee ? +a.creee : +NOW) - (b.creee ? +b.creee : +NOW); }).forEach(function (t) {
+      lies.push(['G' + (i + 1), texte, t.num, t.statutExport, fd(t.planif), t.tech, fd(t.creee), t.ville, t.adresse, t.immeuble,
+                 t.boites.join(', '), t.cls.join(', '), court(t.desc, 200)]);
+    });
+    g.forEach(function (t) {
+      if (!t.aPlanifier) return;
+      var deja = g.filter(function (x) { return x !== t && (x.statutExport === 'Planifiée' || x.statutExport === 'Synchronisée') && x.planif; });
+      if (deja.length) inc('2 - Important', t, 'Lié à une intervention déjà planifiée', texte + ' : ' + deja[0].num + ' prévue le ' + fd(deja[0].planif) + ' avec ' + deja[0].tech);
+      else if (g.some(function (x) { return x !== t && x.aPlanifier; }) && (raisons['même référence client'] || raisons['même PTO']))
+        inc('2 - Important', t, 'Doublon probable', texte + ' avec ' + g.filter(function (x) { return x !== t; }).map(function (x) { return x.num; }).sort().join(', '));
+    });
+  });
+
+  // PM avec au moins 3 tickets ouverts
+  var PM = {}, ordrePm = [];
+  T.forEach(function (t) {
+    if (STATUTS_OUVERTS.indexOf(t.statutExport) < 0 || !t.site) return;
+    var k = t.site.toUpperCase();
+    if (!PM[k]) { PM[k] = []; ordrePm.push(k); }
+    PM[k].push(t);
+  });
+  var pm = ordrePm.filter(function (k) { return PM[k].length >= 3; }).sort(function (a, b) { return PM[b].length - PM[a].length; }).map(function (k) {
+    var v = PM[k], c = v.filter(function (x) { return x.creee; }).map(function (x) { return +x.creee; });
+    return [k, v.length, v.filter(function (x) { return x.aPlanifier; }).length, uniques(v.map(function (x) { return x.ville; })).join(', '),
+            c.length ? fd(new Date(Math.min.apply(null, c)), false) + ' → ' + fd(new Date(Math.max.apply(null, c)), false) : '',
+            uniques(v.map(function (x) { return x.equip; }).filter(function (x) { return x; })).join(', '),
+            v.slice().sort(function (a, b) { return (a.creee ? +a.creee : +NOW) - (b.creee ? +b.creee : +NOW); }).map(function (x) { return x.num; }).join(', ')];
+  });
+
+  INC.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1].num < b[1].num ? -1 : a[1].num > b[1].num ? 1 : 0; });
+  return {
+    incoherences: INC.map(function (i) { return [i[0], i[1].num, i[1].statutExport, i[2], i[3], i[1].tech, i[1].ville, i[1].adresse]; }),
+    lies: lies, pm: pm
   };
 }
 </script>

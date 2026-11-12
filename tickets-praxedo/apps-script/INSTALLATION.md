@@ -56,6 +56,15 @@ La page se recharge toute seule toutes les 2 minutes. Toute personne qui a l'adr
 
 ## Au quotidien
 
+**Les onglets de contrôle** du Sheet remplacent l'Excel d'analyse et se refont tout seuls (à chaque import, à chaque mail de création ou de fin, et au moins une fois par heure) :
+
+- **Incohérences** : échéance dépassée, planifiée après l'échéance, déplanifié, date passée pas clôturée, jour férié, doublon probable, adresse fausse… colorées par gravité. Filtre par gravité ou par problème avec les flèches de l'en-tête.
+- **Tickets liés** : tickets d'un même immeuble, d'une même boîte, d'une même PTO ou référence client, « suite de » un autre ticket, ou au même endroit.
+- **PM chargés** : PM avec au moins 3 tickets ouverts (défaut collectif possible).
+
+Pour un vrai fichier Excel (à envoyer, par exemple) : **Fichier → Télécharger → Microsoft Excel (.xlsx)**. Pour les refaire tout de suite : **Carte tickets → Mettre à jour les onglets de contrôle**.
+
+
 - **Vert** : terminé aujourd'hui (mail de fin, statut de fin dans l'export, ou ticket sorti de l'export). Il disparaît de la carte le lendemain. La liste « Fins d'intervention aujourd'hui » est dans la légende.
 - **Violet** : nouveau depuis moins de 24 h (export ou mail de création), avec un trait vers l'intervention déjà planifiée la plus proche.
 - **Gris** : justifié / en attente. Contour orange : à relancer ou à vérifier.

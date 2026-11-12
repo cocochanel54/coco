@@ -8,6 +8,8 @@
  *   Créations           : une ligne par mail « [CREATION INTERVENTION] » : le ticket apparaît sur la carte
  *                         (en violet, avec sa GTR) jusqu'à ce qu'un export le contienne
  *   Sortis de l'export  : les tickets présents dans l'import précédent et absents du nouveau (terminés ou annulés)
+ *   Incohérences, Tickets liés, PM chargés : les listes de contrôle de l'Excel, refaites à chaque import,
+ *                         à chaque mail de création ou de fin, et au moins une fois par heure
  *   Adresses            : les coordonnées des adresses (service d'adresses de l'IGN), pour ne pas les chercher deux fois
  *
  * Import automatique : un mail reçu dans Gmail avec l'export Praxedo en pièce jointe (.csv) est importé tout seul
@@ -25,6 +27,8 @@ var ONGLET_FINS = "Fins d'intervention";
 var ONGLET_ADRESSES = 'Adresses';
 var ONGLET_SORTIS = "Sortis de l'export";
 var ONGLET_CREATIONS = 'Créations';
+var ONGLET_INCOHERENCES = 'Incohérences', ONGLET_LIES = 'Tickets liés', ONGLET_PM = 'PM chargés';
+var COULEURS_GRAVITE = { '1 - Urgent': '#F8CBAD', '2 - Important': '#FFE699', '3 - À vérifier': '#DDEBF7', '4 - Info': '#EDEDED' };
 var ENTETES_CREATIONS = ['Reçu le', 'N° ticket', 'Type', 'Commune (objet)', 'Adresse', 'CP', 'Ville', 'Nom client', 'Description', 'Id du mail'];
 var RECHERCHE_CREATIONS = 'subject:"CREATION INTERVENTION" newer_than:30d';
 var ENTETES_SORTIS = ['Sorti le', 'N°', 'Statut avant', 'Planifiée', 'Technicien', 'Adresse', 'CP', 'Ville site', 'Site'];
@@ -51,6 +55,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Carte tickets')
     .addItem('Importer un export Praxedo…', 'ouvrirImport')
     .addItem('Lire les mails maintenant', 'lireMails')
+    .addItem('Mettre à jour les onglets de contrôle', 'mettreAJourControles')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
     .addToUi();
 }
@@ -105,6 +110,7 @@ function importerExport(texte) {
   var nouvelles = geocoder_(valeurs.slice(1).map(function (r) {
     return [r[c['Adresse']], r[c['CP']], r[c['Ville site']]].filter(function (x) { return x; }).join(' ');
   }));
+  try { mettreAJourControles(); } catch (err) { console.warn('Contrôles : ' + err); }
   return { tickets: valeurs.length - 1, adresses: nouvelles };
 }
 
@@ -148,9 +154,15 @@ function lireMails() {
       });
     });
     if (ajout.length) f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_FINS.length).setNumberFormat('@').setValues(ajout);
-    try { lireCreations_(); } catch (err) { console.warn('Créations : ' + err); }
-    try { importerDepuisGmail_(); } catch (err) { console.warn('Import par mail : ' + err); }
-    PropertiesService.getScriptProperties().setProperty('LU_LE', maintenant_());
+    var props = PropertiesService.getScriptProperties(), creees = 0, importe = null;
+    try { creees = lireCreations_(); } catch (err) { console.warn('Créations : ' + err); }
+    try { importe = importerDepuisGmail_(); } catch (err) { console.warn('Import par mail : ' + err); }
+    // l'import refait déjà les contrôles ; sinon, après un mail de fin ou de création, et au moins une fois par heure
+    var faits = props.getProperty('CONTROLES_LE');
+    if (!importe && (ajout.length || creees || !faits || Date.now() - new Date(faits).getTime() > 3600 * 1000)) {
+      try { mettreAJourControles(); } catch (err) { console.warn('Contrôles : ' + err); }
+    }
+    props.setProperty('LU_LE', maintenant_());
     return ajout.length;
   } finally {
     verrou.releaseLock();
@@ -228,6 +240,11 @@ function donnees() {
   if (!lu || Date.now() - new Date(lu).getTime() > 2 * 60 * 1000) {
     try { lireMails(); } catch (err) { console.warn(err); }
   }
+  return lireDonnees_();
+}
+
+function lireDonnees_() {
+  var props = PropertiesService.getScriptProperties();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var t = ss.getSheetByName(ONGLET_TICKETS).getDataRange().getDisplayValues();
   var fins = ss.getSheetByName(ONGLET_FINS).getDataRange().getDisplayValues().slice(1).map(function (r) {
@@ -247,6 +264,41 @@ function donnees() {
   });
   return { entetes: t[0], lignes: t.slice(1), fins: fins, creations: creations, sortis: sortis, adresses: adresses,
            importeLe: props.getProperty('IMPORTE_LE') || '', luLe: props.getProperty('LU_LE') || '' };
+}
+
+/**
+ * Refait les onglets Incohérences, Tickets liés et PM chargés, avec la même analyse que la carte
+ * (fichier Analyse : mêmes règles que l'Excel d'analyse_tickets.py).
+ */
+function mettreAJourControles() {
+  var src = HtmlService.createHtmlOutputFromFile('Analyse').getContent().replace(/^\s*<script>/, '').replace(/<\/script>\s*$/, '');
+  var a = new Function(src + '\nreturn { analyser: analyser, controles: controles };')();
+  var NOW = new Date(), c = a.controles(a.analyser(lireDonnees_(), NOW), NOW);
+  ecrireOnglet_(ONGLET_INCOHERENCES, ['Gravité', 'N°', 'Statut', 'Problème', 'Détail', 'Technicien', 'Ville', 'Adresse'],
+    c.incoherences, function (l) { return COULEURS_GRAVITE[l[0]]; }, [100, 160, 100, 300, 480, 150, 160, 220]);
+  ecrireOnglet_(ONGLET_LIES, ['Groupe', 'Pourquoi liés', 'N°', 'Statut', 'Planifiée', 'Technicien', 'Créée', 'Ville', 'Adresse', 'Immeuble',
+    'Boîte(s)', 'Réf. client', 'Description'], c.lies, null, [60, 220, 160, 100, 120, 150, 120, 160, 220, 130, 170, 130, 420]);
+  ecrireOnglet_(ONGLET_PM, ['PM (Site)', 'Tickets ouverts', 'dont à planifier', 'Communes', 'Créés entre', 'Équipement', 'Tickets'],
+    c.pm, null, [160, 80, 80, 220, 190, 220, 600]);
+  PropertiesService.getScriptProperties().setProperty('CONTROLES_LE', maintenant_());
+  return { incoherences: c.incoherences.length, lies: c.lies.length, pm: c.pm.length };
+}
+
+function ecrireOnglet_(nom, entetes, lignes, couleur, largeurs) {
+  var f = feuille_(nom, entetes), n = entetes.length;
+  var valeurs = [entetes].concat(lignes).map(function (l) { return l.map(texte_); });
+  var filtre = f.getFilter();
+  if (filtre) filtre.remove();
+  f.clear();
+  var tout = f.getRange(1, 1, valeurs.length, n);
+  tout.setNumberFormat('@').setValues(valeurs).setWrap(true).setVerticalAlignment('top');
+  f.getRange(1, 1, 1, n).setFontWeight('bold').setBackground('#1F4E78').setFontColor('#FFFFFF');
+  f.setFrozenRows(1);
+  if (couleur && lignes.length) {
+    f.getRange(2, 1, lignes.length, n).setBackgrounds(lignes.map(function (l) { var c = couleur(l) || null; return entetes.map(function () { return c; }); }));
+  }
+  largeurs.forEach(function (w, i) { f.setColumnWidth(i + 1, w); });
+  if (lignes.length) tout.createFilter();
 }
 
 // ---------- outils ----------
