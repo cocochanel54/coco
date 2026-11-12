@@ -9,7 +9,7 @@ La carte se met à jour à chaque export Praxedo que tu importes : nouveaux tick
 Ajoute à ton filtre d'export :
 
 - **Les statuts de fin** (Terminée, Réalisée, Validée… selon ce que Praxedo propose), sur les **7 derniers jours** par exemple. Ces tickets passent en vert sur la carte. S'il existe une colonne de date de fin (« Date de fin », « Réalisée le »…), ajoute-la aussi.
-- **La colonne des notes**, pour les tickets justifiés.
+- **La colonne des notes**, pour les tickets justifiés, si Praxedo la propose. Sinon, tape tes notes dans l'onglet **Notes** du Sheet (voir « Au quotidien »).
 
 Sans les statuts de fin, la carte se débrouille quand même : un ticket présent dans l'import précédent et absent du nouveau passe en vert « sorti de l'export : terminé ou annulé » jusqu'au soir.
 
@@ -29,7 +29,7 @@ Sans les statuts de fin, la carte se débrouille quand même : un ticket présen
 
 1. En haut de l'éditeur, choisis la fonction **installer** puis **Exécuter**.
 2. Google demande une autorisation : **Examiner les autorisations** → ton compte → **Paramètres avancés** → **Accéder à Carte tickets** → **Autoriser**. Le script lit les mails dont l'objet contient « FIN INTERVENTION » (ceux que tu transfères), écrit dans ce Sheet et place les adresses sur la carte.
-3. Les onglets **Tickets**, **Fins d'intervention**, **Créations**, **Sortis de l'export** et **Adresses** sont créés, et Gmail sera lu toutes les 5 minutes.
+3. Les onglets **Tickets**, **Fins d'intervention**, **Créations**, **Sortis de l'export**, **Notes**, **Accès** et **Adresses** sont créés, et Gmail sera lu toutes les 5 minutes.
 
 ## 4. Importer un export Praxedo
 
@@ -80,6 +80,13 @@ Pour un vrai fichier Excel (à envoyer, par exemple) : **Fichier → Télécharg
 - **Rouge / orange** : à planifier (rouge = échéance GTR dépassée ou dans moins de 48 h). **Bleu** : déjà planifié.
 - Un mail de fin pour un ticket absent de l'export apparaît dans la liste « Mails de fin pour des tickets absents de l'export ».
 - Un ticket annulé n'apparaît pas sur la carte.
+
+**Tes notes** : écris-les dans l'onglet **Notes** (colonne A : le n° du ticket, avec ou sans « #0 » ; colonne B : la note), jamais dans l'onglet Tickets, qui est remplacé à chaque import. Elles restent d'un import à l'autre, apparaissent dans la fiche du ticket sur la carte (dans les 2 minutes), et plusieurs lignes pour un même ticket s'ajoutent.
+
+- Une note avec « GTR justifiée… », « poteau à remplacer », « attente Orange / Enedis / nacelle / mairie… » passe le ticket en **gris** : il ne compte plus comme en retard.
+- « relance Orange 12/11 » : la prochaine relance est 10 jours ouvrés après cette date.
+- « remplacement prévu le 25/11 » : rien à faire avant, puis « vérifier si les travaux sont faits ».
+- Toute autre note (« client absent, repasser après 17h ») est juste affichée.
 - **Carte tickets → Lire les mails maintenant** : pour ne pas attendre les 5 minutes.
 
 ## Mettre à jour le code plus tard

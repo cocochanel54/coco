@@ -10,6 +10,10 @@
  *   Sortis de l'export  : les tickets présents dans l'import précédent et absents du nouveau (terminés ou annulés)
  *   Incohérences, Tickets liés, PM chargés : les listes de contrôle de l'Excel, refaites à chaque import,
  *                         à chaque mail de création ou de fin, et au moins une fois par heure
+ *   Notes               : tes notes par ticket (N° ticket, Note). Elles restent d'un import à l'autre, alors que
+ *                         l'onglet Tickets est remplacé à chaque import. « GTR justifiée car poteau », « poteau à
+ *                         remplacer », « attente Orange », « relance Orange 12/11 », « remplacement prévu le 25/11 »…
+ *                         passent le ticket en gris avec son suivi.
  *   Accès               : les codes à taper pour ouvrir la carte (techniciens, conduite d'activité)
  *   Adresses            : les coordonnées des adresses (service d'adresses de l'IGN), pour ne pas les chercher deux fois
  *
@@ -31,6 +35,7 @@ var ONGLET_SORTIS = "Sortis de l'export";
 var ONGLET_CREATIONS = 'Créations';
 var ONGLET_INCOHERENCES = 'Incohérences', ONGLET_LIES = 'Tickets liés', ONGLET_PM = 'PM chargés';
 var ONGLET_ACCES = 'Accès';
+var ONGLET_NOTES = 'Notes', ENTETES_NOTES = ['N° ticket', 'Note'];
 var COULEURS_GRAVITE = { '1 - Urgent': '#F8CBAD', '2 - Important': '#FFE699', '3 - À vérifier': '#DDEBF7', '4 - Info': '#EDEDED' };
 var ENTETES_CREATIONS = ['Reçu le', 'N° ticket', 'Type', 'Commune (objet)', 'Adresse', 'CP', 'Ville', 'Nom client', 'Description', 'Id du mail'];
 var RECHERCHE_CREATIONS = 'subject:"CREATION INTERVENTION"';
@@ -72,7 +77,7 @@ function installer() {
   proprietaire_();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   [[ONGLET_TICKETS, ['Importe un export Praxedo : menu Carte tickets → Importer un export Praxedo']],
-   [ONGLET_FINS, ENTETES_FINS], [ONGLET_CREATIONS, ENTETES_CREATIONS], [ONGLET_SORTIS, ENTETES_SORTIS], [ONGLET_ADRESSES, ENTETES_ADRESSES]].forEach(function (o) {
+   [ONGLET_FINS, ENTETES_FINS], [ONGLET_CREATIONS, ENTETES_CREATIONS], [ONGLET_SORTIS, ENTETES_SORTIS], [ONGLET_NOTES, ENTETES_NOTES], [ONGLET_ADRESSES, ENTETES_ADRESSES]].forEach(function (o) {
     if (ss.getSheetByName(o[0])) return;
     var f = ss.insertSheet(o[0]);
     f.getRange(1, 1, 1, o[1].length).setValues([o[1]]).setFontWeight('bold');
@@ -313,6 +318,9 @@ function lireDonnees_() {
   var fins = ss.getSheetByName(ONGLET_FINS).getDataRange().getDisplayValues().slice(1).map(function (r) {
     return { recu: r[0], num: r[1], commune: r[2], jour: r[3], rapport: r[4] };
   });
+  var fn = feuille_(ONGLET_NOTES, ENTETES_NOTES);
+  var notes = fn.getDataRange().getDisplayValues().slice(1).map(function (r) { return { num: r[0], note: r[1] }; })
+    .filter(function (n) { return n.num && n.note; });
   var fc = ss.getSheetByName(ONGLET_CREATIONS);
   var creations = fc ? fc.getDataRange().getDisplayValues().slice(1).map(function (r) {
     return { recu: r[0], num: r[1], type: r[2], commune: r[3], adresse: r[4], cp: r[5], ville: r[6], client: r[7], desc: r[8] };
@@ -325,7 +333,7 @@ function lireDonnees_() {
   ss.getSheetByName(ONGLET_ADRESSES).getDataRange().getValues().slice(1).forEach(function (r) {
     adresses[r[0]] = r[1] === '' ? null : { lat: +r[1], lon: +r[2], label: r[3], score: +r[4], type: r[5], city: r[6], postcode: String(r[7]) };
   });
-  return { entetes: t[0], lignes: t.slice(1), fins: fins, creations: creations, sortis: sortis, adresses: adresses,
+  return { entetes: t[0], lignes: t.slice(1), fins: fins, creations: creations, sortis: sortis, notes: notes, adresses: adresses,
            importeLe: props.getProperty('IMPORTE_LE') || '', luLe: props.getProperty('LU_LE') || '' };
 }
 

@@ -183,6 +183,12 @@ function analyser(donnees, NOW) {
     lignes.push(r);
   });
   // fins d'intervention reçues par mail : la plus récente par n° de ticket (et par n° sans « #… »)
+  // notes de l'onglet Notes, par n° de ticket (avec ou sans « #0 », majuscules ou non) ; plusieurs lignes s'ajoutent
+  var notesTapees = {};
+  (donnees.notes || []).forEach(function (n) {
+    var k = String(n.num || '').trim().toUpperCase().split('#')[0], v = String(n.note || '').trim();
+    if (k && v) (notesTapees[k] = notesTapees[k] || []).push(v);
+  });
   var fins = {};
   (donnees.fins || []).forEach(function (f) {
     if (!f.num) return;
@@ -195,7 +201,8 @@ function analyser(donnees, NOW) {
     var desc = g('Description').replace(/\r\n|\n\r|\r/g, '\n'), tete = desc.slice(0, 250);
     var tags = []; tete.replace(/\[([^\]]+)\]/g, function (_, x) { tags.push(x.trim().toUpperCase()); });
     var niv = /niveau\s*(\d)/i.exec(tete);
-    var notes = colsNotes.map(g).filter(function (x) { return x; }).join(' · ');
+    var noteTapee = (notesTapees[num.toUpperCase().split('#')[0]] || []).join(' · ');
+    var notes = colsNotes.map(g).concat([noteTapee]).filter(function (x) { return x; }).join(' · ');
     var mj = RE_JUSTIF.exec(notes) || RE_JUSTIF.exec(desc);
     var cp = g('CP'), site = g('Site'), msite = /^(?:SRO|PMU|NRO)-(\d{2})/.exec(site);
     var adr = [g('Adresse'), cp, g('Ville site')].filter(function (x) { return x; }).join(' ');
@@ -204,7 +211,7 @@ function analyser(donnees, NOW) {
       tech: [g('Nom technicien'), g('Prénom technicien')].filter(function (x) { return x; }).join(' '),
       site: site, equip: g('Equipement'), creee: dt(g('Créée')), avant: dt(g('À faire avant')),
       adresse: g('Adresse'), cp: cp, ville: g('Ville site'), desc: desc, tags: tags, niveau: niv ? +niv[1] : null,
-      rdv: tags.indexOf('RDVCLI') >= 0, nacelle: /nacelle/i.test(desc), notes: notes,
+      rdv: tags.indexOf('RDVCLI') >= 0, nacelle: /nacelle/i.test(desc), notes: notes, noteTapee: noteTapee,
       justif: mj ? (RE_JUSTIF.exec(notes) ? 'Note : « ' : 'Description : « ') + mj[0].replace(/\s+/g, ' ').trim().replace(/[\s,;:-]+$/, '') + ' »' : '',
       dept: cp ? cp.slice(0, 2) : (msite ? msite[1] : '54'),
       geo: donnees.adresses ? donnees.adresses[adr] || null : null, alertes: [],

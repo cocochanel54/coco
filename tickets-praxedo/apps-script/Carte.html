@@ -206,6 +206,7 @@ function afficher(d) {
     if (t.fin) html += '<br><span class="fin">Mail de fin reçu le ' + esc(t.fin.recu) + '</span>' + (t.fin.rapport ? ' · <a href="' + esc(t.fin.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '');
     else if (t.sorti) html += '<br><span class="fin">Sorti de l\'export le ' + esc(fd(t.sorti)) + ' : terminé ou annulé</span>';
     else if (t.finStatut) html += '<br><span class="fin">' + esc(t.statut) + (t.finLe ? ' le ' + esc(fd(t.finLe)) : '') + '</span>';
+    if (t.noteTapee) html += '<br><small><b>Note :</b> ' + esc(court(t.noteTapee, 240)) + '</small>';
     if (t.justif) html += '<br><b style="color:#4a535c">Justifié · ' + esc(t.justif) + '</b>';
     if (t.suivi) html += '<br><span style="color:' + (t.suivi.due ? '#a35208' : '#4a535c') + ';font-weight:600">' + (t.suivi.due ? 'À faire maintenant : ' : 'Suivi : ') + esc(t.suivi.action) + '</span>' +
       (t.suivi.prochaine ? '<br><small>' + (t.suivi.due ? 'Relance prévue le ' : 'Prochaine relance le ') + esc(fd(t.suivi.prochaine, false)) + ' · compté depuis ' + esc(t.suivi.base) + '</small>' : '');
