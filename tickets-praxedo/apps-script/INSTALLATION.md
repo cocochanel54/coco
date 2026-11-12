@@ -8,6 +8,9 @@ La carte se met à jour à chaque export Praxedo que tu importes : nouveaux tick
 
 Ajoute à ton filtre d'export :
 
+- **La colonne « Créée »** (date de création), **au moins une fois**. Les GTR se comptent depuis cette date. La carte garde ensuite les dates d'un import à l'autre, et les nouveaux tickets prennent la leur dans le mail de création. Sans elle, la date est estimée d'après le n° du ticket (BB-20261102T… = 02/11/2026) : c'est juste 9 fois sur 10, et un bandeau orange le signale sur la carte.
+- **« Desc. site »** si Praxedo la propose : elle contient les coordonnées GPS (« Lat/Long: … »), plus justes que l'adresse.
+- La colonne « À faire avant » ne sert pas : la GTR est calculée avec les règles par niveau, et un ticket sans niveau n'a pas de GTR.
 - **Les statuts de fin** (Terminée, Réalisée, Validée… selon ce que Praxedo propose), sur les **7 derniers jours** par exemple. Ces tickets passent en vert sur la carte. S'il existe une colonne de date de fin (« Date de fin », « Réalisée le »…), ajoute-la aussi.
 - **La colonne des notes**, pour les tickets justifiés, si Praxedo la propose. Sinon, tape tes notes dans l'onglet **Notes** du Sheet (voir « Au quotidien »).
 
@@ -77,7 +80,9 @@ Pour un vrai fichier Excel (à envoyer, par exemple) : **Fichier → Télécharg
 - **Vert** : terminé aujourd'hui (mail de fin, statut de fin dans l'export, ou ticket sorti de l'export). Il disparaît de la carte le lendemain. La liste « Fins d'intervention aujourd'hui » est dans la légende.
 - **Violet** : nouveau depuis moins de 24 h (export ou mail de création), avec un trait vers l'intervention déjà planifiée la plus proche.
 - **Gris** : justifié / en attente. Contour orange : à relancer ou à vérifier.
-- **Rouge / orange** : à planifier (rouge = échéance GTR dépassée ou dans moins de 48 h). **Bleu** : déjà planifié.
+- **Rouge** : GTR KO (échéance dépassée), à planifier. **Orange** : GTR dans moins de 48 h. **Jaune** : à planifier, GTR encore bonne ou sans GTR. **Bleu** : déjà planifié.
+- **Contour rouge** : GTR KO sur un ticket déjà planifié (bleu) ou nouveau (violet).
+- **Bandeau orange** en haut de la légende (conduite d'activité) : ce qui manque dans l'export, par exemple des dates de création estimées.
 - Un mail de fin pour un ticket absent de l'export apparaît dans la liste « Mails de fin pour des tickets absents de l'export ».
 - Un ticket annulé n'apparaît pas sur la carte.
 

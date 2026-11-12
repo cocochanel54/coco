@@ -4,16 +4,20 @@
 <base target="_top">
 <meta charset="utf-8">
 <style>
+[hidden]{display:none!important}
 body{font:14px system-ui,sans-serif;margin:12px;color:#1a1a1a}
 p{margin:0 0 12px}
 #etat{margin-top:12px;font-weight:600}
 .ok{color:#1d7444}.err{color:#b00}
+#avert{margin-top:10px;background:#fff4e0;border:1px solid #f0c27a;border-radius:6px;padding:6px 8px;color:#6b4300;font-size:13px}
+#avert p{margin:0 0 4px}
 </style>
 </head>
 <body>
 <p>Choisis l'export CSV des interventions de Praxedo. Il remplace l'onglet « Tickets ».</p>
 <input type="file" id="fichier" accept=".csv,text/csv">
 <div id="etat" role="status"></div>
+<div id="avert" hidden></div>
 <script>
 var etat = document.getElementById('etat');
 document.getElementById('fichier').onchange = function (e) {
@@ -26,6 +30,10 @@ document.getElementById('fichier').onchange = function (e) {
       .withSuccessHandler(function (r) {
         etat.className = 'ok';
         etat.textContent = r.tickets + ' tickets importés' + (r.adresses ? ', ' + r.adresses + ' adresses nouvelles placées' : '') + '. Tu peux fermer cette fenêtre.';
+        var av = document.getElementById('avert'), liste = r.avertissements || [];
+        av.hidden = !liste.length;
+        av.textContent = '';
+        liste.forEach(function (x) { var p = document.createElement('p'); p.textContent = 'Attention : ' + x; av.appendChild(p); });
       })
       .withFailureHandler(function (err) { etat.className = 'err'; etat.textContent = (err && err.message) || String(err); })
       .importerExport(lecteur.result);

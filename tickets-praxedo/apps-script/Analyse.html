@@ -35,6 +35,17 @@ var RE_REF = /(?:BB-)?\b(20\d{6}T\d{4})\b/gi;
 var RE_IMMEUBLE = /^(?:GNY-SITE-|IMB-|TN-BAT-)/i;
 var RE_INFO_SITE = /Information du client\s*:\s*([A-Z0-9-]+)\s*\/\s*([^\n]*)/i;
 var STATUTS_OUVERTS = ['Qualifiée', 'Pré-planifiée', 'Planifiée', 'Synchronisée'];
+// Coordonnées GPS écrites par Praxedo dans la colonne « Desc. site » : « Lat/Long: 48.67439/6.22068 »
+var RE_GPS = /Lat\/Long\s*:\s*(-?\d+(?:[.,]\d+)?)\s*\/\s*(-?\d+(?:[.,]\d+)?)/i;
+// Colonnes de l'export dont l'analyse a besoin, et ce qui manque sans elles
+var COLONNES_UTILES = [
+  ['Description', 'les niveaux et les GTR ne peuvent pas être lus'],
+  ['Statut', "impossible de savoir ce qui est à planifier"],
+  ['Planifiée', "les dates de planning ne sont pas connues"],
+  ['Nom technicien', "les techniciens ne sont pas connus"],
+  ['Adresse', "les tickets sans GPS ne peuvent pas être placés"],
+  ['Ville site', "les tickets sans GPS ne peuvent pas être placés"]
+];
 
 function dt(s) {
   var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/.exec(String(s || '').trim());
@@ -118,7 +129,7 @@ function regleGtr(t) {
     if (g[0] === 'heures') return ['Niveau ' + t.niveau + ' : ' + g[1] + ' h', c && new Date(c.getTime() + g[1] * 3600e3)];
     return ['Niveau ' + t.niveau + (t.niveau === 2 ? ' hors RDV' : '') + ' : ' + g[1] + ' j ouvré' + (g[1] > 1 ? 's' : ''), c && joursOuvres(c, g[1], t.dept)];
   }
-  return ['Sans niveau : échéance Praxedo', t.avant];
+  return ['Sans niveau : pas de GTR', null];  // le « À faire avant » de Praxedo n'est pas fiable : il n'est pas utilisé
 }
 
 function datesNotes(texte, NOW) {
@@ -182,13 +193,20 @@ function analyser(donnees, NOW) {
     mettre('Adresse', c.adresse); mettre('CP', c.cp); mettre('Ville site', c.ville); mettre('Description', c.desc);
     lignes.push(r);
   });
-  // fins d'intervention reçues par mail : la plus récente par n° de ticket (et par n° sans « #… »)
+  // date de création connue par le mail « [CREATION INTERVENTION] » (sert quand l'export n'a pas la colonne « Créée »)
+  var creeParMail = {};
+  (donnees.creations || []).forEach(function (c) {
+    var recu = dt(c.recu);
+    if (!c.num || !recu) return;
+    [c.num, c.num.split('#')[0]].forEach(function (k) { if (!creeParMail[k] || recu < creeParMail[k]) creeParMail[k] = recu; });
+  });
   // notes de l'onglet Notes, par n° de ticket (avec ou sans « #0 », majuscules ou non) ; plusieurs lignes s'ajoutent
   var notesTapees = {};
   (donnees.notes || []).forEach(function (n) {
     var k = String(n.num || '').trim().toUpperCase().split('#')[0], v = String(n.note || '').trim();
     if (k && v) (notesTapees[k] = notesTapees[k] || []).push(v);
   });
+  // fins d'intervention reçues par mail : la plus récente par n° de ticket (et par n° sans « #… »)
   var fins = {};
   (donnees.fins || []).forEach(function (f) {
     if (!f.num) return;
@@ -206,15 +224,29 @@ function analyser(donnees, NOW) {
     var mj = RE_JUSTIF.exec(notes) || RE_JUSTIF.exec(desc);
     var cp = g('CP'), site = g('Site'), msite = /^(?:SRO|PMU|NRO)-(\d{2})/.exec(site);
     var adr = [g('Adresse'), cp, g('Ville site')].filter(function (x) { return x; }).join(' ');
+    // position : le GPS de Praxedo s'il est donné (plus juste que l'adresse), sinon l'adresse placée par l'IGN
+    var geoAdr = donnees.adresses ? donnees.adresses[adr] || null : null, geo = geoAdr, mg = RE_GPS.exec(g('Desc. site'));
+    if (mg) {
+      var la = +mg[1].replace(',', '.'), lo = +mg[2].replace(',', '.');
+      if (la > 41 && la < 52 && lo > -6 && lo < 10) geo = { lat: la, lon: lo, gps: true, score: 1, type: 'gps',
+        city: geoAdr ? geoAdr.city : '', postcode: geoAdr ? geoAdr.postcode : '', label: geoAdr ? geoAdr.label : '' };
+    }
+    // date de création : colonne « Créée », sinon mail de création, sinon la date du n° (BB-20261102T… = 02/11/2026, à 8 h)
+    var creee = dt(g('Créée')), creeeSource = creee ? 'export' : '';
+    if (!creee && (creeParMail[num] || creeParMail[num.split('#')[0]])) { creee = creeParMail[num] || creeParMail[num.split('#')[0]]; creeeSource = 'mail'; }
+    if (!creee) {
+      var mn = /(\d{4})(\d{2})(\d{2})T\d{4}/.exec(num);
+      if (mn) { creee = new Date(+mn[1], mn[2] - 1, +mn[3], 8, 0); creeeSource = 'numero'; }
+    }
     var t = {
       num: num, base: num.split('#')[0], statut: g('Statut'), planif: dt(g('Planifiée')),
       tech: [g('Nom technicien'), g('Prénom technicien')].filter(function (x) { return x; }).join(' '),
-      site: site, equip: g('Equipement'), creee: dt(g('Créée')), avant: dt(g('À faire avant')),
+      site: site, equip: g('Equipement'), creee: creee, creeeSource: creeeSource, avant: dt(g('À faire avant')),
       adresse: g('Adresse'), cp: cp, ville: g('Ville site'), desc: desc, tags: tags, niveau: niv ? +niv[1] : null,
       rdv: tags.indexOf('RDVCLI') >= 0, nacelle: /nacelle/i.test(desc), notes: notes, noteTapee: noteTapee,
       justif: mj ? (RE_JUSTIF.exec(notes) ? 'Note : « ' : 'Description : « ') + mj[0].replace(/\s+/g, ' ').trim().replace(/[\s,;:-]+$/, '') + ' »' : '',
       dept: cp ? cp.slice(0, 2) : (msite ? msite[1] : '54'),
-      geo: donnees.adresses ? donnees.adresses[adr] || null : null, alertes: [],
+      geo: geo, alertes: [],
       statutExport: g('Statut'), client: g('Client'), contact: g('Contact'),
       geoCherche: !!donnees.adresses && Object.prototype.hasOwnProperty.call(donnees.adresses, adr)
     };
@@ -238,11 +270,11 @@ function analyser(donnees, NOW) {
     t.aPlanifier = !t.termine && (t.statut === 'Qualifiée' || t.statut === 'Pré-planifiée');
     t.deplanifie = t.statut === 'Qualifiée' && !!t.planif;
     if (parMail[num]) { t.parMail = true; t.statut = "Reçu par mail de création (pas encore dans l'export)"; }
-    var rg = regleGtr(t); t.regle = rg[0]; t.echeance = rg[1] || null; t.echGtr = !/^Sans niveau/.test(t.regle);
+    var rg = regleGtr(t); t.regle = rg[0]; t.echeance = rg[1] || null;
     var e = t.echeance;
     if (ouvert && e && e < NOW && t.justif) t.alertes.push('Retard justifié (' + fretard(NOW - e) + ')');
     else if (ouvert && t.justif) t.alertes.push('Justifié / en attente');
-    else if (ouvert && e && e < NOW) t.alertes.push('Échéance dépassée de ' + fretard(NOW - e));
+    else if (ouvert && e && e < NOW) { t.gtrKo = true; t.alertes.push('Échéance dépassée de ' + fretard(NOW - e)); }
     else if (t.aPlanifier && e && e < plusJours(NOW, 2)) t.alertes.push('Échéance dans moins de 48 h et pas planifié');
     if (t.deplanifie && !t.termine) t.alertes.push('Déplanifié : revenu en « Qualifiée »');
     if (ouvert && (t.statut === 'Planifiée' || t.statut === 'Synchronisée') && t.planif) {
@@ -261,10 +293,12 @@ function analyser(donnees, NOW) {
     }
     t.nouveau = t.aPlanifier && !t.justif && !!t.creee && NOW - t.creee < R.NOUVEAU_H * 3600e3;
     if (t.aPlanifier && t.justif) { t.suivi = suivi(t, NOW); if (t.suivi.due) t.alertes.push('À relancer / à vérifier'); }
-    var a = t.alertes;
-    t.prio = t.justif ? 4 : a.some(function (x) { return /^Échéance (dépassée|dans moins)/.test(x); }) ? 1
+    var a = t.alertes, bientot = a.some(function (x) { return /^Échéance dans moins/.test(x); });
+    t.prio = t.justif ? 4 : (t.gtrKo || bientot) ? 1
            : (t.niveau === 2 || t.niveau === 3) && (t.equip === 'Service Interrompu' || t.equip === 'Service Dégradé') || t.deplanifie || t.niveau === 3 ? 2 : 3;
-    t.categorie = t.annule ? 'annule' : t.termine ? 'termine' : t.aPlanifier ? (t.justif ? 'justifie' : t.nouveau ? 'nouveau' : t.prio === 1 ? 'retard' : 'aplanifier') : 'planifie';
+    // retard = GTR KO (échéance dépassée) · bientot = échéance dans moins de 48 h
+    t.categorie = t.annule ? 'annule' : t.termine ? 'termine' : !t.aPlanifier ? 'planifie'
+                : t.justif ? 'justifie' : t.nouveau ? 'nouveau' : t.gtrKo ? 'retard' : bientot ? 'bientot' : 'aplanifier';
   });
 
   var nums = {}; T.forEach(function (t) { nums[t.num] = 1; nums[t.base] = 1; });
@@ -281,13 +315,29 @@ function analyser(donnees, NOW) {
   });
   // un ticket terminé reste en vert le jour de sa fin, puis disparaît de la carte le lendemain
   var visibles = T.filter(function (t) { return !t.termine || (t.finLe && t.finLe >= TODAY); });
+  // ce qui manque dans l'export pour une analyse complète
+  var avert = [];
+  if ((donnees.entetes || []).indexOf('N°') >= 0) {
+    COLONNES_UTILES.forEach(function (c) { if (col[c[0]] == null) avert.push("L'export n'a pas la colonne « " + c[0] + ' » : ' + c[1] + '.'); });
+    // dates de création : exactes (export ou mail de création), estimées d'après le n° du ticket, ou inconnues
+    var ouverts = T.filter(function (t) { return !t.termine && !t.sorti && !t.annule; });
+    var estimees = ouverts.filter(function (t) { return t.creeeSource === 'numero'; }).length;
+    var sansDate = ouverts.filter(function (t) { return !t.creee; }).length;
+    if (estimees) avert.push(estimees + ' ticket' + (estimees > 1 ? 's ont' : ' a') + " une date de création estimée d'après le n° : GTR KO et nouveaux approximatifs.");
+    if (sansDate) avert.push(sansDate + ' ticket' + (sansDate > 1 ? 's' : '') + ' sans date de création : GTR non calculée.');
+    if (estimees || sansDate) avert.push('Pour corriger : importe une fois un export avec la colonne « Créée ». Les dates sont ensuite gardées.');
+  }
   return {
+    avertissements: avert,
     tous: T,
     tickets: visibles,
     nouveaux: T.filter(function (t) { return t.categorie === 'nouveau'; }).sort(function (a, b) { return (!!b.caser - !!a.caser) || (b.creee - a.creee); }),
     relances: T.filter(function (t) { return t.categorie === 'justifie' && t.suivi && t.suivi.due; }),
     terminesAujourdhui: T.filter(function (t) { return t.termine && t.finLe && t.finLe >= TODAY; }),
-    finsHorsExport: (donnees.fins || []).filter(function (f) { return f.num && !nums[f.num] && !nums[f.num.split('#')[0]]; })
+    // mails de fin arrivés après le dernier import pour un ticket qui n'y est pas (ceux d'avant : le ticket était déjà sorti)
+    finsHorsExport: (donnees.fins || []).filter(function (f) {
+      return f.num && !nums[f.num] && !nums[f.num.split('#')[0]] && (!importe || (dt(f.recu) && dt(f.recu) > importe));
+    })
   };
 }
 
@@ -307,8 +357,6 @@ function controles(res, NOW) {
     else if (t.ouvert && e && e < NOW) inc(st === 'Qualifiée' ? '1 - Urgent' : '2 - Important', t, 'Échéance dépassée de ' + fretard(NOW - e),
       t.regle + ' · à faire avant le ' + fd(e) + ' · statut ' + st + (t.planif && !t.deplanifie ? ' · planifiée le ' + fd(t.planif) : ''));
     else if (t.aPlanifier && e && e < plusJours(NOW, 2)) inc('1 - Urgent', t, 'Échéance dans moins de 48 h et pas planifié', t.regle + ' · à faire avant le ' + fd(e));
-    if (t.echGtr && e && t.avant && Math.abs(t.avant - e) > 2 * 86400e3) inc('3 - À vérifier', t, 'Échéance Praxedo différente de la GTR', t.regle + ' → ' + fd(e) + ' · Praxedo : ' + fd(t.avant));
-    if (t.ouvert && !e && !t.rdv) inc('3 - À vérifier', t, "Pas d'échéance (ni niveau, ni « À faire avant »)");
     if (t.deplanifie) inc('2 - Important', t, 'Déplanifié : revenu en « Qualifiée »',
       'Était planifié le ' + fd(t.planif) + ", n'a plus de technicien" + (e && t.planif > e ? ' · déjà en retard à cette date' : ''));
     if ((st === 'Planifiée' || st === 'Synchronisée') && t.planif) {

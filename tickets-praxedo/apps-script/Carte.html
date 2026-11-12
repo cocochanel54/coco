@@ -27,6 +27,8 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 .lien{border:0;background:none;font:inherit;color:#555;cursor:pointer;padding:0;text-decoration:underline}
 #plier{float:right;text-decoration:none;padding-left:8px}
 #erreur{color:#b00;font-weight:600}
+#avert{background:#fff4e0;border:1px solid #f0c27a;border-radius:6px;padding:6px 8px;margin:6px 0;font-size:12.5px;color:#6b4300}
+#avert p{margin:0 0 4px}#avert p:last-child{margin:0}
 .bouton{display:block;width:100%;margin:8px 0 2px;padding:7px 8px;font:inherit;font-weight:600;border:0;border-radius:6px;background:#1f4e78;color:#fff;cursor:pointer}
 .bouton:focus-visible{outline:2px solid #000;outline-offset:2px}
 #blocMoi select{width:100%;font:inherit;padding:4px;margin-top:2px}
@@ -67,16 +69,18 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
   </form>
 </div>
 <div class="leg"><button id="plier" class="lien" type="button" aria-expanded="true">Masquer</button><h1>Tickets Praxedo</h1>
-<small id="etat">Chargement…</small><div id="erreur"></div>
+<small id="etat">Chargement…</small><div id="erreur"></div><div id="avert" hidden></div>
 <div id="corps">
 <label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé aujourd'hui <b id="nb-termine"></b></label>
 <label><input type="checkbox" data-k="nouveau" checked><span class="dot" style="background:#8e44ad"></span>Nouveau (moins de 24 h) <b id="nb-nouveau"></b></label>
 <label><input type="checkbox" data-k="justifie" checked><span class="dot" style="background:#8b939c"></span>Justifié / en attente <b id="nb-justifie"></b></label>
 <label class="sous"><span class="dot" style="background:#8b939c;border:3px solid #e67e22;width:7px;height:7px"></span>dont à relancer ou à vérifier <b id="nb-relance"></b></label>
-<label><input type="checkbox" data-k="retard" checked><span class="dot" style="background:#d62728"></span>À planifier, prioritaire <b id="nb-retard"></b></label>
-<label><input type="checkbox" data-k="aplanifier" checked><span class="dot" style="background:#ff9f1c"></span>À planifier <b id="nb-aplanifier"></b></label>
+<label><input type="checkbox" data-k="retard" checked><span class="dot" style="background:#d62728"></span>GTR KO, à planifier <b id="nb-retard"></b></label>
+<label><input type="checkbox" data-k="bientot" checked><span class="dot" style="background:#ff7f0e"></span>GTR dans moins de 48 h <b id="nb-bientot"></b></label>
+<label><input type="checkbox" data-k="aplanifier" checked><span class="dot" style="background:#ffd43b"></span>À planifier <b id="nb-aplanifier"></b></label>
 <label><input type="checkbox" data-k="planifie" checked><span class="dot" style="background:#1f77b4"></span>Déjà planifié <b id="nb-planifie"></b></label>
-<small>Contour rouge : nouveau prioritaire. Trait violet : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée.</small>
+<label class="sous"><span class="dot" style="background:#1f77b4;border:3px solid #d62728;width:7px;height:7px"></span>dont GTR KO <b id="nb-planifieKo"></b></label>
+<small>Contour rouge : GTR KO (ou à moins de 48 h pour un nouveau). Trait violet : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée.</small>
 <div id="blocMoi" hidden><h2>Mes interventions</h2>
   <label for="moi" style="cursor:default">Mon nom dans Praxedo</label>
   <select id="moi"><option value="">— choisir —</option></select>
@@ -99,7 +103,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 </div>
 <?!= inclure_('Analyse') ?>
 <script>
-var C = {termine: '#2e9e5b', nouveau: '#8e44ad', justifie: '#8b939c', retard: '#d62728', aplanifier: '#ff9f1c', planifie: '#1f77b4'}, RELANCE = '#e67e22';
+var C = {termine: '#2e9e5b', nouveau: '#8e44ad', justifie: '#8b939c', retard: '#d62728', bientot: '#ff7f0e', aplanifier: '#ffd43b', planifie: '#1f77b4'}, RELANCE = '#e67e22';
 var map = L.map('map'), premier = true, marqueurs = {}, dernier = null, role = null, ongletCtrl = 'incoherences', minuterie = null;
 function lire(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
 function ecrire(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) { /* stockage indisponible */ } }
@@ -109,7 +113,7 @@ L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0
   {maxZoom: 19, attribution: '&copy; <a href="https://www.ign.fr/">IGN</a> Plan IGN'}).addTo(map);
 map.setView([48.69, 6.18], 11);
 var calques = {};
-['planifie', 'termine', 'justifie', 'aplanifier', 'retard', 'nouveau'].forEach(function (k) { calques[k] = L.layerGroup().addTo(map); });
+['planifie', 'termine', 'justifie', 'aplanifier', 'bientot', 'retard', 'nouveau'].forEach(function (k) { calques[k] = L.layerGroup().addTo(map); });
 document.querySelectorAll('.leg input[data-k]').forEach(function (i) {
   i.onchange = function () { i.checked ? calques[i.dataset.k].addTo(map) : calques[i.dataset.k].remove(); };
 });
@@ -176,6 +180,9 @@ function afficher(d) {
   acces.hidden = true; msgAcces.textContent = '';
   ecrire('carteCode', code);
   document.getElementById('erreur').textContent = '';
+  var av = document.getElementById('avert');
+  av.hidden = !res.avertissements.length || role === 'tech';
+  av.innerHTML = res.avertissements.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('');
   document.getElementById('etat').textContent = (role === 'ca' ? "Conduite d'activité" : 'Techniciens') + ' · mis à jour à ' + fd(NOW).slice(11) +
     ' · export du ' + heure(d.importeLe) + ' · mails lus à ' + heure(d.luLe).slice(11);
   document.getElementById('ouvrirControles').hidden = role !== 'ca';
@@ -189,20 +196,23 @@ function afficher(d) {
 
   Object.keys(calques).forEach(function (k) { calques[k].clearLayers(); nb[k] = 0; });
   marqueurs = {};
-  var pts = [];
+  var pts = [], nbPlanifieKo = 0;
   res.tickets.forEach(function (t) {
     if (!t.geo || t.categorie === 'annule') return;
     var k = t.categorie, relance = k === 'justifie' && t.suivi && t.suivi.due, mien = moi && t.tech === moi;
+    var rouge = (k === 'nouveau' && t.prio === 1) || (k === 'planifie' && t.gtrKo);  // contour rouge : GTR KO
     nb[k]++;
+    if (k === 'planifie' && t.gtrKo) nbPlanifieKo++;
     pts.push([t.geo.lat, t.geo.lon]);
     var m = L.circleMarker([t.geo.lat, t.geo.lon], {radius: mien ? 9 : (k === 'planifie' || k === 'termine' ? 6 : (k === 'nouveau' ? 10 : 8)),
-      color: mien ? '#000' : relance ? RELANCE : k === 'nouveau' && t.prio === 1 ? C.retard : '#222',
-      weight: mien ? 4 : relance || (k === 'nouveau' && t.prio === 1) ? 3 : 1, fillColor: C[k], fillOpacity: .92});
+      color: mien ? '#000' : relance ? RELANCE : rouge ? C.retard : '#222',
+      weight: mien ? 4 : relance || rouge ? 3 : 1, fillColor: C[k], fillOpacity: .92});
     var html = '<div class="pop"><b>' + esc(t.num) + '</b>' + (k === 'nouveau' ? ' <span class="foulee">· nouveau</span>' : '') +
       (t.prio && t.aPlanifier ? ' <small>· priorité ' + t.prio + '</small>' : '') +
       '<br>' + esc(t.statut) + (t.planif && !t.deplanifie ? ' · ' + esc(fd(t.planif)) : '') + (t.tech ? ' · ' + esc(t.tech) : '') +
       '<br>' + esc(t.adresse) + ', ' + esc(t.ville) +
-      '<br><small>Créé le ' + esc(fd(t.creee)) + ' · PM ' + esc(t.site) + ' · ' + esc(t.regle) + (t.echeance ? ' → ' + esc(fd(t.echeance)) : '') + '</small>';
+      '<br><small>Créé le ' + esc(t.creee ? fd(t.creee, t.creeeSource !== 'numero') : '—') +
+      (t.creeeSource === 'numero' ? ' (estimé d\'après le n°)' : t.creeeSource === 'mail' ? ' (mail de création)' : '') + ' · PM ' + esc(t.site) + ' · ' + esc(t.regle) + (t.echeance ? ' → ' + esc(fd(t.echeance)) : '') + '</small>';
     if (t.fin) html += '<br><span class="fin">Mail de fin reçu le ' + esc(t.fin.recu) + '</span>' + (t.fin.rapport ? ' · <a href="' + esc(t.fin.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '');
     else if (t.sorti) html += '<br><span class="fin">Sorti de l\'export le ' + esc(fd(t.sorti)) + ' : terminé ou annulé</span>';
     else if (t.finStatut) html += '<br><span class="fin">' + esc(t.statut) + (t.finLe ? ' le ' + esc(fd(t.finLe)) : '') + '</span>';
@@ -219,6 +229,7 @@ function afficher(d) {
     if (k === 'nouveau' && t.caser) L.polyline([[t.geo.lat, t.geo.lon], [t.caser.lat, t.caser.lon]], {color: C.nouveau, weight: 3, dashArray: '6 5'}).addTo(calques.nouveau);
   });
   Object.keys(nb).forEach(function (k) { document.getElementById('nb-' + k).textContent = '(' + nb[k] + ')'; });
+  document.getElementById('nb-planifieKo').textContent = '(' + nbPlanifieKo + ')';
   document.getElementById('nb-relance').textContent = '(' + res.relances.length + ')';
   if (role === 'ca') document.getElementById('ouvrirControles').textContent = 'Listes de contrôle (' + controles(res, NOW).incoherences.length + ' incohérences)';
 

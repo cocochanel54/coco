@@ -29,7 +29,7 @@ PM_ALERTE = 3           # nombre de tickets ouverts sur un même PM qui fait pen
 NOUVEAU_H = 24          # un ticket à planifier reste « nouveau » (violet sur la carte) pendant 24 h après sa création
 
 # Délais de GTR comptés depuis la création du ticket. L'échéance « À faire avant » de Praxedo n'est pas fiable
-# (souvent 3 mois) : c'est ce calcul qui sert pour les retards et les priorités.
+# (souvent 3 mois) : elle n'est pas utilisée. Un ticket sans niveau n'a pas de GTR.
 #   [4H HO] / [8H HO] dans la description : 4 ou 8 heures ouvrées
 #   « OTR 5J OUVRES » écrit dans la description : ce nombre de jours ouvrés
 #   Niveau 1 : 4 heures (24 h/24) · Niveau 2 hors RDV client : 1 jour ouvré · Niveau 3 : 5 jours ouvrés · Niveau 4 : 10 jours ouvrés
@@ -164,7 +164,7 @@ def regle_gtr(t):
         if unite == "heures":
             return f"Niveau {t['niveau']} : {n} h", c + timedelta(hours=n) if c else None
         return f"Niveau {t['niveau']}{hors} : {n} j ouvré{'s' if n > 1 else ''}", jours_ouvres(c, n, t["dept"]) if c else None
-    return "Sans niveau : échéance Praxedo", t["avant"]
+    return "Sans niveau : pas de GTR", None  # le « À faire avant » de Praxedo n'est pas fiable : il n'est pas utilisé
 
 
 def fretard(delta):
@@ -270,7 +270,6 @@ for t in T:
     t["deplanifie"] = t["statut"] == "Qualifiée" and t["planif"] is not None
     t["dept"] = t["cp"][:2] if t["cp"] else (t["site"].split("-")[1] if re.match(r"^(SRO|PMU|NRO)-\d{2}", t["site"]) else "54")
     t["regle"], t["echeance"] = regle_gtr(t)
-    t["ech_gtr"] = not t["regle"].startswith("Sans niveau")
 
 
 # ---------- géocodage (rue + CP + ville uniquement) ----------
@@ -354,11 +353,6 @@ for t in T:
             f"{t['regle']} · à faire avant le {fd(e)} · statut {t['statut']}" + (f" · planifiée le {fd(t['planif'])}" if t["planif"] and not t["deplanifie"] else ""))
     elif t["a_planifier"] and e and e < NOW + timedelta(days=2):
         inc("1 - Urgent", t, "Échéance dans moins de 48 h et pas planifié", f"{t['regle']} · à faire avant le {fd(e)}")
-    if t["ech_gtr"] and e and t["avant"] and abs((t["avant"] - e).total_seconds()) > 2 * 86400:
-        inc("3 - À vérifier", t, "Échéance Praxedo différente de la GTR",
-            f"{t['regle']} → {fd(e)} · Praxedo : {fd(t['avant'])}")
-    if ouvert and not e and not t["rdv"]:
-        inc("3 - À vérifier", t, "Pas d'échéance (ni niveau, ni « À faire avant »)")
     if t["deplanifie"]:
         inc("2 - Important", t, "Déplanifié : revenu en « Qualifiée »",
             f"Était planifié le {fd(t['planif'])}, n'a plus de technicien" + (" · déjà en retard à cette date" if t["echeance"] and t["planif"] > t["echeance"] else ""))
@@ -727,7 +721,7 @@ feuille(ws, ["Règle", "Délai compté depuis la création", "Tickets concernés
     ["Niveau 2 avec RDV client", "Pas de délai fixe (selon le RDV)", regles.get("Niveau 2 avec RDV client : selon le RDV", 0)],
     ["Niveau 3", f"{GTR_NIVEAU[3][1]} jours ouvrés", sum(n for r, n in regles.items() if r.startswith("Niveau 3 :"))],
     ["Niveau 4", f"{GTR_NIVEAU[4][1]} jours ouvrés", sum(n for r, n in regles.items() if r.startswith("Niveau 4 :"))],
-    ["Sans niveau (malfaçons, audits…)", "Échéance « À faire avant » de Praxedo", regles.get("Sans niveau : échéance Praxedo", 0)],
+    ["Sans niveau (malfaçons, audits…)", "Pas de GTR", regles.get("Sans niveau : pas de GTR", 0)],
     ["", "", ""],
     ["Jours ouvrés", "Du lundi au vendredi, hors jours fériés (+ Vendredi saint et 26 décembre en Moselle)", ""],
     ["Heures ouvrées", f"De {HO_DEBUT} h à {HO_FIN} h les jours ouvrés", ""],
@@ -739,7 +733,7 @@ ws = wb.create_sheet("Colonnes export")
 UTILITE = {
     "N°": "Indispensable", "Statut": "Indispensable", "Type inter.": "Utile", "Planifiée": "Indispensable",
     "Nom technicien": "Indispensable", "Prénom technicien": "Facultatif (le nom suffit)", "Site": "Indispensable : c'est le PM",
-    "Equipement": "Utile (mélange catégories et codes de boîte)", "Créée": "Indispensable", "À faire avant": "Indispensable",
+    "Equipement": "Utile (mélange catégories et codes de boîte)", "Créée": "Indispensable", "À faire avant": "Inutile : la GTR est calculée avec les règles par niveau",
     "Adresse": "Indispensable", "CP": "Indispensable", "Ville site": "Indispensable", "Contact": "Utile : c'est l'immeuble",
     "Description": "Indispensable (niveau, GTR, boîte, référence client)", "Client": "Inutile : répète la ville",
     "Drapeaux": "Peu utile : presque toujours « Backbone »", "Equipiers": "Inutile : toujours vide", "INTER OCEL": "Inutile : toujours vide",

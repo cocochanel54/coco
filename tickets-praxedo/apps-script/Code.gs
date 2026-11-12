@@ -125,7 +125,15 @@ function importerExport_(texte) {
   var valeurs = lignes.filter(function (l, i) { return i === 0 || l.some(function (v) { return v; }); })
     .map(function (l) { var r = l.slice(0, n); while (r.length < n) r.push(''); return r.map(texte_); });
   var ss = SpreadsheetApp.getActiveSpreadsheet(), f = ss.getSheetByName(ONGLET_TICKETS);
-  noterSortis_(ss, f.getDataRange().getDisplayValues(), valeurs);
+  var anciens = f.getDataRange().getDisplayValues();
+  // La date de création n'a besoin d'être dans l'export qu'une fois : elle est gardée ici, par n° de ticket, pour les
+  // exports suivants qui n'ont pas la colonne « Créée » ou qui la laissent vide.
+  var ia = anciens[0].indexOf('Créée'), na = anciens[0].indexOf('N°'), connues = {};
+  if (ia >= 0 && na >= 0) anciens.slice(1).forEach(function (r) { if (r[na] && r[ia]) connues[r[na]] = r[ia]; });
+  var iNum = entetes.indexOf('N°'), iCree = entetes.indexOf('Créée');
+  if (iCree < 0) { entetes.push('Créée'); iCree = n; n++; valeurs.forEach(function (r, i) { r.push(i ? '' : 'Créée'); }); }
+  valeurs.forEach(function (r, i) { if (i && !r[iCree] && connues[r[iNum]]) r[iCree] = connues[r[iNum]]; });
+  noterSortis_(ss, anciens, valeurs);
   f.clear();
   f.getRange(1, 1, valeurs.length, n).setNumberFormat('@').setValues(valeurs);
   f.getRange(1, 1, 1, n).setFontWeight('bold');
@@ -135,8 +143,9 @@ function importerExport_(texte) {
   var nouvelles = geocoder_(valeurs.slice(1).map(function (r) {
     return [r[c['Adresse']], r[c['CP']], r[c['Ville site']]].filter(function (x) { return x; }).join(' ');
   }));
-  try { majControles_(); } catch (err) { console.warn('Contrôles : ' + err); }
-  return { tickets: valeurs.length - 1, adresses: nouvelles };
+  var avertissements = [];
+  try { avertissements = majControles_().avertissements; } catch (err) { console.warn('Contrôles : ' + err); }
+  return { tickets: valeurs.length - 1, adresses: nouvelles, avertissements: avertissements };
 }
 
 /** Tickets de l'ancien import absents du nouveau : ils sont sortis du filtre (terminés ou annulés). Garde 14 jours. */
@@ -350,7 +359,7 @@ function mettreAJourControles() {
 function majControles_() {
   var src = HtmlService.createHtmlOutputFromFile('Analyse').getContent().replace(/^\s*<script>/, '').replace(/<\/script>\s*$/, '');
   var a = new Function(src + '\nreturn { analyser: analyser, controles: controles };')();
-  var NOW = new Date(), c = a.controles(a.analyser(lireDonnees_(), NOW), NOW);
+  var NOW = new Date(), res = a.analyser(lireDonnees_(), NOW), c = a.controles(res, NOW);
   ecrireOnglet_(ONGLET_INCOHERENCES, ['Gravité', 'N°', 'Statut', 'Problème', 'Détail', 'Technicien', 'Ville', 'Adresse'],
     c.incoherences, function (l) { return COULEURS_GRAVITE[l[0]]; }, [100, 160, 100, 300, 480, 150, 160, 220]);
   ecrireOnglet_(ONGLET_LIES, ['Groupe', 'Pourquoi liés', 'N°', 'Statut', 'Planifiée', 'Technicien', 'Créée', 'Ville', 'Adresse', 'Immeuble',
@@ -358,7 +367,7 @@ function majControles_() {
   ecrireOnglet_(ONGLET_PM, ['PM (Site)', 'Tickets ouverts', 'dont à planifier', 'Communes', 'Créés entre', 'Équipement', 'Tickets'],
     c.pm, null, [160, 80, 80, 220, 190, 220, 600]);
   PropertiesService.getScriptProperties().setProperty('CONTROLES_LE', maintenant_());
-  return { incoherences: c.incoherences.length, lies: c.lies.length, pm: c.pm.length };
+  return { incoherences: c.incoherences.length, lies: c.lies.length, pm: c.pm.length, avertissements: res.avertissements };
 }
 
 function ecrireOnglet_(nom, entetes, lignes, couleur, largeurs) {
