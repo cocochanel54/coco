@@ -8,6 +8,7 @@ var REGLAGES = {
   NOUVEAU_H: 24,     // un ticket à planifier reste « nouveau » 24 h
   CASER_M: 1000,     // intervention déjà planifiée à moins de 1 km : programmer dans la foulée
   RELANCE_JO: 10,    // ticket justifié : relance tous les 10 jours ouvrés
+  FIN_CERCLE_MIN: 60, // un technicien qui vient de clôturer : cercle autour de lui pendant 60 minutes
   HO_DEBUT: 8, HO_FIN: 18,  // heures ouvrées
   // GTR comptée depuis la création : niveau 1 = 4 h, niveau 2 hors RDV = 1 j ouvré, niveau 3 = 5 j ouvrés, niveau 4 = 10 j ouvrés
   GTR_NIVEAU: { 1: ['heures', 4], 2: ['jours', 1], 3: ['jours', 5], 4: ['jours', 10] }
@@ -301,6 +302,19 @@ function analyser(donnees, NOW) {
                 : t.justif ? 'justifie' : t.nouveau ? 'nouveau' : t.gtrKo ? 'retard' : bientot ? 'bientot' : 'aplanifier';
   });
 
+  // Techniciens qui viennent de clôturer (mail de fin depuis moins de FIN_CERCLE_MIN) : on sait où ils sont et qu'ils
+  // sont libres. Autour de chacun, les tickets à planifier à moins de CASER_M, les plus prioritaires d'abord.
+  var viennentDeFinir = T.filter(function (t) {
+    return t.fin && t.finLe && t.geo && NOW - t.finLe >= 0 && NOW - t.finLe < R.FIN_CERCLE_MIN * 60000;
+  }).sort(function (a, b) { return b.finLe - a.finLe; });
+  viennentDeFinir.forEach(function (t) {
+    t.depuisMin = Math.floor((NOW - t.finLe) / 60000);
+    t.autour = T.filter(function (u) { return u.aPlanifier && !u.justif && u.geo; })
+      .map(function (u) { return { num: u.num, d: distance(t, u), prio: u.prio, ko: !!u.gtrKo, ville: u.ville, regle: u.regle }; })
+      .filter(function (x) { return x.d != null && x.d <= R.CASER_M; })
+      .sort(function (a, b) { return (a.prio - b.prio) || (a.d - b.d); });
+  });
+
   var nums = {}; T.forEach(function (t) { nums[t.num] = 1; nums[t.base] = 1; });
   // tickets sortis du filtre depuis l'import précédent : terminés ou annulés, en vert le jour même
   var vus = {};
@@ -329,6 +343,7 @@ function analyser(donnees, NOW) {
   }
   return {
     avertissements: avert,
+    viennentDeFinir: viennentDeFinir,
     tous: T,
     tickets: visibles,
     nouveaux: T.filter(function (t) { return t.categorie === 'nouveau'; }).sort(function (a, b) { return (!!b.caser - !!a.caser) || (b.creee - a.creee); }),
