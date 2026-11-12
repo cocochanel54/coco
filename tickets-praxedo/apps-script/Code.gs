@@ -33,15 +33,18 @@ var ONGLET_INCOHERENCES = 'Incohérences', ONGLET_LIES = 'Tickets liés', ONGLET
 var ONGLET_ACCES = 'Accès';
 var COULEURS_GRAVITE = { '1 - Urgent': '#F8CBAD', '2 - Important': '#FFE699', '3 - À vérifier': '#DDEBF7', '4 - Info': '#EDEDED' };
 var ENTETES_CREATIONS = ['Reçu le', 'N° ticket', 'Type', 'Commune (objet)', 'Adresse', 'CP', 'Ville', 'Nom client', 'Description', 'Id du mail'];
-var RECHERCHE_CREATIONS = 'subject:"CREATION INTERVENTION" newer_than:30d';
+var RECHERCHE_CREATIONS = 'subject:"CREATION INTERVENTION"';
 var ENTETES_SORTIS = ['Sorti le', 'N°', 'Statut avant', 'Planifiée', 'Technicien', 'Adresse', 'CP', 'Ville site', 'Site'];
 var ENTETES_FINS = ['Reçu le', 'N° ticket', 'Commune', 'Intervention du', 'Rapport', 'Objet du mail', 'Id du mail'];
 var ENTETES_ADRESSES = ['Adresse cherchée', 'Latitude', 'Longitude', 'Adresse trouvée', 'Score', 'Type', 'Commune', 'CP'];
 // Mails de fin d'intervention : l'objet contient « [FIN INTERVENTION] … N°BB-20261102T0761#0 - COMMUNE »
-var RECHERCHE_GMAIL = 'subject:"FIN INTERVENTION" newer_than:30d';
+var RECHERCHE_GMAIL = 'subject:"FIN INTERVENTION"';
 var RE_NUM = /N°\s*([A-Z]{2,4}-\d{8}T\d{4}(?:#\d+)?|\d{5,})/i;
 // Exports Praxedo reçus par mail : toute pièce jointe .csv avec une colonne « N° » (les autres CSV sont ignorés)
-var RECHERCHE_EXPORTS = 'has:attachment filename:csv newer_than:7d';
+var RECHERCHE_EXPORTS = 'has:attachment filename:csv';
+// Google limite un compte gratuit à 20 000 lectures Gmail et 90 minutes de déclencheurs par jour : chaque passage ne
+// regarde que les mails arrivés depuis le précédent (fenetre_), et une fois par heure les 2 derniers jours, par sécurité.
+var MARGE_MAILS_S = 15 * 60, RELECTURE_LARGE_MS = 3600 * 1000;
 
 /** La carte. */
 function doGet() {
@@ -57,7 +60,7 @@ function inclure_(nom) {
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Carte tickets')
     .addItem('Importer un export Praxedo…', 'ouvrirImport')
-    .addItem('Lire les mails maintenant', 'lireMails')
+    .addItem('Lire les mails maintenant', 'lireMailsMaintenant')
     .addItem('Mettre à jour les onglets de contrôle', 'mettreAJourControles')
     .addItem("Codes d'accès à la carte", 'afficherCodes')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
@@ -84,7 +87,7 @@ function installer() {
   var props = PropertiesService.getScriptProperties();
   if (!props.getProperty('CLE_MACRO')) props.setProperty('CLE_MACRO', Utilities.getUuid());
   acces_();
-  lireMails();
+  lireMails_(0);
 }
 
 function afficherCodes() {
@@ -154,30 +157,46 @@ function noterSortis_(ss, anciens, nouveaux) {
   if (tout.length) feuille.getRange(2, 1, tout.length, ENTETES_SORTIS.length).setNumberFormat('@').setValues(tout);
 }
 
-/** Lit les mails de fin d'intervention arrivés dans Gmail (déclencheur toutes les 5 minutes). */
+/** Déclencheur toutes les 5 minutes : lit les mails arrivés dans Gmail. Au plus une lecture par minute. */
 function lireMails() {
+  return lireMails_(60);
+}
+
+/** Menu « Lire les mails maintenant ». Réservé au propriétaire. */
+function lireMailsMaintenant() {
+  proprietaire_();
+  return lireMails_(0);
+}
+
+/** Fins d'intervention, créations et exports reçus. delaiMin : ne rien faire si la dernière lecture a moins de delaiMin secondes. */
+function lireMails_(delaiMin) {
   var verrou = LockService.getScriptLock();
   if (!verrou.tryLock(20000)) return 0;
   try {
+    var props = PropertiesService.getScriptProperties(), lu = props.getProperty('LU_LE');
+    if (delaiMin && lu && Date.now() - new Date(lu).getTime() < delaiMin * 1000) return 0;
+    var debut = Date.now(), fen = fenetre_(props), complet = true;
     var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_FINS);
     var vus = {};
     if (f.getLastRow() > 1) f.getRange(2, 7, f.getLastRow() - 1, 1).getValues().forEach(function (r) { vus[r[0]] = 1; });
     var ajout = [];
-    GmailApp.search(RECHERCHE_GMAIL, 0, 100).forEach(function (fil) {
-      fil.getMessages().forEach(function (m) {
-        if (vus[m.getId()]) return;
-        var l = ligneFin_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
-        if (l) { ajout.push(l); vus[m.getId()] = 1; }
-      });
+    messages_(RECHERCHE_GMAIL + fen.q, 100).forEach(function (m) {
+      if (vus[m.getId()]) return;
+      var l = ligneFin_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
+      if (l) { ajout.push(l); vus[m.getId()] = 1; }
     });
     if (ajout.length) f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_FINS.length).setNumberFormat('@').setValues(ajout);
-    var props = PropertiesService.getScriptProperties(), creees = 0, importe = null;
-    try { creees = lireCreations_(); } catch (err) { console.warn('Créations : ' + err); }
-    try { importe = importerDepuisGmail_(); } catch (err) { console.warn('Import par mail : ' + err); }
+    var creees = 0, importe = null;
+    try { creees = lireCreations_(fen.q); } catch (err) { complet = false; console.warn('Créations : ' + err); }
+    try { importe = importerDepuisGmail_(fen.q); } catch (err) { complet = false; console.warn('Import par mail : ' + err); }
     // l'import refait déjà les contrôles ; sinon, après un mail de fin ou de création, et au moins une fois par heure
     var faits = props.getProperty('CONTROLES_LE');
     if (!importe && (ajout.length || creees || !faits || Date.now() - new Date(faits).getTime() > 3600 * 1000)) {
       try { majControles_(); } catch (err) { console.warn('Contrôles : ' + err); }
+    }
+    if (complet) {  // en cas d'erreur, le prochain passage reprend la même période
+      props.setProperty('MAILS_DEPUIS', String(debut));
+      if (fen.large) props.setProperty('MAILS_LARGE', String(debut));
     }
     props.setProperty('LU_LE', maintenant_());
     return ajout.length;
@@ -186,18 +205,39 @@ function lireMails() {
   }
 }
 
+/**
+ * La période de mails à regarder. En temps normal : depuis la dernière lecture réussie, avec 15 minutes de marge
+ * (« after: » en secondes). Une fois par heure, et la première fois : les 2 derniers jours (ou depuis la dernière
+ * lecture si le script est resté arrêté plus longtemps, 30 jours au plus), pour ne rien manquer.
+ */
+function fenetre_(props) {
+  var depuis = +props.getProperty('MAILS_DEPUIS') || 0, large = +props.getProperty('MAILS_LARGE') || 0, now = Date.now();
+  if (!depuis || now - large > RELECTURE_LARGE_MS) {
+    var jours = depuis ? Math.min(30, Math.max(2, Math.ceil((now - depuis) / 86400000) + 1)) : 3;
+    return { q: ' newer_than:' + jours + 'd', large: true };
+  }
+  return { q: ' after:' + (Math.floor(depuis / 1000) - MARGE_MAILS_S), large: false };
+}
+
+/** Les messages des fils trouvés, lus en un seul appel à Gmail (au lieu d'un appel par fil). */
+function messages_(recherche, max) {
+  var fils = GmailApp.search(recherche, 0, max);
+  if (!fils.length) return [];
+  var out = [];
+  GmailApp.getMessagesForThreads(fils).forEach(function (ms) { ms.forEach(function (m) { out.push(m); }); });
+  return out;
+}
+
 /** Mails « [CREATION INTERVENTION] » : une ligne par ticket créé, et son adresse placée sur la carte. */
-function lireCreations_() {
+function lireCreations_(fenetre) {
   var f = feuille_(ONGLET_CREATIONS, ENTETES_CREATIONS);
   var vus = {};
   if (f.getLastRow() > 1) f.getRange(2, 10, f.getLastRow() - 1, 1).getValues().forEach(function (r) { vus[r[0]] = 1; });
   var ajout = [];
-  GmailApp.search(RECHERCHE_CREATIONS, 0, 100).forEach(function (fil) {
-    fil.getMessages().forEach(function (m) {
-      if (vus[m.getId()]) return;
-      var l = ligneCreation_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
-      if (l) { ajout.push(l.map(texte_)); vus[m.getId()] = 1; }
-    });
+  messages_(RECHERCHE_CREATIONS + fenetre, 100).forEach(function (m) {
+    if (vus[m.getId()]) return;
+    var l = ligneCreation_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
+    if (l) { ajout.push(l.map(texte_)); vus[m.getId()] = 1; }
   });
   if (!ajout.length) return 0;
   f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_CREATIONS.length).setNumberFormat('@').setValues(ajout);
@@ -209,19 +249,17 @@ function lireCreations_() {
  * Importe le plus récent export Praxedo reçu en pièce jointe, s'il est plus récent que le dernier import.
  * Chaque mail n'est regardé qu'une fois ; un CSV qui n'est pas un export d'interventions est ignoré.
  */
-function importerDepuisGmail_() {
+function importerDepuisGmail_(fenetre) {
   var props = PropertiesService.getScriptProperties();
   var vus = JSON.parse(props.getProperty('EXPORTS_VUS') || '[]');
   var dernier = props.getProperty('IMPORTE_LE') ? new Date(props.getProperty('IMPORTE_LE')) : new Date(0);
   var candidats = [];
-  GmailApp.search(RECHERCHE_EXPORTS, 0, 20).forEach(function (fil) {
-    fil.getMessages().forEach(function (m) {
-      if (vus.indexOf(m.getId()) >= 0) return;
-      vus.push(m.getId());
-      if (m.getDate() <= dernier) return;
-      m.getAttachments().forEach(function (pj) {
-        if (/\.csv$/i.test(pj.getName())) candidats.push({ date: m.getDate(), pj: pj });
-      });
+  messages_(RECHERCHE_EXPORTS + fenetre, 20).forEach(function (m) {
+    if (vus.indexOf(m.getId()) >= 0) return;
+    vus.push(m.getId());
+    if (m.getDate() <= dernier) return;
+    m.getAttachments().forEach(function (pj) {
+      if (/\.csv$/i.test(pj.getName())) candidats.push({ date: m.getDate(), pj: pj });
     });
   });
   props.setProperty('EXPORTS_VUS', JSON.stringify(vus.slice(-200)));
@@ -261,7 +299,7 @@ function donnees(code) {
   var props = PropertiesService.getScriptProperties();
   var lu = props.getProperty('LU_LE');
   if (!lu || Date.now() - new Date(lu).getTime() > 2 * 60 * 1000) {
-    try { lireMails(); } catch (err) { console.warn(err); }
+    try { lireMails_(120); } catch (err) { console.warn(err); }  // plusieurs personnes en même temps : une seule lecture
   }
   var d = lireDonnees_();
   d.role = role;
