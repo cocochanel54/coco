@@ -290,17 +290,35 @@ function analyser(donnees, NOW) {
     if (t.aPlanifier && t.geo) {
       var best = null;
       planifies.forEach(function (p) { var d = distance(t, p); if (d != null && d <= R.CASER_M && (!best || d < best[0])) best = [d, p]; });
-      if (best) t.caser = { lat: best[1].geo.lat, lon: best[1].geo.lon, n: best[1].num, p: fd(best[1].planif), tech: best[1].tech || 'sans technicien', d: fdist(best[0]) };
+      if (best) t.caser = { lat: best[1].geo.lat, lon: best[1].geo.lon, n: best[1].num, p: fd(best[1].planif), tech: best[1].tech || 'sans technicien', d: fdist(best[0]), m: best[0] };
     }
     t.nouveau = t.aPlanifier && !t.justif && !!t.creee && NOW - t.creee < R.NOUVEAU_H * 3600e3;
     if (t.aPlanifier && t.justif) { t.suivi = suivi(t, NOW); if (t.suivi.due) t.alertes.push('À relancer / à vérifier'); }
     var a = t.alertes, bientot = a.some(function (x) { return /^Échéance dans moins/.test(x); });
+    // urgent = à planifier, pas justifié, GTR KO (rang 0) ou échéance dans moins de 48 h (rang 1) ; les autres : rang 2
+    t.gtrBientot = bientot && !t.justif;
+    t.urgent = t.aPlanifier && !t.justif && (!!t.gtrKo || bientot);
+    t.rang = !t.urgent ? 2 : t.gtrKo ? 0 : 1;
+    t.gtrTexte = !t.urgent ? '' : t.gtrKo ? 'GTR KO depuis ' + fretard(NOW - t.echeance) : 'GTR KO dans ' + fretard(t.echeance - NOW);
     t.prio = t.justif ? 4 : (t.gtrKo || bientot) ? 1
            : (t.niveau === 2 || t.niveau === 3) && (t.equip === 'Service Interrompu' || t.equip === 'Service Dégradé') || t.deplanifie || t.niveau === 3 ? 2 : 3;
     // retard = GTR KO (échéance dépassée) · bientot = échéance dans moins de 48 h
     t.categorie = t.annule ? 'annule' : t.termine ? 'termine' : !t.aPlanifier ? 'planifie'
                 : t.justif ? 'justifie' : t.nouveau ? 'nouveau' : t.gtrKo ? 'retard' : bientot ? 'bientot' : 'aplanifier';
   });
+
+  // Tickets à planifier à moins de CASER_M d'un point : GTR KO d'abord, puis bientôt KO, puis les autres, du plus proche au plus loin
+  function autourDe(t, urgentsSeulement) {
+    return T.filter(function (u) { return u !== t && u.aPlanifier && !u.justif && u.geo && (!urgentsSeulement || u.urgent); })
+      .map(function (u) { return { num: u.num, d: distance(t, u), prio: u.prio, rang: u.rang, ko: !!u.gtrKo && u.urgent, bientot: u.rang === 1, gtr: u.gtrTexte, ville: u.ville, regle: u.regle }; })
+      .filter(function (x) { return x.d != null && x.d <= R.CASER_M; })
+      .sort(function (a, b) { return (a.rang - b.rang) || (a.prio - b.prio) || (a.d - b.d); });
+  }
+  // autour de chaque intervention planifiée à venir : les tickets GTR KO ou bientôt KO à faire dans la foulée
+  planifies.forEach(function (p) { p.urgentsAutour = autourDe(p, true); });
+  // les tickets GTR KO ou bientôt KO qui ont une intervention planifiée à moins de CASER_M
+  var urgentsProches = T.filter(function (t) { return t.urgent && t.caser; })
+    .sort(function (a, b) { return (a.rang - b.rang) || (a.caser.m - b.caser.m); });
 
   // Techniciens qui viennent de clôturer (mail de fin depuis moins de FIN_CERCLE_MIN) : on sait où ils sont et qu'ils
   // sont libres. Autour de chacun, les tickets à planifier à moins de CASER_M, les plus prioritaires d'abord.
@@ -309,10 +327,7 @@ function analyser(donnees, NOW) {
   }).sort(function (a, b) { return b.finLe - a.finLe; });
   viennentDeFinir.forEach(function (t) {
     t.depuisMin = Math.floor((NOW - t.finLe) / 60000);
-    t.autour = T.filter(function (u) { return u.aPlanifier && !u.justif && u.geo; })
-      .map(function (u) { return { num: u.num, d: distance(t, u), prio: u.prio, ko: !!u.gtrKo, ville: u.ville, regle: u.regle }; })
-      .filter(function (x) { return x.d != null && x.d <= R.CASER_M; })
-      .sort(function (a, b) { return (a.prio - b.prio) || (a.d - b.d); });
+    t.autour = autourDe(t, false);
   });
 
   var nums = {}; T.forEach(function (t) { nums[t.num] = 1; nums[t.base] = 1; });
@@ -344,6 +359,7 @@ function analyser(donnees, NOW) {
   return {
     avertissements: avert,
     viennentDeFinir: viennentDeFinir,
+    urgentsProches: urgentsProches,
     tous: T,
     tickets: visibles,
     nouveaux: T.filter(function (t) { return t.categorie === 'nouveau'; }).sort(function (a, b) { return (!!b.caser - !!a.caser) || (b.creee - a.creee); }),

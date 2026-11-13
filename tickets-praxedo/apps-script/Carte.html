@@ -23,6 +23,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 .nv.relance{background:#fdf0e3;border-color:#f3d3b0}.nv.relance b{color:#a35208}
 .nv.termine{background:#e9f6ee;border-color:#c4e6d1}.nv.termine b{color:#1d7444}
 .nv.moi{background:#eef3fb;border-color:#c9d8f0}.nv.moi b{color:#174a8b}
+.nv.urgent{background:#fdecea;border-color:#f3c0bb}.nv.urgent b{color:#b00}
 .pop .autour{margin:4px 0 0;padding:0;list-style:none}.pop .autour li{margin:2px 0}.pop .autour b{font-size:inherit}
 .pop a[data-aller]{color:#174a8b;font-weight:600}
 .nv:hover,.nv:focus-visible{border-color:#333;outline:none}
@@ -83,7 +84,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <label><input type="checkbox" data-k="aplanifier" checked><span class="dot" style="background:#ffd43b"></span>À planifier <b id="nb-aplanifier"></b></label>
 <label><input type="checkbox" data-k="planifie" checked><span class="dot" style="background:#1f77b4"></span>Déjà planifié <b id="nb-planifie"></b></label>
 <label class="sous"><span class="dot" style="background:#1f77b4;border:3px solid #d62728;width:7px;height:7px"></span>dont GTR KO <b id="nb-planifieKo"></b></label>
-<small>Contour rouge : GTR KO (ou à moins de 48 h pour un nouveau). Trait violet : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée. Cercle vert : technicien qui vient de clôturer (moins d'1 h), avec les tickets à planifier à moins de 1 km.</small>
+<small>Contour rouge : GTR KO (ou à moins de 48 h pour un nouveau). Trait pointillé : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée (rouge ou orange : GTR KO ou bientôt KO, violet : nouveau). Cercle vert : technicien qui vient de clôturer (moins d'1 h), avec les tickets à planifier à moins de 1 km.</small>
 <div id="blocMoi" hidden><h2>Mes interventions</h2>
   <label for="moi" style="cursor:default">Mon nom dans Praxedo</label>
   <select id="moi"><option value="">— choisir —</option></select>
@@ -126,6 +127,13 @@ var plier = document.getElementById('plier'), corps = document.getElementById('c
 plier.onclick = function () { corps.hidden = !corps.hidden; plier.textContent = corps.hidden ? 'Afficher' : 'Masquer'; plier.setAttribute('aria-expanded', String(!corps.hidden)); };
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
 function heure(iso) { return iso ? fd(new Date(iso)) : '—'; }
+// lignes « n° · distance · GTR » d'une fiche, pour les tickets autour d'un point
+function listeAutour(l) {
+  return '<ul class="autour">' + l.slice(0, 8).map(function (x) {
+    return '<li><a href="#" data-aller="' + esc(x.num) + '">' + esc(x.num) + '</a> · ' + esc(fdist(x.d)) + ' · ' +
+      (x.ko ? '<b style="color:#b00">' + esc(x.gtr) + '</b>' : x.bientot ? '<b style="color:#c25e00">' + esc(x.gtr) + '</b>' : 'priorité ' + x.prio) + '</li>';
+  }).join('') + '</ul>' + (l.length > 8 ? '<small>… et ' + (l.length - 8) + ' autres</small>' : '');
+}
 function aller(num) { var m = marqueurs[num]; if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); } }
 // liens « n° de ticket » dans les fiches : montrent le ticket sur la carte
 document.addEventListener('click', function (e) {
@@ -228,26 +236,30 @@ function afficher(d) {
       '<br><small>Créé le ' + esc(t.creee ? fd(t.creee, t.creeeSource !== 'numero') : '—') +
       (t.creeeSource === 'numero' ? ' (estimé d\'après le n°)' : t.creeeSource === 'mail' ? ' (mail de création)' : '') + ' · PM ' + esc(t.site) + ' · ' + esc(t.regle) + (t.echeance ? ' → ' + esc(fd(t.echeance)) : '') + '</small>';
     if (t.fin) html += '<br><span class="fin">Mail de fin reçu le ' + esc(t.fin.recu) + '</span>' + (t.fin.rapport ? ' · <a href="' + esc(t.fin.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '');
-    if (t.autour) {  // vient de clôturer : cercle de 1 km et tickets à planifier autour
-      L.circle([t.geo.lat, t.geo.lon], {radius: REGLAGES.CASER_M, color: C.termine, weight: 2, dashArray: '6 5', fillColor: C.termine, fillOpacity: .07, interactive: false}).addTo(calques.termine);
-      html += '<br><b>Vient de clôturer (il y a ' + t.depuisMin + ' min).</b> ' + (t.autour.length ? 'À planifier à moins de ' + fdist(REGLAGES.CASER_M) + ' :' : 'Aucun ticket à planifier à moins de ' + fdist(REGLAGES.CASER_M) + '.') +
-        '<ul class="autour">' + t.autour.slice(0, 8).map(function (x) {
-          return '<li><a href="#" data-aller="' + esc(x.num) + '">' + esc(x.num) + '</a> · ' + esc(fdist(x.d)) + (x.ko ? ' · <b style="color:#b00">GTR KO</b>' : ' · priorité ' + x.prio) + '</li>';
-        }).join('') + '</ul>' + (t.autour.length > 8 ? '<small>… et ' + (t.autour.length - 8) + ' autres</small>' : '');
-    }
     else if (t.sorti) html += '<br><span class="fin">Sorti de l\'export le ' + esc(fd(t.sorti)) + ' : terminé ou annulé</span>';
     else if (t.finStatut) html += '<br><span class="fin">' + esc(t.statut) + (t.finLe ? ' le ' + esc(fd(t.finLe)) : '') + '</span>';
+    if (t.autour) {  // vient de clôturer : cercle de 1 km et tickets à planifier autour, GTR KO d'abord
+      L.circle([t.geo.lat, t.geo.lon], {radius: REGLAGES.CASER_M, color: C.termine, weight: 2, dashArray: '6 5', fillColor: C.termine, fillOpacity: .07, interactive: false}).addTo(calques.termine);
+      html += '<br><b>Vient de clôturer (il y a ' + t.depuisMin + ' min).</b> ' + (t.autour.length ? 'À planifier à moins de ' + fdist(REGLAGES.CASER_M) + ' :' : 'Aucun ticket à planifier à moins de ' + fdist(REGLAGES.CASER_M) + '.') + listeAutour(t.autour);
+    }
+    if (k === 'planifie' && t.urgentsAutour && t.urgentsAutour.length)  // intervention planifiée : les urgents à faire dans la foulée
+      html += '<br><b style="color:#b00">GTR KO ou bientôt KO à moins de ' + fdist(REGLAGES.CASER_M) + ' :</b>' + listeAutour(t.urgentsAutour);
     if (t.noteTapee) html += '<br><small><b>Note :</b> ' + esc(court(t.noteTapee, 240)) + '</small>';
     if (t.justif) html += '<br><b style="color:#4a535c">Justifié · ' + esc(t.justif) + '</b>';
     if (t.suivi) html += '<br><span style="color:' + (t.suivi.due ? '#a35208' : '#4a535c') + ';font-weight:600">' + (t.suivi.due ? 'À faire maintenant : ' : 'Suivi : ') + esc(t.suivi.action) + '</span>' +
       (t.suivi.prochaine ? '<br><small>' + (t.suivi.due ? 'Relance prévue le ' : 'Prochaine relance le ') + esc(fd(t.suivi.prochaine, false)) + ' · compté depuis ' + esc(t.suivi.base) + '</small>' : '');
     if (t.caser) html += '<br><span class="foulee">À programmer avec ' + esc(t.caser.n) + ' le ' + esc(t.caser.p) + ' · ' + esc(t.caser.tech) + ' · à ' + esc(t.caser.d) + '</span>';
-    if (t.alertes && t.alertes.length) html += '<br><b style="color:#b00">' + esc(t.alertes.join(' · ')) + '</b>';
+    // mêmes mots que sur le terrain : « GTR KO depuis 9 j », « GTR KO dans 20 h »
+    var al = (t.alertes || []).map(function (x) {
+      return x.replace(/^Échéance dépassée de /, 'GTR KO depuis ').replace(/^Échéance dans moins de 48 h et pas planifié$/, t.gtrTexte || x);
+    });
+    if (al.length) html += '<br><b style="color:#b00">' + esc(al.join(' · ')) + '</b>';
     html += '<br><small>' + esc(court(t.desc, 220)) + '</small></div>';
     m.bindPopup(html, {maxWidth: 320});
     m.addTo(calques[k]);
     marqueurs[t.num] = m;
     if (k === 'nouveau' && t.caser) L.polyline([[t.geo.lat, t.geo.lon], [t.caser.lat, t.caser.lon]], {color: C.nouveau, weight: 3, dashArray: '6 5'}).addTo(calques.nouveau);
+    if ((k === 'retard' || k === 'bientot') && t.caser) L.polyline([[t.geo.lat, t.geo.lon], [t.caser.lat, t.caser.lon]], {color: C[k], weight: 2.5, dashArray: '5 5'}).addTo(calques[k]);
   });
   Object.keys(nb).forEach(function (k) { document.getElementById('nb-' + k).textContent = '(' + nb[k] + ')'; });
   document.getElementById('nb-planifieKo').textContent = '(' + nbPlanifieKo + ')';
@@ -266,15 +278,33 @@ function afficher(d) {
       listes.appendChild(b);
     });
   }
+  function nbUrgents(l) { return l.filter(function (x) { return x.rang < 2; }).length; }
   if (moi) {
     var miens = res.tickets.filter(function (t) { return t.tech === moi && !t.termine && t.planif && !t.deplanifie; }).sort(function (a, b) { return a.planif - b.planif; });
-    liste('Mes interventions (' + miens.length + ')', '#174a8b', 'moi', miens, function (t) { return fd(t.planif) + ' · ' + t.adresse; });
-    var aCote = res.tickets.filter(function (t) { return t.caser && t.caser.tech === moi; });
-    liste('À côté de mes interventions', '#6c2e91', 'nouveau', aCote, function (t) { return 'Près de ' + t.caser.n + ' (' + t.caser.p + ', ' + t.caser.d + ') · ' + t.regle; });
+    liste('Mes interventions (' + miens.length + ')', '#174a8b', 'moi', miens, function (t) {
+      var n = (t.urgentsAutour || []).length;
+      return fd(t.planif) + ' · ' + t.adresse + (n ? ' · ' + n + ' GTR KO ou bientôt KO à côté' : '');
+    });
+    // tickets à planifier à moins de 1 km d'une de mes interventions : les GTR KO ou bientôt KO d'abord, dans leur propre liste
+    var pres = [];
+    res.tickets.forEach(function (u) {
+      if (!u.aPlanifier || u.justif || !u.geo) return;
+      var best = null;
+      miens.forEach(function (m) { var dd = distance(u, m); if (dd != null && dd <= REGLAGES.CASER_M && (!best || dd < best.d)) best = {d: dd, m: m}; });
+      if (best) pres.push({num: u.num, ville: u.ville, t: u, d: best.d, m: best.m});
+    });
+    pres.sort(function (a, b) { return (a.t.rang - b.t.rang) || (a.d - b.d); });
+    var texteMoi = function (x) { return (x.t.urgent ? x.t.gtrTexte + ' · ' : '') + 'à ' + fdist(x.d) + ' de ' + x.m.num + ' (' + fd(x.m.planif) + ')'; };
+    liste('GTR KO ou bientôt KO à côté de mes interventions', '#b00', 'urgent', pres.filter(function (x) { return x.t.urgent; }), texteMoi);
+    liste('Autres tickets à côté de mes interventions', '#6c2e91', 'nouveau', pres.filter(function (x) { return !x.t.urgent; }), texteMoi);
+  } else {
+    liste("GTR KO ou bientôt KO à côté d'une intervention planifiée", '#b00', 'urgent', res.urgentsProches, function (t) {
+      return t.gtrTexte + ' · à ' + t.caser.d + ' de ' + t.caser.tech + ' (' + t.caser.p + ')';
+    });
   }
   liste("Viennent de clôturer (moins d'1 h)", '#1d7444', 'termine', res.viennentDeFinir, function (t) {
-    var ko = t.autour.filter(function (x) { return x.ko; }).length;
-    return 'Il y a ' + t.depuisMin + ' min' + (t.tech ? ' · ' + t.tech : '') + ' · ' + (t.autour.length ? t.autour.length + ' ticket' + (t.autour.length > 1 ? 's' : '') + ' à planifier à moins de ' + fdist(REGLAGES.CASER_M) + (ko ? ', dont ' + ko + ' GTR KO' : '') : 'aucun ticket à planifier autour');
+    var n = nbUrgents(t.autour);
+    return 'Il y a ' + t.depuisMin + ' min' + (t.tech ? ' · ' + t.tech : '') + ' · ' + (t.autour.length ? t.autour.length + ' ticket' + (t.autour.length > 1 ? 's' : '') + ' à planifier à moins de ' + fdist(REGLAGES.CASER_M) + (n ? ', dont ' + n + ' GTR KO ou bientôt KO' : '') : 'aucun ticket à planifier autour');
   });
   liste("Fins d'intervention aujourd'hui", '#1d7444', 'termine', res.terminesAujourdhui, function (t) {
     return (t.fin ? 'Mail reçu le ' + t.fin.recu : t.sorti ? "Sorti de l'export le " + fd(t.sorti) + ' (terminé ou annulé)' : t.statut + ' le ' + fd(t.finLe)) + (t.tech ? ' · ' + t.tech : '');

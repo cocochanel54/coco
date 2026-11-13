@@ -92,6 +92,7 @@ Pour un vrai fichier Excel (à envoyer, par exemple) : **Fichier → Télécharg
 - **Gris** : justifié / en attente. Contour orange : à relancer ou à vérifier.
 - **Rouge** : GTR KO (échéance dépassée), à planifier. **Orange** : GTR dans moins de 48 h. **Jaune** : à planifier, GTR encore bonne ou sans GTR. **Bleu** : déjà planifié.
 - **Contour rouge** : GTR KO sur un ticket déjà planifié (bleu) ou nouveau (violet).
+- **GTR KO ou bientôt KO à proximité** : c'est ce qui ressort en premier partout. Un trait pointillé rouge ou orange relie le ticket à l'intervention planifiée la plus proche (moins de 1 km). La liste « GTR KO ou bientôt KO à côté d'une intervention planifiée » les donne avec le technicien et la distance. La fiche d'une intervention planifiée liste les urgents autour d'elle. Un technicien qui a choisi son nom voit « GTR KO ou bientôt KO à côté de mes interventions ».
 - **Cercle vert de 1 km** : un technicien vient de clôturer à cet endroit (mail de fin reçu depuis moins d'1 heure). La liste « Viennent de clôturer » et la fiche du ticket donnent les tickets à planifier dans le cercle, GTR KO d'abord ; un clic sur un n° montre le ticket. La carte ne sait pas quand une intervention commence, seulement quand elle est clôturée.
 - **Bandeau orange** en haut de la légende (conduite d'activité) : ce qui manque dans l'export, par exemple des dates de création estimées.
 - Un mail de fin pour un ticket absent de l'export apparaît dans la liste « Mails de fin pour des tickets absents de l'export ».
