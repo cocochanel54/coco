@@ -3,6 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Carte des tickets</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -215,7 +216,15 @@ document.querySelectorAll('.leg input[data-k]').forEach(function (i) {
   i.onchange = function () { i.checked ? calques[i.dataset.k].addTo(map) : calques[i.dataset.k].remove(); };
 });
 var plier = document.getElementById('plier'), corps = document.getElementById('corps');
-plier.onclick = function () { corps.hidden = !corps.hidden; plier.textContent = corps.hidden ? 'Afficher' : 'Masquer'; plier.setAttribute('aria-expanded', String(!corps.hidden)); };
+plier.onclick = function () { corps.hidden = !corps.hidden; plier.textContent = corps.hidden ? 'Afficher' : 'Masquer'; plier.setAttribute('aria-expanded', String(!corps.hidden)); margesFiches(); };
+// une fiche ne doit pas s'ouvrir sous le bandeau des chiffres clés ni sous le panneau : Leaflet décale la carte d'autant
+function margesFiches() {
+  var k = document.getElementById('kpi'), leg = document.querySelector('.leg'), o = L.Popup.prototype.options;
+  var enBas = leg.offsetTop > window.innerHeight / 3;   // sur téléphone, le panneau est en bas de l'écran
+  o.autoPanPaddingTopLeft = L.point(10, k.hidden ? 10 : k.offsetTop + k.offsetHeight + 6);
+  o.autoPanPaddingBottomRight = enBas ? L.point(10, window.innerHeight - leg.offsetTop + 6) : L.point(leg.offsetWidth + 20, 10);
+}
+window.addEventListener('resize', margesFiches);
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
 function heure(iso) { return iso ? fd(new Date(iso)) : '—'; }
 // ce que dit le rapport d'intervention lu (horaires réels, résultat, compte-rendu), pour une fiche
@@ -223,8 +232,10 @@ function texteRapport(f, avecResume) {
   if (!f || f.lu !== 'oui') return '';
   var m = motifsSuite(f), h = '';
   if (f.debut) h += '<br><small>Sur place : ' + esc(f.debut.slice(11)) + ' → ' + esc(f.fin.slice(0, 10) === f.debut.slice(0, 10) ? f.fin.slice(11) : f.fin) + (f.duree ? ' (' + esc(f.duree) + ')' : '') + '</small>';
+  var op = /^non$/i.test(f.corrige || '') && resteOperateur(f);
   if (m.length) h += '<br><b style="color:#a35208">À suivre : ' + esc(m.join(', ')) + '</b>';
-  else if (f.corrige || f.definitive) h += '<br><small>' + esc([f.corrige ? 'Défaut corrigé : ' + f.corrige.toLowerCase() : '', f.definitive ? 'réparation définitive : ' + f.definitive.toLowerCase() : ''].filter(function (x) { return x; }).join(' · ')) + '</small>';
+  if (op) h += '<br><small>Reste côté opérateur (jarretière, brassage) : pas une reprise pour nous</small>';
+  else if (!m.length && (f.corrige || f.definitive)) h += '<br><small>' + esc([f.corrige ? 'Défaut corrigé : ' + f.corrige.toLowerCase() : '', f.definitive ? 'réparation définitive : ' + f.definitive.toLowerCase() : ''].filter(function (x) { return x; }).join(' · ')) + '</small>';
   if (avecResume && f.resume) h += '<br><small><b>Compte-rendu :</b> ' + esc(court(f.resume, 320)) + '</small>';
   return h;
 }
@@ -289,23 +300,29 @@ document.querySelectorAll('#controles .onglet').forEach(function (b) {
 filtreG.onchange = function () { tableauControles(); };
 function tableauControles() {
   if (!dernier || panneau.hidden) return;
-  var c = dernier.ctrl, choisir = function (t, cols) { return [cols.map(function (i) { return t.entetes[i]; }), t.lignes.map(function (l) { return cols.map(function (i) { return l[i]; }); })]; };
-  var clo = choisir(c.clotures, [0, 1, 2, 3, 6, 8, 10, 11, 12]), boi = choisir(c.statsBoites, [0, 1, 2, 3, 4, 5, 6, 7, 9, 10]), vil = choisir(c.statsVilles, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  var c = dernier.ctrl, choisir = function (t, noms) {
+    var idx = noms.map(function (n) { return t.entetes.indexOf(n); }).filter(function (i) { return i >= 0; });
+    return [idx.map(function (i) { return t.entetes[i]; }), t.lignes.map(function (l) { return idx.map(function (i) { return l[i]; }); })];
+  };
+  var clo = choisir(c.clotures, ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Durée', 'GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'À vérifier']);
+  var boi = choisir(c.statsBoites, ['Boîte', 'PM', 'Commune', 'Interventions', 'Retours sous 30 j', 'dont provisoires', 'dont non corrigées', 'Temps total', 'Temps moyen', 'Dernière', 'Dernier résultat']);
+  var vil = choisir(c.statsVilles, ['Commune', 'Interventions', 'Part du total', 'GTR respectée', 'Retours sous 30 j', 'dont provisoires', 'dont non corrigées', 'dont dommage réseau', 'Temps total', 'Temps moyen', 'Boîtes les plus touchées']);
   // [en-têtes, lignes, colonne du n° de ticket (ou -1), colonne de la boîte (ou -1)]
   var defs = {
     incoherences: [['Gravité', 'N°', 'Statut', 'Problème', 'Détail', 'Technicien', 'Ville'], c.incoherences.filter(function (l) { return !filtreG.value || l[0] === filtreG.value; }), 1, -1],
     lies: [['Groupe', 'Pourquoi liés', 'N°', 'Statut', 'Planifiée', 'Technicien', 'Ville', 'Adresse'], c.lies.map(function (l) { return l.slice(0, 9).filter(function (_, i) { return i !== 6; }); }), 2, -1],
     pm: [['PM (Site)', 'Tickets ouverts', 'dont à planifier', 'Communes', 'Créés entre', 'Équipement', 'Tickets'], c.pm, -1, -1],
     suites: [['Clôturée le', 'N°', 'Commune', 'Technicien', 'Pourquoi une suite', 'Ticket de suite', 'Compte-rendu du technicien'], c.suites, 1, -1],
-    clotures: [clo[0], clo[1], 1, -1], boites: [boi[0], boi[1], -1, 0], villes: [vil[0], vil[1], -1, -1]
+    clotures: [clo[0], clo[1], clo[0].indexOf('N°'), -1], boites: [boi[0], boi[1], -1, boi[0].indexOf('Boîte')], villes: [vil[0], vil[1], -1, -1]
   }[ongletCtrl];
+  var en = function (nom) { return defs[0].indexOf(nom); };
   var h = '<table><thead><tr>' + defs[0].map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
   defs[1].forEach(function (l, i) {
     var num = defs[2] >= 0 ? l[defs[2]] : '', boite = defs[3] >= 0 ? l[defs[3]] : '', g = '';
     if (ongletCtrl === 'incoherences') g = ' g' + l[0].charAt(0);
     else if (ongletCtrl === 'suites' && !l[5]) g = ' g2';
-    else if (ongletCtrl === 'clotures') g = l[6] === 'non' ? ' g1' : /^À suivre/.test(l[7]) ? ' g2' : '';
-    else if (ongletCtrl === 'boites' && /^À suivre/.test(l[9])) g = ' g2';
+    else if (ongletCtrl === 'clotures') g = l[en('Dans la GTR')] === 'non' ? ' g1' : /^À suivre/.test(l[en('Résultat')]) ? ' g2' : /côté opérateur/.test(l[en('Résultat')]) ? ' g4' : '';
+    else if (ongletCtrl === 'boites' && /^À suivre/.test(l[en('Dernier résultat')])) g = ' g2';
     else if (ongletCtrl === 'villes' && i === 0) g = ' g3';
     if (ongletCtrl === 'suites' && !marqueurs[num]) num = (l[5].match(/^[^ ,]+/) || [''])[0];  // intervention sortie de la carte : on montre son ticket de suite
     var clic = (num && marqueurs[num]) || (boite && marqueursBoites[boite]);
@@ -327,6 +344,7 @@ function tableauControles() {
 function ficheBoite(h) {
   return '<div class="pop"><b>Boîte ' + esc(h.boite) + '</b><br>' + esc([h.pm ? 'PM ' + h.pm : '', h.commune].filter(function (x) { return x; }).join(' · ')) +
     '<br><b>' + h.n + ' intervention' + (h.n > 1 ? 's' : '') + '</b> depuis le ' + esc(h.premier) + (h.temps ? ' · ' + esc(h.temps) + ' sur place au total' : '') +
+    (h.retours ? '<br><b>' + h.retours + ' retour' + (h.retours > 1 ? 's' : '') + ' moins de 30 jours après une autre intervention</b>' : '') +
     (h.prov || h.nonCorr ? '<br><b style="color:#a35208">' + [h.prov ? h.prov + ' provisoire' + (h.prov > 1 ? 's' : '') : '', h.nonCorr ? h.nonCorr + ' non corrigée' + (h.nonCorr > 1 ? 's' : '') : ''].filter(function (x) { return x; }).join(', ') + '</b>' : '') +
     (h.causes ? '<br><small>Causes : ' + esc(h.causes) + '</small>' : '') +
     '<ul class="autour">' + h.tickets.map(function (x) {
@@ -365,6 +383,7 @@ function brancherBulle(cible, lignes, nomAccessible) {
 function lignesBulle(o, titre) {
   var css = getComputedStyle(bilanEl), l = [['b', pluriel(o.n, 'clôture')], ['s', titre]];
   if (o.n) l.push(['d', (o.n - o.suite) + ' sans suite à donner', css.getPropertyValue('--series-1').trim()], ['d', o.suite + ' à reprendre', css.getPropertyValue('--series-2').trim()]);
+  if (o.retours) l.push(['d', pluriel(o.retours, 'retour') + ' dans une boîte déjà visitée sous 30 j']);
   if (o.gtr) l.push(['d', 'GTR respectée : ' + o.gtr + ' (' + o.gtrOk + ' sur ' + o.gtrN + ')']);
   if (o.temps) l.push(['d', 'Temps moyen sur place : ' + o.temps]);
   if (o.nonLus) l.push(['d', pluriel(o.nonLus, 'rapport') + ' pas encore lu' + (o.nonLus > 1 ? 's' : '')]);
@@ -424,9 +443,9 @@ function dessinerBilan() {
   colonnes(b.semaines);
   barres('gCommunes', 'resteCommunes', b.communes, ['commune', 'communes']);
   barres('gBoites', 'resteBoites', b.boites, ['boîte', 'boîtes']);
-  tableauBilan('tvSemaines', ['Semaine', 'Du', 'Au', 'Clôtures', 'dont à reprendre', 'GTR respectée', 'Temps moyen sur place'],
-    b.semaines.map(function (s) { return [s.label + (s.enCours ? ' (en cours)' : ''), s.du, s.au, s.n, s.suite, s.gtr, s.temps]; }));
-  var cols = ['Clôtures', 'dont à reprendre', 'GTR respectée', 'Temps moyen sur place', 'Temps total sur place'], ligne = function (o) { return [o.nom, o.n, o.suite, o.gtr, o.temps, o.tempsTotal]; };
+  tableauBilan('tvSemaines', ['Semaine', 'Du', 'Au', 'Clôtures', 'dont à reprendre', 'Retours sous 30 j', 'GTR respectée', 'Temps moyen sur place'],
+    b.semaines.map(function (s) { return [s.label + (s.enCours ? ' (en cours)' : ''), s.du, s.au, s.n, s.suite, s.retours, s.gtr, s.temps]; }));
+  var cols = ['Clôtures', 'dont à reprendre', 'Retours sous 30 j', 'GTR respectée', 'Temps moyen sur place', 'Temps total sur place'], ligne = function (o) { return [o.nom, o.n, o.suite, o.retours, o.gtr, o.temps, o.tempsTotal]; };
   tableauBilan('tvCommunes', ['Commune'].concat(cols), b.communes.map(ligne));
   tableauBilan('tvBoites', ['Boîte'].concat(cols), b.boites.map(ligne));
 }
@@ -564,11 +583,13 @@ function afficher(d) {
   if (k.gtrN) cases.push([k.pctGtr, 'GTR respectée', k.gtrOk / k.gtrN >= .8 ? C.termine : RELANCE, k.gtrOk + ' sur ' + k.gtrN + ' clôtures', 1]);
   if (k.tempsMoyen) cases.push([k.tempsMoyen, 'en moyenne sur place', '#3b3f8f', k.clotures + ' clôtures depuis le ' + k.depuis, 1]);
   if (k.avecReponse) cases.push([k.pctDefinitif, 'réparées en définitif', k.definitives / k.avecReponse >= .8 ? C.termine : RELANCE, k.definitives + ' sur ' + k.avecReponse, 1]);
+  if (k.avecBoite) cases.push([k.pctRetours, 'retours dans une boîte sous 30 j', '#3b3f8f', k.retours + ' sur ' + k.avecBoite + ' interventions', 1]);
   var bandeau = document.getElementById('kpi');
   bandeau.innerHTML = cases.map(function (c) {
     return '<div' + (c[4] ? ' class="plus"' : '') + ' style="border-top-color:' + c[2] + '"><b>' + esc(c[0]) + '</b><span>' + esc(c[1]) + '</span>' + (c[3] ? '<small>' + esc(c[3]) + '</small>' : '') + '</div>';
   }).join('');
   bandeau.hidden = false;
+  margesFiches();
   document.getElementById('nb-relance').textContent = '(' + res.relances.length + ')';
   if (role === 'ca') document.getElementById('ouvrirControles').textContent = 'Listes de contrôle (' + ctrl.incoherences.length + ' incohérences)';
 

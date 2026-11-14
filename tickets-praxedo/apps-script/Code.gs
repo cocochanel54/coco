@@ -12,7 +12,8 @@
  *   Sortis de l'export  : les tickets présents dans l'import précédent et absents du nouveau (terminés ou annulés)
  *   Suites à prévoir    : les interventions clôturées en provisoire, non corrigées ou avec un dommage signalé, et leur
  *                         ticket de suite quand il existe
- *   Clôtures            : chaque intervention clôturée, avec ses horaires, sa durée, sa GTR respectée ou non, son résultat
+ *   Clôtures            : chaque intervention clôturée, avec ses horaires, sa durée, sa GTR respectée ou non (de la demande
+ *                         à la fin de l'intervention), son résultat, et la fin d'impact client pour information
  *   Stats boîtes, Stats villes, Stats semaines : d'après les rapports lus, où on intervient le plus, le temps passé, les provisoires,
  *                         la part de GTR respectées (sur les 90 derniers jours)
  *   Incohérences, Tickets liés, PM chargés : les listes de contrôle de l'Excel, refaites à chaque import,
@@ -50,7 +51,8 @@ var RECHERCHE_CREATIONS = 'subject:"CREATION INTERVENTION"';
 var ENTETES_SORTIS = ['Sorti le', 'N°', 'Statut avant', 'Planifiée', 'Technicien', 'Adresse', 'CP', 'Ville site', 'Site'];
 var ENTETES_FINS = ['Reçu le', 'N° ticket', 'Commune', 'Intervention du', 'Rapport', 'Objet du mail', 'Id du mail',
   'Rapport lu', 'Début', 'Fin', 'Durée', 'Défaut corrigé', 'Réparation définitive', 'Dommage réseau', 'Compte-rendu du technicien',
-  'Boîte(s)', 'PM (site)', 'Nature du défaut', 'Cause du défaut', 'Adresse', 'Demande le', 'Étiquettes GTR', 'Autres éléments du rapport', 'Technicien'];
+  'Boîte(s)', 'PM (site)', 'Nature du défaut', 'Cause du défaut', 'Adresse', 'Demande le', 'Étiquettes GTR', 'Autres éléments du rapport', 'Technicien',
+  "Fin d'impact"];
 var JOURS_HISTORIQUE = 90;     // la carte et les statistiques portent sur les clôtures des 90 derniers jours
 var RAPPORTS_PAR_PASSAGE = 4;  // rapports PDF lus à chaque passage (les plus récents d'abord), pour garder des passages courts
 var ENTETES_ADRESSES = ['Adresse cherchée', 'Latitude', 'Longitude', 'Adresse trouvée', 'Score', 'Type', 'Commune', 'CP'];
@@ -79,7 +81,7 @@ function onOpen() {
     .addItem('Importer un export Praxedo…', 'ouvrirImport')
     .addItem('Lire les mails maintenant', 'lireMailsMaintenant')
     .addItem('Mettre à jour les onglets de contrôle', 'mettreAJourControles')
-    .addItem('Fichier « carte du jour » (pour Teams)…', 'ouvrirCarteDuJour')
+    .addItem('Fichiers du jour : carte + Excel (pour Teams)…', 'ouvrirCarteDuJour')
     .addItem("Codes d'accès à la carte", 'afficherCodes')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
     .addToUi();
@@ -120,38 +122,50 @@ function ouvrirImport() {
 }
 
 /**
- * « Carte du jour » : la carte complète dans un seul fichier HTML, pour les postes où le lien Google est bloqué.
- * Le fichier contient les données du moment (vue conduite d'activité) et ne se met pas à jour.
+ * Fichiers du jour, pour les postes où Google est bloqué : la carte complète dans un seul fichier HTML, et un vrai
+ * fichier Excel avec toutes les listes et les statistiques. Ce sont des photos du moment : ils ne se mettent pas à jour.
  */
 function ouvrirCarteDuJour() {
   var page = '<style>[hidden]{display:none!important}body{font:14px system-ui,sans-serif;margin:12px;color:#1a1a1a}p{margin:0 0 10px}' +
-    '#etat{font-weight:600}a,button{font:inherit}button{padding:6px 10px}</style>' +
-    '<p>La carte complète dans un seul fichier, à déposer dans Teams. Tes collègues le téléchargent et l\'ouvrent : pas de lien Google, pas de code. ' +
-    'C\'est une photo des données de maintenant, elle ne se met pas à jour.</p>' +
-    '<p id="etat" role="status">Préparation du fichier…</p><p><a id="lien" hidden></a></p><p><button id="mail" type="button" hidden>Me l\'envoyer aussi par mail</button></p>' +
-    '<script>var etat=document.getElementById("etat"),lien=document.getElementById("lien"),mail=document.getElementById("mail");' +
-    'function rate(e){etat.textContent=(e&&e.message)||String(e);mail.disabled=false;}' +
-    'google.script.run.withSuccessHandler(function(r){var b=new Blob([r.html],{type:"text/html"});lien.href=URL.createObjectURL(b);lien.download=r.nom;' +
-    'lien.textContent="Télécharger "+r.nom;lien.hidden=false;mail.hidden=false;etat.textContent="Fichier prêt ("+Math.round(b.size/1024)+" Ko). Clique sur le lien pour le télécharger.";})' +
-    '.withFailureHandler(rate).carteDuJour();' +
-    'mail.onclick=function(){mail.disabled=true;etat.textContent="Envoi…";google.script.run.withSuccessHandler(function(a){etat.textContent="Envoyé à "+a+".";}).withFailureHandler(rate).envoyerCarteDuJour();};' +
+    '.etat{font-weight:600}a,button{font:inherit}button{padding:6px 10px}</style>' +
+    '<p>Deux fichiers à déposer dans Teams ou à ouvrir au bureau, sans lien Google ni code : la <b>carte</b> (à ouvrir dans un navigateur) ' +
+    'et l\'<b>Excel</b> (à planifier, justifiés, suites, incohérences, clôtures, statistiques). Ce sont des photos de maintenant : ils ne se mettent pas à jour.</p>' +
+    '<p class="etat" id="etatC" role="status">Préparation de la carte…</p><p><a id="lienC" hidden></a></p>' +
+    '<p class="etat" id="etatX" role="status">Préparation de l\'Excel…</p><p><a id="lienX" hidden></a></p>' +
+    '<p><button id="mail" type="button" hidden>M\'envoyer les deux par mail</button></p><p class="etat" id="etatM" role="status"></p>' +
+    '<script>function $(i){return document.getElementById(i);}var prets=0,mail=$("mail");' +
+    'function pret(lien,etat,b,nom,texte){lien.href=URL.createObjectURL(b);lien.download=nom;lien.textContent="Télécharger "+nom;lien.hidden=false;' +
+    'etat.textContent=texte+" ("+Math.round(b.size/1024)+" Ko).";if(++prets===2)mail.hidden=false;}' +
+    'function rate(etat){return function(e){etat.textContent=(e&&e.message)||String(e);mail.disabled=false;};}' +
+    'google.script.run.withSuccessHandler(function(r){pret($("lienC"),$("etatC"),new Blob([r.html],{type:"text/html"}),r.nom,"Carte prête");}).withFailureHandler(rate($("etatC"))).carteDuJour();' +
+    'google.script.run.withSuccessHandler(function(r){var t=atob(r.base64),o=new Uint8Array(t.length);for(var i=0;i<t.length;i++)o[i]=t.charCodeAt(i);' +
+    'pret($("lienX"),$("etatX"),new Blob([o],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),r.nom,"Excel prêt");}).withFailureHandler(rate($("etatX"))).excelDuJour();' +
+    'mail.onclick=function(){mail.disabled=true;$("etatM").textContent="Envoi…";google.script.run.withSuccessHandler(function(a){$("etatM").textContent="Envoyé à "+a+".";}).withFailureHandler(rate($("etatM"))).envoyerCarteDuJour();};' +
     '</' + 'script>';
-  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(page).setWidth(460).setHeight(250), 'Fichier « carte du jour »');
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(page).setWidth(480).setHeight(330), 'Fichiers du jour : carte + Excel');
 }
 
-/** Pour la fenêtre : le nom et le contenu du fichier. Réservé au propriétaire. */
+/** Pour la fenêtre : le nom et le contenu du fichier de la carte. Réservé au propriétaire. */
 function carteDuJour() {
   proprietaire_();
   return { nom: nomCarteDuJour_(), html: construireCarteDuJour_() };
 }
 
-/** Envoie le fichier en pièce jointe à l'adresse Gmail du propriétaire (et à personne d'autre). */
+/** Pour la fenêtre : le nom et le contenu (en base 64) du fichier Excel. Réservé au propriétaire. */
+function excelDuJour() {
+  proprietaire_();
+  var b = classeurDuJour_();
+  return { nom: b.getName(), base64: Utilities.base64Encode(b.getBytes()) };
+}
+
+/** Envoie la carte et l'Excel en pièces jointes à l'adresse Gmail du propriétaire (et à personne d'autre). */
 function envoyerCarteDuJour() {
   proprietaire_();
-  var moi = Session.getEffectiveUser().getEmail(), nom = nomCarteDuJour_();
-  GmailApp.sendEmail(moi, 'Carte du jour des tickets, ' + Utilities.formatDate(new Date(), 'Europe/Paris', "dd/MM/yyyy 'à' HH:mm"),
-    'En pièce jointe : la carte du jour. Télécharge le fichier puis ouvre-le dans un navigateur.',
-    { attachments: [Utilities.newBlob(construireCarteDuJour_(), 'text/html', nom)] });
+  var moi = Session.getEffectiveUser().getEmail();
+  GmailApp.sendEmail(moi, 'Carte et Excel du jour des tickets, ' + Utilities.formatDate(new Date(), 'Europe/Paris', "dd/MM/yyyy 'à' HH:mm"),
+    'En pièces jointes :\n- la carte du jour : télécharge le fichier .html puis ouvre-le dans un navigateur ;\n' +
+    '- l\'Excel du jour : à planifier, justifiés, suites à prévoir, incohérences, clôtures et statistiques.',
+    { attachments: [Utilities.newBlob(construireCarteDuJour_(), 'text/html', nomCarteDuJour_()), classeurDuJour_()] });
   return moi;
 }
 
@@ -183,6 +197,178 @@ function construireCarteDuJour_() {
   var donnees = JSON.stringify(d).replace(/</g, '\\u003c');
   return page.replace('<div id="map"></div>', function () { return '<script>window.CARTE_DU_JOUR = ' + donnees + ';</' + 'script><div id="map"></div>'; });
 }
+
+var MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/**
+ * L'Excel du jour : un résumé chiffré, les tickets à planifier par priorité, le suivi des justifiés, puis les mêmes
+ * onglets que le Sheet (suites, incohérences, tickets liés, PM, clôtures, statistiques). N° de téléphone masqués.
+ */
+function classeurDuJour_() {
+  var a = analyse_(), d = lireDonnees_(), NOW = new Date(), res = a.analyser(d, NOW), c = a.controles(res, NOW);
+  var l = a.listesDuJour(res, c, NOW, { importeLe: d.importeLe, luLe: d.luLe });
+  var feuilles = [
+    { nom: 'Résumé', entetes: l.resume.entetes, lignes: l.resume.lignes, fonds: l.resume.fonds, largeurs: [460, 220], filtre: false },
+    { nom: 'À planifier', entetes: l.aPlanifier.entetes, lignes: l.aPlanifier.lignes, fonds: l.aPlanifier.fonds,
+      largeurs: [50, 160, 150, 140, 120, 220, 100, 130, 160, 220, 140, 170, 130, 120, 260, 260, 300, 480] },
+    { nom: 'Justifiés', entetes: l.justifies.entetes, lignes: l.justifies.lignes, fonds: l.justifies.fonds,
+      largeurs: [90, 300, 120, 120, 200, 160, 100, 60, 120, 80, 300, 160, 220, 140, 420] }
+  ].concat(ongletsControle_(c).map(function (o) {
+    return { nom: o.nom, entetes: o.entetes, lignes: o.lignes, largeurs: o.largeurs, fonds: o.lignes.map(function (x, i) { return o.couleur ? o.couleur(x, i) || null : null; }) };
+  }));
+  var tel = /(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g;
+  feuilles.forEach(function (f) { f.lignes = f.lignes.map(function (r) { return r.map(function (v) { return typeof v === 'string' ? v.replace(tel, '[tél.]') : v; }); }); });
+  return Utilities.newBlob(signes_(xlsx_(feuilles)), MIME_XLSX,
+    'Tickets_du_jour_' + Utilities.formatDate(NOW, 'Europe/Paris', "yyyy-MM-dd_HH'h'mm") + '.xlsx');
+}
+
+/**
+ * Classeur Excel (.xlsx) fabriqué en mémoire, sans passer par le Drive : une feuille par tableau, en-tête bleu figé,
+ * filtres, largeurs et couleurs de lignes comme dans le Sheet, liens « rapport » cliquables.
+ * feuilles : [{ nom, entetes, lignes, fonds (couleur '#RRGGBB' ou null, une par ligne), largeurs (pixels), filtre (false : sans filtre) }].
+ * Les nombres restent des nombres, le reste du texte. Renvoie les octets du fichier (Uint8Array).
+ */
+function xlsx_(feuilles) {
+  function x(v) {
+    return String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '')
+      .replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+  }
+  function lettre(i) { var s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; }
+  var fonds = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'], numFond = {};
+  var xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'], numXf = {};
+  // style d'une cellule : police (0 normale, 1 en-tête blanc gras, 2 lien) et fond
+  function style(police, fond) {
+    var cle = police + '|' + fond;
+    if (numXf[cle] == null) {
+      if (fond && numFond[fond] == null) {
+        fonds.push('<fill><patternFill patternType="solid"><fgColor rgb="FF' + fond + '"/><bgColor indexed="64"/></patternFill></fill>');
+        numFond[fond] = fonds.length - 1;
+      }
+      xfs.push('<xf numFmtId="0" fontId="' + police + '" fillId="' + (fond ? numFond[fond] : 0) + '" borderId="1" xfId="0" applyFont="1" applyFill="1" ' +
+        'applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>');
+      numXf[cle] = xfs.length - 1;
+    }
+    return numXf[cle];
+  }
+  var vus = {}, filtres = [], DEBUT = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  var NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  var docs = feuilles.map(function (fe, n) {
+    // nom d'onglet : 31 caractères au plus, sans : \ / ? * [ ], et unique
+    var nom = String(fe.nom).replace(/[:\\\/?*\[\]]/g, ' ').slice(0, 31).trim() || 'Feuille ' + (n + 1);
+    while (vus[nom.toLowerCase()]) nom = nom.slice(0, 27) + ' (' + (n + 1) + ')';
+    vus[nom.toLowerCase()] = 1;
+    fe.nomXl = nom;
+    var nc = fe.entetes.length, tout = [fe.entetes].concat(fe.lignes), rangees = [];
+    tout.forEach(function (l, i) {
+      var fond = i === 0 ? '1F4E78' : String((fe.fonds && fe.fonds[i - 1]) || '').replace('#', '').toUpperCase(), cel = [];
+      for (var j = 0; j < nc; j++) {
+        var v = l[j], ref = lettre(j) + (i + 1);
+        if (i === 0) { cel.push('<c r="' + ref + '" s="' + style(1, fond) + '" t="inlineStr"><is><t>' + x(v) + '</t></is></c>'); continue; }
+        if (v == null || v === '') { if (fond) cel.push('<c r="' + ref + '" s="' + style(0, fond) + '"/>'); continue; }
+        if (typeof v === 'number' && isFinite(v)) { cel.push('<c r="' + ref + '" s="' + style(0, fond) + '"><v>' + v + '</v></c>'); continue; }
+        v = String(v);
+        if (/^https:\/\/[^\s"]+$/.test(v) && v.length < 250) {
+          var lib = fe.entetes[j] === 'Rapport' ? 'rapport' : 'lien';
+          cel.push('<c r="' + ref + '" s="' + style(2, fond) + '" t="str"><f>' + x('HYPERLINK("' + v + '","' + lib + '")') + '</f><v>' + lib + '</v></c>');
+          continue;
+        }
+        cel.push('<c r="' + ref + '" s="' + style(0, fond) + '" t="inlineStr"><is><t xml:space="preserve">' + x(v.slice(0, 32000)) + '</t></is></c>');
+      }
+      rangees.push('<row r="' + (i + 1) + '">' + cel.join('') + '</row>');
+    });
+    var zone = 'A1:' + lettre(nc - 1) + tout.length;
+    var filtre = fe.lignes.length > 0 && fe.filtre !== false;
+    if (filtre) filtres.push('<definedName name="_xlnm._FilterDatabase" localSheetId="' + n + '" hidden="1">\'' + x(nom.replace(/'/g, "''")) +
+      '\'!$A$1:$' + lettre(nc - 1) + '$' + tout.length + '</definedName>');
+    return DEBUT + '<worksheet ' + NS + '><dimension ref="' + zone + '"/>' +
+      '<sheetViews><sheetView workbookViewId="0"' + (n === 0 ? ' tabSelected="1"' : '') + '>' +
+      '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>' +
+      '<sheetFormatPr defaultRowHeight="15"/><cols>' + fe.entetes.map(function (h, j) {
+        var px = (fe.largeurs && fe.largeurs[j]) || 120;
+        return '<col min="' + (j + 1) + '" max="' + (j + 1) + '" width="' + Math.max(4, Math.round((px - 5) / 7 * 100) / 100) + '" customWidth="1"/>';
+      }).join('') + '</cols><sheetData>' + rangees.join('') + '</sheetData>' +
+      (filtre ? '<autoFilter ref="' + zone + '"/>' : '') +
+      '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>' +
+      '<ignoredErrors><ignoredError sqref="' + zone + '" numberStoredAsText="1"/></ignoredErrors></worksheet>';
+  });
+  var classeur = DEBUT + '<workbook ' + NS + '><bookViews><workbookView activeTab="0"/></bookViews><sheets>' +
+    feuilles.map(function (fe, n) { return '<sheet name="' + x(fe.nomXl) + '" sheetId="' + (n + 1) + '" r:id="rId' + (n + 1) + '"/>'; }).join('') + '</sheets>' +
+    (filtres.length ? '<definedNames>' + filtres.join('') + '</definedNames>' : '') + '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>';
+  var REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/', RELS = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  var liens = DEBUT + RELS + feuilles.map(function (fe, n) {
+    return '<Relationship Id="rId' + (n + 1) + '" Type="' + REL + 'worksheet" Target="worksheets/sheet' + (n + 1) + '.xml"/>';
+  }).join('') + '<Relationship Id="rId' + (feuilles.length + 1) + '" Type="' + REL + 'styles" Target="styles.xml"/></Relationships>';
+  var police = function (debut, couleur) { return '<font>' + debut + '<sz val="10"/>' + (couleur ? '<color rgb="' + couleur + '"/>' : '') + '<name val="Arial"/><family val="2"/></font>'; };
+  var gris = '<color rgb="FFD9D9D9"/>';
+  var styles = DEBUT + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<fonts count="3">' + police('') + police('<b/>', 'FFFFFFFF') + police('<u/>', 'FF0563C1') + '</fonts>' +
+    '<fills count="' + fonds.length + '">' + fonds.join('') + '</fills>' +
+    '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin">' + gris + '</left><right style="thin">' + gris +
+    '</right><top style="thin">' + gris + '</top><bottom style="thin">' + gris + '</bottom><diagonal/></border></borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="' + xfs.length + '">' + xfs.join('') + '</cellXfs>' +
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  var types = DEBUT + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+    feuilles.map(function (fe, n) {
+      return '<Override PartName="/xl/worksheets/sheet' + (n + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+    }).join('') + '</Types>';
+  var racine = DEBUT + RELS + '<Relationship Id="rId1" Type="' + REL + 'officeDocument" Target="xl/workbook.xml"/></Relationships>';
+  return zip_([['[Content_Types].xml', types], ['_rels/.rels', racine], ['xl/workbook.xml', classeur], ['xl/_rels/workbook.xml.rels', liens],
+    ['xl/styles.xml', styles]].concat(docs.map(function (doc, n) { return ['xl/worksheets/sheet' + (n + 1) + '.xml', doc]; })));
+}
+
+/** Archive ZIP sans compression (c'est ce qu'est un .xlsx) : fichiers = [[nom, texte]]. Renvoie un Uint8Array. */
+function zip_(fichiers) {
+  var table = [];
+  for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; table[n] = c >>> 0; }
+  var d = new Date(), heure = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  var jour = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(), taille = 22;
+  var f = fichiers.map(function (x) {
+    var nom = utf8_(x[0]), o = utf8_(x[1]), crc = 0xFFFFFFFF;
+    for (var i = 0; i < o.length; i++) crc = table[(crc ^ o[i]) & 255] ^ (crc >>> 8);
+    taille += 76 + 2 * nom.length + o.length;
+    return { nom: nom, o: o, crc: (crc ^ 0xFFFFFFFF) >>> 0 };
+  });
+  var out = new Uint8Array(taille), v = new DataView(out.buffer), p = 0;
+  function ecrire(champs) { champs.forEach(function (c) { if (c[1] === 4) v.setUint32(p, c[0], true); else v.setUint16(p, c[0], true); p += c[1]; }); }
+  f.forEach(function (x) {
+    x.pos = p;
+    ecrire([[0x04034b50, 4], [20, 2], [0x0800, 2], [0, 2], [heure, 2], [jour, 2], [x.crc, 4], [x.o.length, 4], [x.o.length, 4], [x.nom.length, 2], [0, 2]]);
+    out.set(x.nom, p); p += x.nom.length;
+    out.set(x.o, p); p += x.o.length;
+  });
+  var central = p;
+  f.forEach(function (x) {
+    ecrire([[0x02014b50, 4], [20, 2], [20, 2], [0x0800, 2], [0, 2], [heure, 2], [jour, 2], [x.crc, 4], [x.o.length, 4], [x.o.length, 4],
+      [x.nom.length, 2], [0, 2], [0, 2], [0, 2], [0, 2], [0, 4], [x.pos, 4]]);
+    out.set(x.nom, p); p += x.nom.length;
+  });
+  ecrire([[0x06054b50, 4], [0, 2], [0, 2], [f.length, 2], [f.length, 2], [p - central, 4], [central, 4], [0, 2]]);
+  return out;
+}
+
+/** Texte → octets UTF-8 (un demi-caractère isolé devient « � »). */
+function utf8_(s) {
+  s = String(s);
+  var o = new Uint8Array(s.length * 3), n = 0;
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.length && s.charCodeAt(i + 1) >= 0xDC00 && s.charCodeAt(i + 1) <= 0xDFFF) {
+      c = 0x10000 + ((c - 0xD800) << 10) + (s.charCodeAt(++i) - 0xDC00);
+    } else if (c >= 0xD800 && c <= 0xDFFF) c = 0xFFFD;
+    if (c < 0x80) o[n++] = c;
+    else if (c < 0x800) { o[n++] = 0xC0 | (c >> 6); o[n++] = 0x80 | (c & 63); }
+    else if (c < 0x10000) { o[n++] = 0xE0 | (c >> 12); o[n++] = 0x80 | ((c >> 6) & 63); o[n++] = 0x80 | (c & 63); }
+    else { o[n++] = 0xF0 | (c >> 18); o[n++] = 0x80 | ((c >> 12) & 63); o[n++] = 0x80 | ((c >> 6) & 63); o[n++] = 0x80 | (c & 63); }
+  }
+  return o.subarray(0, n);
+}
+
+/** Octets 0..255 → -128..127, comme les attend Utilities.newBlob. */
+function signes_(o) { var a = new Array(o.length); for (var i = 0; i < o.length; i++) a[i] = o[i] > 127 ? o[i] - 256 : o[i]; return a; }
 
 function afficherCle() {
   SpreadsheetApp.getUi().alert('Clé à coller dans la macro Outlook :\n\n' + PropertiesService.getScriptProperties().getProperty('CLE_MACRO'));
@@ -409,7 +595,8 @@ function lireDonnees_() {
   var fins = ss.getSheetByName(ONGLET_FINS).getDataRange().getDisplayValues().slice(1).filter(recent).map(function (r) {
     return { recu: r[0], num: r[1], commune: r[2], jour: r[3], rapport: r[4], lu: r[7] || '', debut: r[8] || '', fin: r[9] || '',
              duree: r[10] || '', corrige: r[11] || '', definitive: r[12] || '', dommage: r[13] || '', resume: r[14] || '',
-             boites: r[15] || '', pm: r[16] || '', nature: r[17] || '', cause: r[18] || '', adresse: r[19] || '', demande: r[20] || '', etiquettes: r[21] || '', autres: r[22] || '', tech: r[23] || '' };
+             boites: r[15] || '', pm: r[16] || '', nature: r[17] || '', cause: r[18] || '', adresse: r[19] || '', demande: r[20] || '', etiquettes: r[21] || '', autres: r[22] || '', tech: r[23] || '',
+             finImpact: r[24] || (/fin d'impact client : (\d{2}\/\d{2}\/\d{4} \d{1,2}:\d{2})/.exec(r[22] || '') || [])[1] || '' };
   });
   var fn = feuille_(ONGLET_NOTES, ENTETES_NOTES);
   var notes = fn.getDataRange().getDisplayValues().slice(1).map(function (r) { return { num: r[0], note: r[1] }; })
@@ -441,26 +628,46 @@ function mettreAJourControles() {
  * (fichier Analyse : mêmes règles que l'Excel d'analyse_tickets.py).
  */
 function majControles_() {
-  var src = HtmlService.createHtmlOutputFromFile('Analyse').getContent().replace(/^\s*<script>/, '').replace(/<\/script>\s*$/, '');
-  var a = new Function(src + '\nreturn { analyser: analyser, controles: controles };')();
-  var NOW = new Date(), res = a.analyser(lireDonnees_(), NOW), c = a.controles(res, NOW);
-  ecrireOnglet_(ONGLET_INCOHERENCES, ['Gravité', 'N°', 'Statut', 'Problème', 'Détail', 'Technicien', 'Ville', 'Adresse'],
-    c.incoherences, function (l) { return COULEURS_GRAVITE[l[0]]; }, [100, 160, 100, 300, 480, 150, 160, 220]);
-  ecrireOnglet_(ONGLET_LIES, ['Groupe', 'Pourquoi liés', 'N°', 'Statut', 'Planifiée', 'Technicien', 'Créée', 'Ville', 'Adresse', 'Immeuble',
-    'Boîte(s)', 'Réf. client', 'Description'], c.lies, null, [60, 220, 160, 100, 120, 150, 120, 160, 220, 130, 170, 130, 420]);
-  ecrireOnglet_(ONGLET_PM, ['PM (Site)', 'Tickets ouverts', 'dont à planifier', 'Communes', 'Créés entre', 'Équipement', 'Tickets'],
-    c.pm, null, [160, 80, 80, 220, 190, 220, 600]);
-  ecrireOnglet_(ONGLET_SUITES, ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Pourquoi une suite', 'Ticket de suite', 'Compte-rendu du technicien', 'Rapport'],
-    c.suites, function (l) { return l[5] ? null : '#FFE699'; }, [120, 160, 170, 150, 220, 200, 480, 260]);
-  ecrireOnglet_(ONGLET_CLOTURES, c.clotures.entetes, c.clotures.lignes, function (l) { return l[10] === 'non' ? '#F8CBAD' : /^À suivre/.test(l[11]) ? '#FFE699' : null; },
-    [120, 160, 170, 150, 120, 120, 80, 120, 200, 120, 90, 200, 190, 150, 180, 480, 260, 480]);
-  ecrireOnglet_(ONGLET_STATS_BOITES, c.statsBoites.entetes, c.statsBoites.lignes, function (l) { return /^À suivre/.test(l[10]) ? '#FFE699' : null; },
-    [190, 150, 170, 90, 90, 90, 90, 90, 100, 100, 220, 240, 420]);
-  ecrireOnglet_(ONGLET_STATS_VILLES, c.statsVilles.entetes, c.statsVilles.lignes, function (l, i) { return i === 0 ? '#DDEBF7' : null; },
-    [220, 90, 90, 100, 90, 90, 90, 90, 90, 320, 280]);
-  ecrireOnglet_(ONGLET_STATS_SEMAINES, c.statsSemaines.entetes, c.statsSemaines.lignes, null, [130, 100, 100, 90, 110, 110, 110, 150, 150]);
+  var a = analyse_(), NOW = new Date(), res = a.analyser(lireDonnees_(), NOW), c = a.controles(res, NOW);
+  ongletsControle_(c).forEach(function (o) { ecrireOnglet_(o.nom, o.entetes, o.lignes, o.couleur, o.largeurs); });
   PropertiesService.getScriptProperties().setProperty('CONTROLES_LE', maintenant_());
   return { incoherences: c.incoherences.length, lies: c.lies.length, pm: c.pm.length, avertissements: res.avertissements };
+}
+
+/** Les fonctions du fichier Analyse (les mêmes que la carte), pour s'en servir côté serveur. */
+function analyse_() {
+  var src = HtmlService.createHtmlOutputFromFile('Analyse').getContent().replace(/^\s*<script>/, '').replace(/<\/script>\s*$/, '');
+  return new Function(src + '\nreturn { analyser: analyser, controles: controles, listesDuJour: listesDuJour };')();
+}
+
+/**
+ * Les onglets de contrôle, décrits une seule fois pour le Sheet et pour l'Excel du jour :
+ * nom, en-têtes, lignes, couleur de fond d'une ligne (ou rien) et largeur des colonnes en pixels.
+ */
+function ongletsControle_(c) {
+  // couleurs : on retrouve les colonnes par leur nom, pour qu'un ajout de colonne ne décale rien
+  var col = function (t, nom) { return t.entetes.indexOf(nom); };
+  var cGtr = col(c.clotures, 'Dans la GTR'), cRes = col(c.clotures, 'Résultat'), bRes = col(c.statsBoites, 'Dernier résultat');
+  return [
+    { nom: ONGLET_INCOHERENCES, entetes: ['Gravité', 'N°', 'Statut', 'Problème', 'Détail', 'Technicien', 'Ville', 'Adresse'], lignes: c.incoherences,
+      couleur: function (l) { return COULEURS_GRAVITE[l[0]]; }, largeurs: [100, 160, 100, 300, 480, 150, 160, 220] },
+    { nom: ONGLET_LIES, entetes: ['Groupe', 'Pourquoi liés', 'N°', 'Statut', 'Planifiée', 'Technicien', 'Créée', 'Ville', 'Adresse', 'Immeuble',
+      'Boîte(s)', 'Réf. client', 'Description'], lignes: c.lies, couleur: null, largeurs: [60, 220, 160, 100, 120, 150, 120, 160, 220, 130, 170, 130, 420] },
+    { nom: ONGLET_PM, entetes: ['PM (Site)', 'Tickets ouverts', 'dont à planifier', 'Communes', 'Créés entre', 'Équipement', 'Tickets'], lignes: c.pm,
+      couleur: null, largeurs: [160, 80, 80, 220, 190, 220, 600] },
+    { nom: ONGLET_SUITES, entetes: ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Pourquoi une suite', 'Ticket de suite', 'Compte-rendu du technicien', 'Rapport'],
+      lignes: c.suites, couleur: function (l) { return l[5] ? null : '#FFE699'; }, largeurs: [120, 160, 170, 150, 220, 200, 480, 260] },
+    // en gris : ce qui reste est chez l'opérateur (jarretière, brassage), pas une reprise pour nous
+    { nom: ONGLET_CLOTURES, entetes: c.clotures.entetes, lignes: c.clotures.lignes,
+      couleur: function (l) { return l[cGtr] === 'non' ? '#F8CBAD' : /^À suivre/.test(l[cRes]) ? '#FFE699' : /côté opérateur/.test(l[cRes]) ? '#EDEDED' : null; },
+      largeurs: [120, 160, 170, 150, 120, 120, 80, 120, 120, 200, 120, 90, 200, 190, 150, 180, 480, 260, 480, 320] },
+    { nom: ONGLET_STATS_BOITES, entetes: c.statsBoites.entetes, lignes: c.statsBoites.lignes,
+      couleur: function (l) { return /^À suivre/.test(l[bRes]) ? '#FFE699' : null; }, largeurs: [190, 150, 170, 90, 100, 90, 90, 90, 90, 100, 100, 220, 240, 420] },
+    { nom: ONGLET_STATS_VILLES, entetes: c.statsVilles.entetes, lignes: c.statsVilles.lignes,
+      couleur: function (l, i) { return i === 0 ? '#DDEBF7' : null; }, largeurs: [220, 90, 90, 100, 100, 90, 90, 90, 90, 90, 320, 280] },
+    { nom: ONGLET_STATS_SEMAINES, entetes: c.statsSemaines.entetes, lignes: c.statsSemaines.lignes, couleur: null,
+      largeurs: [130, 100, 100, 90, 110, 100, 110, 110, 150, 150] }
+  ];
 }
 
 function ecrireOnglet_(nom, entetes, lignes, couleur, largeurs) {
@@ -487,7 +694,7 @@ function ecrireOnglet_(nom, entetes, lignes, couleur, largeurs) {
  */
 function lireRapports_(max) {
   var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_FINS), nc = ENTETES_FINS.length;
-  if (f.getRange(1, 8).getDisplayValue() !== ENTETES_FINS[7]) f.getRange(1, 1, 1, nc).setValues([ENTETES_FINS]).setFontWeight('bold');
+  if (f.getRange(1, 1, 1, nc).getDisplayValues()[0].join('|') !== ENTETES_FINS.join('|')) f.getRange(1, 1, 1, nc).setValues([ENTETES_FINS]).setFontWeight('bold');
   var n = f.getLastRow() - 1, essais = 0, lus = 0, aPlacer = [], techs = null;
   if (n < 1) return 0;
   // le technicien d'un ticket, tant qu'il est encore dans l'export (ou vient d'en sortir) : le rapport ne le donne pas
@@ -503,9 +710,9 @@ function lireRapports_(max) {
   }
   var v = f.getRange(2, 1, n, nc).getDisplayValues();
   for (var i = n - 1; i >= 0 && essais < max; i--) {
-    var url = v[i][4], etat = v[i][7], ligne;
+    var url = v[i][4], etat = v[i][7], champs;
     if (!url || (etat && !/^erreur [12]$/.test(etat))) continue;
-    if (!/^https:\/\/([a-z0-9-]+\.)*praxedo\.com\//i.test(url)) ligne = ['lien refusé'];   // on n'ouvre que les liens de Praxedo
+    if (!/^https:\/\/([a-z0-9-]+\.)*praxedo\.com\//i.test(url)) champs = { 'Rapport lu': 'lien refusé' };   // on n'ouvre que les liens de Praxedo
     else {
       essais++;
       try {
@@ -513,17 +720,23 @@ function lireRapports_(max) {
         if (rep.getResponseCode() !== 200) throw new Error('réponse ' + rep.getResponseCode());
         var c = champsRapport_(texteDuPdf_(Uint8Array.from(rep.getContent())));
         var base = function (x) { return String(x).split('#')[0].toUpperCase(); };
-        if (!c.num && !c.debut && !c.resume) ligne = ['illisible'];
-        else if (c.num && base(c.num) !== base(v[i][1])) ligne = ['autre ticket'];
-        else { ligne = ['oui', c.debut, c.fin, c.duree, c.corrige, c.definitive, c.dommage, c.resume || c.actions, c.boites, c.pm, c.nature, c.cause, c.adresse, c.demande, c.etiquettes, c.autres]; lus++; if (c.adresse) aPlacer.push(c.adresse); }
+        if (!c.num && !c.debut && !c.resume) champs = { 'Rapport lu': 'illisible' };
+        else if (c.num && base(c.num) !== base(v[i][1])) champs = { 'Rapport lu': 'autre ticket' };
+        else {
+          champs = { 'Rapport lu': 'oui', 'Début': c.debut, 'Fin': c.fin, 'Durée': c.duree, 'Défaut corrigé': c.corrige, 'Réparation définitive': c.definitive,
+            'Dommage réseau': c.dommage, 'Compte-rendu du technicien': c.resume || c.actions, 'Boîte(s)': c.boites, 'PM (site)': c.pm, 'Nature du défaut': c.nature,
+            'Cause du défaut': c.cause, 'Adresse': c.adresse, 'Demande le': c.demande, 'Étiquettes GTR': c.etiquettes, 'Autres éléments du rapport': c.autres,
+            "Fin d'impact": c.finImpact };
+          lus++; if (c.adresse) aPlacer.push(c.adresse);
+        }
       } catch (err) {
         console.warn('Rapport ' + v[i][1] + ' : ' + err);
-        ligne = ['erreur ' + ((+String(etat).replace(/\D/g, '') || 0) + 1)];
+        champs = { 'Rapport lu': 'erreur ' + ((+String(etat).replace(/\D/g, '') || 0) + 1) };
       }
     }
-    while (ligne.length < nc - 7) ligne.push('');
-    ligne[nc - 8] = v[i][nc - 1] || technicien(v[i][1]);
-    f.getRange(i + 2, 8, 1, nc - 7).setNumberFormat('@').setValues([ligne.map(texte_)]);
+    champs['Technicien'] = v[i][ENTETES_FINS.indexOf('Technicien')] || technicien(v[i][1]);
+    // une valeur par colonne, de « Rapport lu » à la dernière, rangée par nom : ajouter une colonne ne décale rien
+    f.getRange(i + 2, 8, 1, nc - 7).setNumberFormat('@').setValues([ENTETES_FINS.slice(7).map(function (h) { return texte_(champs[h] || ''); })]);
   }
   if (aPlacer.length) try { geocoder_(aPlacer); } catch (err) { console.warn('Adresses des rapports : ' + err); }   // pour les boîtes sur la carte
   return lus;
@@ -710,10 +923,10 @@ function champsRapport_(t) {
   var md = /(?:^|\n)Description\n([\s\S]*)/.exec(coupe < 0 ? t : t.slice(0, coupe)), desc = md ? md[1] : '';
   // les autres réponses du rapport, gardées telles quelles dans une colonne (pas encore exploitées par la carte)
   var autres = [];
-  [["fin d'impact client", /date de fin d['’]impact[^\n?]*(?:\n[^\n?]*)?\?\s*(\d{2}\/\d{2}\/\d{4})/i, /heure de fin d['’]impact[^\n?]*(?:\n[^\n?]*)?\?\s*(\d{1,2}:\d{2})/i],
-   ['localisation du défaut', /Localisation du défaut[^\n]*\n([^\n]+)/i],
+  [['localisation du défaut', /Localisation du défaut[^\n]*\n([^\n]+)/i],
    ['plusieurs intervenants', /Plusieurs intervenants[\s\S]{0,60}?\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
    ['accès à une PTO', /accès à au moins\s+une PTO\s*\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
+   ['jarretière présente à l\'arrivée', /jarretière au\s+PM était-elle présente\s*\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
    ['coupleur de la jarretière', /coupleur la jarretière[\s\S]{0,40}?\?\s*([^\n]+)/i],
    ['validée par le NOC ou le Patrimoine', /validée par le\s+NOC ou le Patrimoine\s*\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
    ['matériel utilisé', /Du matériel[^\n?]{0,30}\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
@@ -723,6 +936,10 @@ function champsRapport_(t) {
     var v = reponse(x[1]), h = x[2] ? un(x[2]) : '';
     if (v) autres.push(x[0] + ' : ' + v + (h ? ' ' + h : ''));
   });
+  // fin d'impact client (côté opérateur, pour information : la GTR s'arrête à la fin de l'intervention). Date et heure.
+  var jourImpact = un(/date de fin d['’]impact[^\n?]*(?:\n[^\n?]*)?\?\s*(\d{2}\/\d{2}\/\d{4})/i);
+  var heureImpact = un(/heure de fin d['’]impact[^\n?]*(?:\n[^\n?]*)?\?\s*(\d{1,2}:\d{2})/i);
+  var finImpact = jourImpact && heureImpact ? jourImpact + ' ' + heureImpact : '';
   var otr = /OTR\s*\d+\s*J\s*OUVR[A-ZÉ]*/i.exec(desc);
   var etiquettes = (desc.slice(0, 250).match(/\[[^\]\n]{1,30}\]/g) || []).join('') + (otr ? ' GTR: ' + otr[0] : '');
   return {
@@ -739,7 +956,7 @@ function champsRapport_(t) {
     // la boîte où le technicien est intervenu (celle qu'il cite), sinon celle du ticket
     boites: (bTerrain.length ? bTerrain : boites(coupe < 0 ? t : t.slice(0, coupe))).join(', '),
     pm: un(/(?:^|\n)Site\n([^\n]+)/),
-    adresse: adresse, etiquettes: etiquettes, autres: autres.join(' · '),
+    adresse: adresse, etiquettes: etiquettes, autres: autres.join(' · '), finImpact: finImpact,
     nature: reponse(/Nature du défaut[^\n]*\n([^\n]+)/i),
     cause: reponse(/Cause du défaut[^\n]*\n([^\n]+)/i)
   };

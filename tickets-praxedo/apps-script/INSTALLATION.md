@@ -66,15 +66,18 @@ La carte demande un **code** à la première ouverture (gardé ensuite sur le t�
 
 Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte : l'import et les mises à jour ne marchent que pour toi, depuis le Sheet. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
 
-## Là où le lien est bloqué : le fichier « carte du jour »
+## Là où Google est bloqué : la carte et l'Excel du jour
 
-Sur les PC où la sécurité de l'entreprise bloque le lien de la carte, utilise le fichier « carte du jour » :
+Sur les PC où la sécurité de l'entreprise bloque le lien de la carte ou Google Sheets, utilise les **fichiers du jour** :
 
-1. Dans le Sheet : **Carte tickets → Fichier « carte du jour » (pour Teams)…**
-2. Clique **Télécharger Carte_du_jour_….html** (ou **Me l'envoyer aussi par mail** : il arrive en pièce jointe dans ton Gmail).
-3. Dépose le fichier dans Teams. Tes collègues le **téléchargent puis l'ouvrent** dans leur navigateur.
+1. Dans le Sheet : **Carte tickets → Fichiers du jour : carte + Excel (pour Teams)…**
+2. Clique **Télécharger Carte_du_jour_….html** et **Télécharger Tickets_du_jour_….xlsx**, ou **M'envoyer les deux par mail** : ils arrivent en pièces jointes dans ton Gmail.
+3. Dépose-les dans Teams. Tes collègues les **téléchargent puis les ouvrent** : la carte dans leur navigateur, l'Excel dans Excel.
 
-C'est la carte complète (zoom, fiches des tickets, couleurs, listes de contrôle), sans lien Google et sans code, mais c'est une **photo** : les données sont celles du moment où tu as fabriqué le fichier. Refais-le quand tu veux une version à jour. Les numéros de téléphone des descriptions y sont masqués. Il contient les adresses et les descriptions des tickets : ne le dépose que dans l'équipe.
+- **La carte** : la carte complète (zoom, fiches des tickets, couleurs, listes de contrôle).
+- **L'Excel** : un onglet **Résumé** avec les chiffres du jour, **À planifier** (par priorité, avec la GTR et l'intervention planifiée à côté), **Justifiés** (qui relancer et quand), puis les mêmes onglets que le Sheet : Suites à prévoir, Incohérences, Tickets liés, PM chargés, Clôtures, Stats boîtes, villes et semaines. Couleurs, filtres et liens « rapport » cliquables compris.
+
+Pas de lien Google ni de code, mais ce sont des **photos** : les données sont celles du moment où tu as fabriqué les fichiers. Refais-les quand tu veux une version à jour. Les numéros de téléphone y sont masqués. Ils contiennent les adresses et les descriptions des tickets : ne les dépose que dans l'équipe.
 
 ## Les rapports d'intervention, le bilan et les graphiques
 
@@ -82,9 +85,9 @@ Chaque mail « [FIN INTERVENTION] » contient un lien vers le rapport Praxedo (u
 
 Avec ces rapports, le Sheet tient à jour (sur les 90 derniers jours) :
 
-- **Suites à prévoir** : les clôtures en provisoire, non corrigées ou avec un dommage signalé, et leur ticket de suite quand il existe (en jaune : pas encore de ticket de suite).
-- **Clôtures** : une ligne par intervention clôturée, avec la durée, la GTR respectée ou non (de la date de la demande à la fin de l'intervention) et le résultat.
-- **Stats boîtes**, **Stats villes**, **Stats semaines** : où on intervient le plus, le temps passé, les provisoires, la part de GTR respectées.
+- **Suites à prévoir** : les clôtures en provisoire, non corrigées ou avec un dommage signalé, et leur ticket de suite quand il existe (en jaune : pas encore de ticket de suite). Un défaut non corrigé dont le reste est **chez l'opérateur** n'en fait pas partie : jarretière absente au PM à l'arrivée, ou compte-rendu qui parle de jarretière ou de brassage et de l'opérateur (OC, FAI, Free, SFR, Bouygues, Orange…).
+- **Clôtures** : une ligne par intervention clôturée, avec la durée, la GTR respectée ou non (de la date de la demande à la fin de l'intervention ; la fin d'impact client, côté opérateur, est notée pour information) et le résultat (en gris : « reste côté opérateur (jarretière, brassage) », ce n'est pas une reprise pour nous). La colonne « À vérifier » signale un retour dans une boîte sous 30 jours, ou une fin d'impact notée avant l'arrivée du technicien.
+- **Stats boîtes**, **Stats villes**, **Stats semaines** : où on intervient le plus, les **retours sous 30 jours** (une intervention dans une boîte déjà visitée moins de 30 jours avant), le temps passé, les provisoires, la part de GTR respectées. Sans le nombre de prises, ce sont des nombres d'interventions, pas des taux de panne.
 
 Sur la carte (conduite d'activité) : les **chiffres clés** en haut, les **boîtes à répétition** (un anneau avec le nombre d'interventions, orange si la dernière réparation est à reprendre ; un clic donne l'historique et les rapports), le bouton **Bilan en graphiques** (clôtures par semaine, communes et boîtes où on intervient le plus, avec le choix de la période) et, dans **Listes de contrôle**, les onglets Suites à prévoir, Clôtures, Boîtes et Villes. La fiche d'un ticket donne ses **tickets liés** (un trait les relie quand la fiche est ouverte), l'intervention d'avant avec son rapport, et ce qu'on sait déjà de sa boîte.
 
@@ -121,5 +124,7 @@ Pour un vrai fichier Excel (à envoyer, par exemple) : **Fichier → Télécharg
 - **Carte tickets → Lire les mails maintenant** : pour ne pas attendre les 5 minutes.
 
 ## Mettre à jour le code plus tard
+
+Le Sheet et son code sont dans ton compte Google, pas sur un PC : depuis n'importe quel ordinateur, connecte-toi à ce compte (celui qui reçoit les mails FIN INTERVENTION). Le code se retrouve dans le Sheet (**Extensions → Apps Script**) ou directement sur **script.google.com → Mes projets**. Le bon projet est celui dont la page **Exécutions** montre « lireMails » toutes les 5 minutes : renomme-le **Carte tickets** pour le retrouver facilement.
 
 Colle le nouveau code, puis **Déployer → Gérer les déploiements** → crayon → **Version : Nouvelle version** → **Déployer**. L'URL ne change pas.
