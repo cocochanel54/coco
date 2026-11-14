@@ -31,6 +31,15 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 .lien{border:0;background:none;font:inherit;color:#555;cursor:pointer;padding:0;text-decoration:underline}
 #plier{float:right;text-decoration:none;padding-left:8px}
 #erreur{color:#b00;font-weight:600}
+/* chiffres clés, en haut de la carte */
+#kpi{position:absolute;z-index:1000;top:10px;left:56px;display:flex;flex-wrap:wrap;gap:8px;max-width:calc(100% - 380px);pointer-events:none}
+#kpi div{background:#fff;border-radius:8px;box-shadow:0 1px 6px #0003;padding:6px 12px 7px;min-width:74px;border-top:4px solid #8b939c}
+#kpi b{display:block;font-size:22px;line-height:1.15;font-variant-numeric:tabular-nums}
+#kpi span{display:block;font-size:11.5px;color:#444;white-space:nowrap}
+#kpi small{display:block;font-size:10.5px;color:#777;white-space:nowrap}
+/* nombre d'interventions au centre d'une boîte à répétition */
+.leaflet-tooltip.nbBoite{background:none;border:0;box-shadow:none;font-weight:700;font-size:12px;color:#22264f;padding:0}
+.leaflet-tooltip.nbBoite::before{display:none}
 #avert{background:#fff4e0;border:1px solid #f0c27a;border-radius:6px;padding:6px 8px;margin:6px 0;font-size:12.5px;color:#6b4300}
 #avert p{margin:0 0 4px}#avert p:last-child{margin:0}
 .bouton{display:block;width:100%;margin:8px 0 2px;padding:7px 8px;font:inherit;font-weight:600;border:0;border-radius:6px;background:#1f4e78;color:#fff;cursor:pointer}
@@ -57,11 +66,14 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 #controles tr.cliquable{cursor:pointer}#controles tr.cliquable:hover td{outline:1px solid #8aa}
 .g1{background:#f8cbad}.g2{background:#ffe699}.g3{background:#ddebf7}.g4{background:#ededed}
 @media (max-width:760px){#controles{width:auto;right:10px;max-height:50%}}
-@media (max-width:560px){.leg{top:auto;bottom:10px;left:10px;right:10px;width:auto;max-height:42%}#controles{top:10px;bottom:auto;max-height:45%}}
+@media (max-width:900px){#kpi{max-width:calc(100% - 66px)}#kpi .plus{display:none}}
+@media (max-width:560px){.leg{top:auto;bottom:10px;left:10px;right:10px;width:auto;max-height:42%}#controles{top:70px;bottom:auto;max-height:45%}
+  #kpi{gap:5px}#kpi div{padding:4px 8px 5px;min-width:56px}#kpi b{font-size:17px}#kpi span{font-size:10.5px}#kpi small{display:none}}
 </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="kpi" hidden aria-label="Chiffres clés"></div>
 <div id="acces">
   <form id="formAcces">
     <h1>Carte des tickets</h1>
@@ -76,6 +88,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <small id="etat">Chargement…</small><div id="erreur"></div><div id="avert" hidden></div>
 <div id="corps">
 <label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé aujourd'hui <b id="nb-termine"></b></label>
+<label class="sous"><span class="dot" style="background:#2e9e5b;border:3px solid #e67e22;width:7px;height:7px"></span>dont à suivre : non corrigé, provisoire ou dommage <b id="nb-aSuivre"></b></label>
 <label><input type="checkbox" data-k="nouveau" checked><span class="dot" style="background:#8e44ad"></span>Nouveau (moins de 24 h) <b id="nb-nouveau"></b></label>
 <label><input type="checkbox" data-k="justifie" checked><span class="dot" style="background:#8b939c"></span>Justifié / en attente <b id="nb-justifie"></b></label>
 <label class="sous"><span class="dot" style="background:#8b939c;border:3px solid #e67e22;width:7px;height:7px"></span>dont à relancer ou à vérifier <b id="nb-relance"></b></label>
@@ -84,7 +97,8 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <label><input type="checkbox" data-k="aplanifier" checked><span class="dot" style="background:#ffd43b"></span>À planifier <b id="nb-aplanifier"></b></label>
 <label><input type="checkbox" data-k="planifie" checked><span class="dot" style="background:#1f77b4"></span>Déjà planifié <b id="nb-planifie"></b></label>
 <label class="sous"><span class="dot" style="background:#1f77b4;border:3px solid #d62728;width:7px;height:7px"></span>dont GTR KO <b id="nb-planifieKo"></b></label>
-<small>Contour rouge : GTR KO (ou à moins de 48 h pour un nouveau). Trait pointillé : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée (rouge ou orange : GTR KO ou bientôt KO, violet : nouveau). Cercle vert : technicien qui vient de clôturer (moins d'1 h), avec les tickets à planifier à moins de 1 km.</small>
+<label><input type="checkbox" data-k="boites" checked><span class="dot" style="background:#e6e7f5;border:3px solid #3b3f8f;width:7px;height:7px"></span>Boîtes à répétition ou à reprendre <b id="nb-boites"></b></label>
+<small>Anneau avec un nombre : boîte où on est intervenu plusieurs fois (orange : dernière réparation provisoire ou non corrigée). Contour rouge : GTR KO (ou à moins de 48 h pour un nouveau). Trait pointillé : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée (rouge ou orange : GTR KO ou bientôt KO, violet : nouveau). Cercle vert : technicien qui vient de clôturer (moins d'1 h), avec les tickets à planifier à moins de 1 km.</small>
 <div id="blocMoi" hidden><h2>Mes interventions</h2>
   <label for="moi" style="cursor:default">Mon nom dans Praxedo</label>
   <select id="moi"><option value="">— choisir —</option></select>
@@ -99,6 +113,10 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
     <button class="onglet" type="button" data-o="incoherences" aria-selected="true">Incohérences</button>
     <button class="onglet" type="button" data-o="lies" aria-selected="false">Tickets liés</button>
     <button class="onglet" type="button" data-o="pm" aria-selected="false">PM chargés</button>
+    <button class="onglet" type="button" data-o="suites" aria-selected="false">Suites à prévoir</button>
+    <button class="onglet" type="button" data-o="clotures" aria-selected="false">Clôtures</button>
+    <button class="onglet" type="button" data-o="boites" aria-selected="false">Boîtes</button>
+    <button class="onglet" type="button" data-o="villes" aria-selected="false">Villes</button>
     <label for="filtreGravite">Gravité</label>
     <select id="filtreGravite"><option value="">Toutes</option><option>1 - Urgent</option><option>2 - Important</option><option>3 - À vérifier</option><option>4 - Info</option></select>
     <button class="lien fermer" type="button" id="fermerControles">Fermer</button>
@@ -108,7 +126,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <?!= inclure_('Analyse') ?>
 <script>
 var C = {termine: '#2e9e5b', nouveau: '#8e44ad', justifie: '#8b939c', retard: '#d62728', bientot: '#ff7f0e', aplanifier: '#ffd43b', planifie: '#1f77b4'}, RELANCE = '#e67e22';
-var map = L.map('map'), premier = true, marqueurs = {}, dernier = null, role = null, ongletCtrl = 'incoherences', minuterie = null;
+var map = L.map('map'), premier = true, marqueurs = {}, marqueursBoites = {}, dernier = null, role = null, ongletCtrl = 'incoherences', minuterie = null;
 function lire(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
 function ecrire(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) { /* stockage indisponible */ } }
 var code = lire('carteCode');
@@ -119,7 +137,7 @@ L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0
   {maxZoom: 19, attribution: '&copy; <a href="https://www.ign.fr/">IGN</a> Plan IGN'}).addTo(map);
 map.setView([48.69, 6.18], 11);
 var calques = {};
-['planifie', 'termine', 'justifie', 'aplanifier', 'bientot', 'retard', 'nouveau'].forEach(function (k) { calques[k] = L.layerGroup().addTo(map); });
+['boites', 'planifie', 'termine', 'justifie', 'aplanifier', 'bientot', 'retard', 'nouveau'].forEach(function (k) { calques[k] = L.layerGroup().addTo(map); });
 document.querySelectorAll('.leg input[data-k]').forEach(function (i) {
   i.onchange = function () { i.checked ? calques[i.dataset.k].addTo(map) : calques[i.dataset.k].remove(); };
 });
@@ -127,6 +145,30 @@ var plier = document.getElementById('plier'), corps = document.getElementById('c
 plier.onclick = function () { corps.hidden = !corps.hidden; plier.textContent = corps.hidden ? 'Afficher' : 'Masquer'; plier.setAttribute('aria-expanded', String(!corps.hidden)); };
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
 function heure(iso) { return iso ? fd(new Date(iso)) : '—'; }
+// ce que dit le rapport d'intervention lu (horaires réels, résultat, compte-rendu), pour une fiche
+function texteRapport(f, avecResume) {
+  if (!f || f.lu !== 'oui') return '';
+  var m = motifsSuite(f), h = '';
+  if (f.debut) h += '<br><small>Sur place : ' + esc(f.debut.slice(11)) + ' → ' + esc(f.fin.slice(0, 10) === f.debut.slice(0, 10) ? f.fin.slice(11) : f.fin) + (f.duree ? ' (' + esc(f.duree) + ')' : '') + '</small>';
+  if (m.length) h += '<br><b style="color:#a35208">À suivre : ' + esc(m.join(', ')) + '</b>';
+  else if (f.corrige || f.definitive) h += '<br><small>' + esc([f.corrige ? 'Défaut corrigé : ' + f.corrige.toLowerCase() : '', f.definitive ? 'réparation définitive : ' + f.definitive.toLowerCase() : ''].filter(function (x) { return x; }).join(' · ')) + '</small>';
+  if (avecResume && f.resume) h += '<br><small><b>Compte-rendu :</b> ' + esc(court(f.resume, 320)) + '</small>';
+  return h;
+}
+// à l'ouverture d'une fiche : un trait vers chaque ticket lié, et un anneau autour d'eux
+var liensDe = {}, calqueLiens = L.layerGroup().addTo(map);
+map.on('popupopen', function (e) {
+  calqueLiens.clearLayers();
+  var src = e.popup._source, lies = src && liensDe[src.numTicket];
+  if (!lies) return;
+  lies.forEach(function (num) {
+    var m = marqueurs[num];
+    if (!m) return;
+    L.polyline([src.getLatLng(), m.getLatLng()], {color: '#111', weight: 2, dashArray: '2 6', interactive: false}).addTo(calqueLiens);
+    L.circleMarker(m.getLatLng(), {radius: 14, color: '#111', weight: 2, fill: false, interactive: false}).addTo(calqueLiens);
+  });
+});
+map.on('popupclose', function () { calqueLiens.clearLayers(); });
 // lignes « n° · distance · GTR » d'une fiche, pour les tickets autour d'un point
 function listeAutour(l) {
   return '<ul class="autour">' + l.slice(0, 8).map(function (x) {
@@ -174,26 +216,58 @@ document.querySelectorAll('#controles .onglet').forEach(function (b) {
 filtreG.onchange = function () { tableauControles(); };
 function tableauControles() {
   if (!dernier || panneau.hidden) return;
-  var c = controles(dernier.res, dernier.NOW), defs = {
-    incoherences: [['Gravité', 'N°', 'Statut', 'Problème', 'Détail', 'Technicien', 'Ville'], c.incoherences.filter(function (l) { return !filtreG.value || l[0] === filtreG.value; }), 1],
-    lies: [['Groupe', 'Pourquoi liés', 'N°', 'Statut', 'Planifiée', 'Technicien', 'Ville', 'Adresse'], c.lies.map(function (l) { return l.slice(0, 9).filter(function (_, i) { return i !== 6; }); }), 2],
-    pm: [['PM (Site)', 'Tickets ouverts', 'dont à planifier', 'Communes', 'Créés entre', 'Équipement', 'Tickets'], c.pm, -1]
+  var c = dernier.ctrl, choisir = function (t, cols) { return [cols.map(function (i) { return t.entetes[i]; }), t.lignes.map(function (l) { return cols.map(function (i) { return l[i]; }); })]; };
+  var clo = choisir(c.clotures, [0, 1, 2, 3, 6, 8, 10, 11, 12]), boi = choisir(c.statsBoites, [0, 1, 2, 3, 4, 5, 6, 7, 9, 10]), vil = choisir(c.statsVilles, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  // [en-têtes, lignes, colonne du n° de ticket (ou -1), colonne de la boîte (ou -1)]
+  var defs = {
+    incoherences: [['Gravité', 'N°', 'Statut', 'Problème', 'Détail', 'Technicien', 'Ville'], c.incoherences.filter(function (l) { return !filtreG.value || l[0] === filtreG.value; }), 1, -1],
+    lies: [['Groupe', 'Pourquoi liés', 'N°', 'Statut', 'Planifiée', 'Technicien', 'Ville', 'Adresse'], c.lies.map(function (l) { return l.slice(0, 9).filter(function (_, i) { return i !== 6; }); }), 2, -1],
+    pm: [['PM (Site)', 'Tickets ouverts', 'dont à planifier', 'Communes', 'Créés entre', 'Équipement', 'Tickets'], c.pm, -1, -1],
+    suites: [['Clôturée le', 'N°', 'Commune', 'Technicien', 'Pourquoi une suite', 'Ticket de suite', 'Compte-rendu du technicien'], c.suites, 1, -1],
+    clotures: [clo[0], clo[1], 1, -1], boites: [boi[0], boi[1], -1, 0], villes: [vil[0], vil[1], -1, -1]
   }[ongletCtrl];
   var h = '<table><thead><tr>' + defs[0].map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
-  defs[1].forEach(function (l) {
-    var num = defs[2] >= 0 ? l[defs[2]] : '', g = ongletCtrl === 'incoherences' ? ' g' + l[0].charAt(0) : '';
-    h += '<tr class="' + (num && marqueurs[num] ? 'cliquable' : '') + g + '" data-num="' + esc(num) + '">' + l.slice(0, defs[0].length).map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>';
+  defs[1].forEach(function (l, i) {
+    var num = defs[2] >= 0 ? l[defs[2]] : '', boite = defs[3] >= 0 ? l[defs[3]] : '', g = '';
+    if (ongletCtrl === 'incoherences') g = ' g' + l[0].charAt(0);
+    else if (ongletCtrl === 'suites' && !l[5]) g = ' g2';
+    else if (ongletCtrl === 'clotures') g = l[6] === 'non' ? ' g1' : /^À suivre/.test(l[7]) ? ' g2' : '';
+    else if (ongletCtrl === 'boites' && (l[4] || l[5])) g = ' g2';
+    else if (ongletCtrl === 'villes' && i === 0) g = ' g3';
+    if (ongletCtrl === 'suites' && !marqueurs[num]) num = (l[5].match(/^[^ ,]+/) || [''])[0];  // intervention sortie de la carte : on montre son ticket de suite
+    var clic = (num && marqueurs[num]) || (boite && marqueursBoites[boite]);
+    h += '<tr class="' + (clic ? 'cliquable' : '') + g + '" data-num="' + esc(num) + '" data-boite="' + esc(boite) + '">' + l.slice(0, defs[0].length).map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>';
   });
-  h += '</tbody></table>' + (defs[1].length ? '' : '<p style="padding:10px">Rien à signaler.</p>');
+  h += '</tbody></table>' + (defs[1].length ? '' : '<p style="padding:10px">' + (/clotures|boites|villes/.test(ongletCtrl) ? 'Aucune clôture reçue pour l\'instant : ces tableaux se remplissent avec les mails de fin d\'intervention.' : 'Rien à signaler.') + '</p>');
   var t = document.getElementById('tableau');
   t.innerHTML = h;
-  t.querySelectorAll('tr.cliquable').forEach(function (tr) { tr.onclick = function () { aller(tr.dataset.num); }; });
+  t.querySelectorAll('tr.cliquable').forEach(function (tr) {
+    tr.onclick = function () {
+      var m = marqueursBoites[tr.dataset.boite];
+      if (tr.dataset.num && marqueurs[tr.dataset.num]) aller(tr.dataset.num);
+      else if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); }
+    };
+  });
+}
+
+// la fiche d'une boîte : son historique d'interventions
+function ficheBoite(h) {
+  return '<div class="pop"><b>Boîte ' + esc(h.boite) + '</b><br>' + esc([h.pm ? 'PM ' + h.pm : '', h.commune].filter(function (x) { return x; }).join(' · ')) +
+    '<br><b>' + h.n + ' intervention' + (h.n > 1 ? 's' : '') + '</b> depuis le ' + esc(h.premier) + (h.temps ? ' · ' + esc(h.temps) + ' sur place au total' : '') +
+    (h.prov || h.nonCorr ? '<br><b style="color:#a35208">' + [h.prov ? h.prov + ' provisoire' + (h.prov > 1 ? 's' : '') : '', h.nonCorr ? h.nonCorr + ' non corrigée' + (h.nonCorr > 1 ? 's' : '') : ''].filter(function (x) { return x; }).join(', ') + '</b>' : '') +
+    (h.causes ? '<br><small>Causes : ' + esc(h.causes) + '</small>' : '') +
+    '<ul class="autour">' + h.tickets.map(function (x) {
+      return '<li>' + esc(x.recu.slice(0, 10)) + ' · ' + (marqueurs[x.num] ? '<a href="#" data-aller="' + esc(x.num) + '">' + esc(x.num) + '</a>' : esc(x.num)) + (x.duree ? ' · ' + esc(x.duree) : '') +
+        (x.resultat ? ' · ' + (/^À suivre/.test(x.resultat) ? '<b style="color:#a35208">' + esc(x.resultat) + '</b>' : esc(x.resultat)) : '') +
+        (x.rapport ? ' · <a href="' + esc(x.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '') + '</li>';
+    }).join('') + '</ul>' + (h.n > h.tickets.length ? '<small>… et ' + (h.n - h.tickets.length) + ' plus anciennes</small>' : '') + '</div>';
 }
 
 // ---------- carte ----------
 function afficher(d) {
   var NOW = new Date(), res = analyser(d, NOW), nb = {};
-  dernier = {d: d, res: res, NOW: NOW};
+  var ctrl = controles(res, NOW);
+  dernier = {d: d, res: res, NOW: NOW, ctrl: ctrl};
   role = d.role;
   acces.hidden = true; msgAcces.textContent = '';
   if (!PHOTO) ecrire('carteCode', code);
@@ -218,24 +292,39 @@ function afficher(d) {
 
   Object.keys(calques).forEach(function (k) { calques[k].clearLayers(); nb[k] = 0; });
   marqueurs = {};
-  var pts = [], nbPlanifieKo = 0;
+  var pts = [], nbPlanifieKo = 0, nbASuivre = 0;
+  liensDe = {}; marqueursBoites = {};
+  // les boîtes où on est intervenu au moins 2 fois, ou dont la dernière réparation est à reprendre : un anneau avec le nombre
+  Object.keys(res.stats.histoBoite).forEach(function (b) {
+    var hb = res.stats.histoBoite[b];
+    if (!hb.geo || !(hb.n >= 2 || hb.aSuivre)) return;
+    nb.boites++;
+    var coul = hb.aSuivre ? RELANCE : '#3b3f8f';
+    var mb = L.circleMarker([hb.geo.lat, hb.geo.lon], {radius: 13 + 2 * Math.min(hb.n, 6), color: coul, weight: 3, fillColor: coul, fillOpacity: .10});
+    mb.bindTooltip(String(hb.n), {permanent: true, direction: 'center', className: 'nbBoite'});
+    mb.bindPopup(function () { return ficheBoite(hb); }, {maxWidth: 340});
+    mb.addTo(calques.boites);
+    marqueursBoites[b] = mb;
+  });
   res.tickets.forEach(function (t) {
     if (!t.geo || t.categorie === 'annule') return;
     var k = t.categorie, relance = k === 'justifie' && t.suivi && t.suivi.due, mien = moi && t.tech === moi;
     var rouge = (k === 'nouveau' && t.prio === 1) || (k === 'planifie' && t.gtrKo);  // contour rouge : GTR KO
+    var aSuivre = k === 'termine' && t.suiteMotifs && t.suiteMotifs.length > 0;        // contour orange : le rapport appelle une suite
+    if (aSuivre) nbASuivre++;
     nb[k]++;
     if (k === 'planifie' && t.gtrKo) nbPlanifieKo++;
     pts.push([t.geo.lat, t.geo.lon]);
     var m = L.circleMarker([t.geo.lat, t.geo.lon], {radius: mien || t.autour ? 9 : (k === 'planifie' || k === 'termine' ? 6 : (k === 'nouveau' ? 10 : 8)),
-      color: mien ? '#000' : relance ? RELANCE : rouge ? C.retard : '#222',
-      weight: mien ? 4 : relance || rouge ? 3 : 1, fillColor: C[k], fillOpacity: .92});
+      color: mien ? '#000' : relance || aSuivre ? RELANCE : rouge ? C.retard : '#222',
+      weight: mien ? 4 : relance || aSuivre || rouge ? 3 : 1, fillColor: C[k], fillOpacity: .92});
     var html = '<div class="pop"><b>' + esc(t.num) + '</b>' + (k === 'nouveau' ? ' <span class="foulee">· nouveau</span>' : '') +
       (t.prio && t.aPlanifier ? ' <small>· priorité ' + t.prio + '</small>' : '') +
       '<br>' + esc(t.statut) + (t.planif && !t.deplanifie ? ' · ' + esc(fd(t.planif)) : '') + (t.tech ? ' · ' + esc(t.tech) : '') +
       '<br>' + esc(t.adresse) + ', ' + esc(t.ville) +
       '<br><small>Créé le ' + esc(t.creee ? fd(t.creee, t.creeeSource !== 'numero') : '—') +
       (t.creeeSource === 'numero' ? ' (estimé d\'après le n°)' : t.creeeSource === 'mail' ? ' (mail de création)' : '') + ' · PM ' + esc(t.site) + ' · ' + esc(t.regle) + (t.echeance ? ' → ' + esc(fd(t.echeance)) : '') + '</small>';
-    if (t.fin) html += '<br><span class="fin">Mail de fin reçu le ' + esc(t.fin.recu) + '</span>' + (t.fin.rapport ? ' · <a href="' + esc(t.fin.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '');
+    if (t.fin) html += '<br><span class="fin">Mail de fin reçu le ' + esc(t.fin.recu) + '</span>' + (t.fin.rapport ? ' · <a href="' + esc(t.fin.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '') + texteRapport(t.fin, true);
     else if (t.sorti) html += '<br><span class="fin">Sorti de l\'export le ' + esc(fd(t.sorti)) + ' : terminé ou annulé</span>';
     else if (t.finStatut) html += '<br><span class="fin">' + esc(t.statut) + (t.finLe ? ' le ' + esc(fd(t.finLe)) : '') + '</span>';
     if (t.autour) {  // vient de clôturer : cercle de 1 km et tickets à planifier autour, GTR KO d'abord
@@ -248,6 +337,26 @@ function afficher(d) {
     if (t.justif) html += '<br><b style="color:#4a535c">Justifié · ' + esc(t.justif) + '</b>';
     if (t.suivi) html += '<br><span style="color:' + (t.suivi.due ? '#a35208' : '#4a535c') + ';font-weight:600">' + (t.suivi.due ? 'À faire maintenant : ' : 'Suivi : ') + esc(t.suivi.action) + '</span>' +
       (t.suivi.prochaine ? '<br><small>' + (t.suivi.due ? 'Relance prévue le ' : 'Prochaine relance le ') + esc(fd(t.suivi.prochaine, false)) + ' · compté depuis ' + esc(t.suivi.base) + '</small>' : '');
+    // l'intervention d'avant (« Suite à l'intervention BB-… ») et son rapport, si son mail de fin a été reçu
+    (t.precedents || []).forEach(function (pr) {
+      html += '<br><b>Suite de ' + esc(pr.fin ? pr.fin.num : pr.num) + '</b>' + (pr.fin ? ' · clôturée le ' + esc(pr.fin.recu) +
+        (pr.fin.rapport ? ' · <a href="' + esc(pr.fin.rapport) + '" target="_blank" rel="noopener">rapport</a>' : '') + texteRapport(pr.fin, true) : '');
+    });
+    // les tickets liés à celui-ci : même immeuble, même boîte, même PTO, même référence client, suite de…
+    // ce qu'on sait déjà des boîtes de ce ticket : les interventions clôturées dessus
+    if (!t.termine) (t.boites || []).forEach(function (b) {
+      var hb = res.stats.histoBoite[b];
+      if (hb) html += '<br><small><b>Boîte ' + esc(b) + '</b> : déjà ' + hb.n + ' intervention' + (hb.n > 1 ? 's' : '') + ', la dernière le ' + esc(hb.dernier) +
+        (hb.resultat ? ' (' + esc(hb.resultat.replace(/^À suivre : /, '')) + ')' : '') + (hb.tickets[0] && hb.tickets[0].rapport ? ' · <a href="' + esc(hb.tickets[0].rapport) + '" target="_blank" rel="noopener">rapport</a>' : '') + '</small>';
+    });
+    var gr = ctrl.groupeDe[t.num];
+    if (gr && gr.membres.length) {
+      liensDe[t.num] = gr.membres.map(function (x) { return x.num; });
+      html += '<br><b>Tickets liés</b> (' + esc(gr.raisons) + ') :<ul class="autour">' + gr.membres.slice(0, 8).map(function (x) {
+        return '<li><a href="#" data-aller="' + esc(x.num) + '">' + esc(x.num) + '</a> · ' + esc(x.statut) + (x.planif ? ' ' + esc(x.planif) : '') + (x.tech ? ' · ' + esc(x.tech) : '') +
+          (x.ko ? ' · <b style="color:#b00">GTR KO</b>' : '') + '</li>';
+      }).join('') + '</ul>' + (gr.membres.length > 8 ? '<small>… et ' + (gr.membres.length - 8) + ' autres</small>' : '');
+    }
     if (t.caser) html += '<br><span class="foulee">À programmer avec ' + esc(t.caser.n) + ' le ' + esc(t.caser.p) + ' · ' + esc(t.caser.tech) + ' · à ' + esc(t.caser.d) + '</span>';
     // mêmes mots que sur le terrain : « GTR KO depuis 9 j », « GTR KO dans 20 h »
     var al = (t.alertes || []).map(function (x) {
@@ -256,6 +365,7 @@ function afficher(d) {
     if (al.length) html += '<br><b style="color:#b00">' + esc(al.join(' · ')) + '</b>';
     html += '<br><small>' + esc(court(t.desc, 220)) + '</small></div>';
     m.bindPopup(html, {maxWidth: 320});
+    m.numTicket = t.num;
     m.addTo(calques[k]);
     marqueurs[t.num] = m;
     if (k === 'nouveau' && t.caser) L.polyline([[t.geo.lat, t.geo.lon], [t.caser.lat, t.caser.lon]], {color: C.nouveau, weight: 3, dashArray: '6 5'}).addTo(calques.nouveau);
@@ -263,8 +373,21 @@ function afficher(d) {
   });
   Object.keys(nb).forEach(function (k) { document.getElementById('nb-' + k).textContent = '(' + nb[k] + ')'; });
   document.getElementById('nb-planifieKo').textContent = '(' + nbPlanifieKo + ')';
+  document.getElementById('nb-aSuivre').textContent = '(' + nbASuivre + ')';
+  // chiffres clés
+  var k = res.stats.kpi, ko = 0, bientotKo = 0, aPlan = 0;
+  res.tickets.forEach(function (t) { if (t.aPlanifier) aPlan++; if (t.urgent) { if (t.rang === 0) ko++; else bientotKo++; } });
+  var cases = [[aPlan, 'à planifier', '#ffb300'], [ko, 'GTR KO', C.retard], [bientotKo, 'GTR dans moins de 48 h', C.bientot], [k.aujourdhui, "clôturées aujourd'hui", C.termine]];
+  if (k.gtrN) cases.push([k.pctGtr, 'GTR respectée', k.gtrOk / k.gtrN >= .8 ? C.termine : RELANCE, k.gtrOk + ' sur ' + k.gtrN + ' clôtures', 1]);
+  if (k.tempsMoyen) cases.push([k.tempsMoyen, 'en moyenne sur place', '#3b3f8f', k.clotures + ' clôtures depuis le ' + k.depuis, 1]);
+  if (k.avecReponse) cases.push([k.pctDefinitif, 'réparées en définitif', k.definitives / k.avecReponse >= .8 ? C.termine : RELANCE, k.definitives + ' sur ' + k.avecReponse, 1]);
+  var bandeau = document.getElementById('kpi');
+  bandeau.innerHTML = cases.map(function (c) {
+    return '<div' + (c[4] ? ' class="plus"' : '') + ' style="border-top-color:' + c[2] + '"><b>' + esc(c[0]) + '</b><span>' + esc(c[1]) + '</span>' + (c[3] ? '<small>' + esc(c[3]) + '</small>' : '') + '</div>';
+  }).join('');
+  bandeau.hidden = false;
   document.getElementById('nb-relance').textContent = '(' + res.relances.length + ')';
-  if (role === 'ca') document.getElementById('ouvrirControles').textContent = 'Listes de contrôle (' + controles(res, NOW).incoherences.length + ' incohérences)';
+  if (role === 'ca') document.getElementById('ouvrirControles').textContent = 'Listes de contrôle (' + ctrl.incoherences.length + ' incohérences)';
 
   var listes = document.getElementById('listes');
   listes.innerHTML = '';
@@ -307,7 +430,8 @@ function afficher(d) {
     return 'Il y a ' + t.depuisMin + ' min' + (t.tech ? ' · ' + t.tech : '') + ' · ' + (t.autour.length ? t.autour.length + ' ticket' + (t.autour.length > 1 ? 's' : '') + ' à planifier à moins de ' + fdist(REGLAGES.CASER_M) + (n ? ', dont ' + n + ' GTR KO ou bientôt KO' : '') : 'aucun ticket à planifier autour');
   });
   liste("Fins d'intervention aujourd'hui", '#1d7444', 'termine', res.terminesAujourdhui, function (t) {
-    return (t.fin ? 'Mail reçu le ' + t.fin.recu : t.sorti ? "Sorti de l'export le " + fd(t.sorti) + ' (terminé ou annulé)' : t.statut + ' le ' + fd(t.finLe)) + (t.tech ? ' · ' + t.tech : '');
+    return (t.fin ? 'Mail reçu le ' + t.fin.recu : t.sorti ? "Sorti de l'export le " + fd(t.sorti) + ' (terminé ou annulé)' : t.statut + ' le ' + fd(t.finLe)) + (t.tech ? ' · ' + t.tech : '') +
+      (t.fin && t.fin.duree ? ' · ' + t.fin.duree + ' sur place' : '') + (t.suiteMotifs && t.suiteMotifs.length ? ' · À SUIVRE : ' + t.suiteMotifs.join(', ') : '');
   });
   liste('À relancer / à vérifier', '#a35208', 'relance', res.relances, function (t) { return t.suivi.action; });
   liste('Nouveaux à programmer', '#6c2e91', 'nouveau', res.nouveaux, function (t) {

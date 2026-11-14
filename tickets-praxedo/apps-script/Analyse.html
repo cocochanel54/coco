@@ -35,6 +35,17 @@ var RE_BOITE = /\b(?:GNY-(?:BPI|BPE)-[A-Z0-9]{4,6}(?:-\d{2})?|(?:PBO|BPE|BPI|PEC
 var RE_REF = /(?:BB-)?\b(20\d{6}T\d{4})\b/gi;
 var RE_IMMEUBLE = /^(?:GNY-SITE-|IMB-|TN-BAT-)/i;
 var RE_INFO_SITE = /Information du client\s*:\s*([A-Z0-9-]+)\s*\/\s*([^\n]*)/i;
+// Le « jeton » d'un n° de ticket : sa date et son numéro (BB-20261023T0113#0 → 20261023T0113). C'est lui qu'on retrouve
+// dans les tickets de suite : « Suite à l'intervention BB-20261023T0113… »
+function jetonTicket(num) { var m = /(\d{8}T\d{4})/.exec(String(num || '').toUpperCase()); return m ? m[1] : ''; }
+// Ce qui, dans un rapport d'intervention lu, appelle une suite
+function motifsSuite(f) {
+  var m = [];
+  if (/^non$/i.test(f.corrige || '')) m.push('défaut non corrigé');
+  if (/^non$/i.test(f.definitive || '')) m.push('réparation provisoire');
+  if (/^oui$/i.test(f.dommage || '')) m.push('dommage réseau signalé');
+  return m;
+}
 var STATUTS_OUVERTS = ['Qualifiée', 'Pré-planifiée', 'Planifiée', 'Synchronisée'];
 // Coordonnées GPS écrites par Praxedo dans la colonne « Desc. site » : « Lat/Long: 48.67439/6.22068 »
 var RE_GPS = /Lat\/Long\s*:\s*(-?\d+(?:[.,]\d+)?)\s*\/\s*(-?\d+(?:[.,]\d+)?)/i;
@@ -75,6 +86,8 @@ function court(s, n) {
   s = String(s || '').replace(/\s+/g, ' ').replace(/(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g, '[tél.]').trim();
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
+function minutesDe(duree) { var m = /(\d+)\s*h\s*(\d+)/.exec(duree || ''); return m ? +m[1] * 60 + +m[2] : 0; }
+function fduree(min) { min = Math.round(min); return min ? Math.floor(min / 60) + ' h ' + ('0' + min % 60).slice(-2) : ''; }
 function fdist(m) { return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1).replace('.', ',') + ' km'; }
 
 var _feries = {};
@@ -173,6 +186,89 @@ function suivi(t, NOW) {
   return { qui: qui, action: action, base: (passees.length ? 'dernière date notée : ' : 'création du ticket : ') + fd(base, false), prochaine: prochaine, due: prochaine <= NOW };
 }
 
+/**
+ * Bilan des interventions clôturées (mails de fin et rapports lus, sur la période envoyée par le Sheet) :
+ * une ligne par clôture, puis le cumul par boîte et par commune, et quelques chiffres clés.
+ * La GTR d'une clôture se compte de la « date de la demande » du rapport à la fin de l'intervention.
+ */
+function statistiques(donnees, NOW, techDe) {
+  var TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()), vus = {}, F = [];
+  (donnees.fins || []).slice().sort(function (a, b) { return dt(b.recu) - dt(a.recu); }).forEach(function (f) {
+    var recu = dt(f.recu);
+    if (!f.num || vus[f.num] || !recu) return;
+    vus[f.num] = 1;
+    var cp = (/\b(\d{5})\b/.exec(f.adresse || '') || [])[1] || '', villeAdr = (/\d{5}\s+(.+)$/.exec(f.adresse || '') || [])[1] || '';
+    var commune = String(f.commune && !/^NA$/i.test(f.commune.trim()) ? f.commune : villeAdr).trim().toUpperCase() || '(commune inconnue)';
+    var x = { f: f, recu: recu, finLe: dt(f.fin) || recu, lu: f.lu === 'oui', min: minutesDe(f.duree), motifs: motifsSuite(f), tech: f.tech || (techDe || {})[f.num] || '',
+              boites: String(f.boites || '').split(/\s*,\s*/).filter(function (b) { return b; }), commune: commune,
+              geo: donnees.adresses && f.adresse ? donnees.adresses[f.adresse] || null : null, regle: '', echeance: null, dansGtr: null };
+    x.resultat = !x.lu ? 'rapport non lu' : x.motifs.length ? 'À suivre : ' + x.motifs.join(', ') : /^oui$/i.test(f.definitive) ? 'définitive' : /^oui$/i.test(f.corrige) ? 'défaut corrigé' : '';
+    var demande = dt(f.demande);
+    if (demande && f.etiquettes) {
+      var tags = []; f.etiquettes.replace(/\[([^\]]+)\]/g, function (_, t) { tags.push(t.trim().toUpperCase()); });
+      var niv = /niveau\s*(\d)/i.exec(f.etiquettes);
+      var rg = regleGtr({ creee: demande, desc: f.etiquettes, tags: tags, niveau: niv ? +niv[1] : null, rdv: tags.indexOf('RDVCLI') >= 0, dept: cp.slice(0, 2) || '54' });
+      x.regle = rg[0]; x.echeance = rg[1] || null;
+      if (x.echeance) x.dansGtr = x.finLe <= x.echeance;
+    }
+    F.push(x);
+  });
+  function top(o, n) {
+    return Object.keys(o).sort(function (a, b) { return (o[b] - o[a]) || (a < b ? -1 : 1); }).slice(0, n).map(function (k) { return k + (o[k] > 1 ? ' (' + o[k] + ')' : ''); }).join(', ');
+  }
+  function premier(o) { return Object.keys(o).sort(function (a, b) { return (o[b] - o[a]) || (a < b ? -1 : 1); })[0] || ''; }   // le plus fréquent, sans le nombre
+  function pct(a, b) { return b ? Math.round(100 * a / b) + ' %' : ''; }
+  function vide(cle) { return { cle: cle, n: 0, prov: 0, nonCorr: 0, dommage: 0, min: 0, nMin: 0, gtrOk: 0, gtrN: 0, premier: null, dernier: null, dernierX: null, xs: [], causes: {}, natures: {}, communes: {}, pms: {}, boites: {}, lat: 0, lon: 0, nGeo: 0 }; }
+  function cumul(s, x) {
+    s.n++; s.xs.push(x);
+    if (/^non$/i.test(x.f.definitive)) s.prov++;
+    if (/^non$/i.test(x.f.corrige)) s.nonCorr++;
+    if (/^oui$/i.test(x.f.dommage)) s.dommage++;
+    if (x.min) { s.min += x.min; s.nMin++; }
+    if (x.dansGtr !== null) { s.gtrN++; if (x.dansGtr) s.gtrOk++; }
+    if (!s.premier || x.recu < s.premier) s.premier = x.recu;
+    if (!s.dernier || x.recu > s.dernier) { s.dernier = x.recu; s.dernierX = x; }
+    [['causes', x.f.cause], ['natures', x.f.nature], ['communes', x.commune], ['pms', x.f.pm]].forEach(function (c) { if (c[1]) s[c[0]][c[1]] = (s[c[0]][c[1]] || 0) + 1; });
+    if (x.geo) { s.lat += x.geo.lat; s.lon += x.geo.lon; s.nGeo++; }
+  }
+  var B = {}, V = {}, total = vide('TOUTES LES COMMUNES');
+  F.forEach(function (x) {
+    cumul(total, x);
+    var v = V[x.commune] || (V[x.commune] = vide(x.commune));
+    cumul(v, x);
+    x.boites.forEach(function (b) { cumul(B[b] || (B[b] = vide(b)), x); v.boites[b] = (v.boites[b] || 0) + 1; total.boites[b] = (total.boites[b] || 0) + 1; });
+  });
+  var parN = function (a, b) { return (b.n - a.n) || (b.prov + b.nonCorr - a.prov - a.nonCorr) || (a.cle < b.cle ? -1 : 1); };
+  var boites = Object.keys(B).map(function (k) { return B[k]; }).sort(parN), villes = Object.keys(V).map(function (k) { return V[k]; }).sort(parN);
+  var histoBoite = {};
+  boites.forEach(function (s) {
+    histoBoite[s.cle] = { boite: s.cle, n: s.n, prov: s.prov, nonCorr: s.nonCorr, aSuivre: s.dernierX.motifs.length > 0, dernier: fd(s.dernier, false), resultat: s.dernierX.resultat,
+      pm: premier(s.pms), commune: premier(s.communes), temps: fduree(s.min), premier: fd(s.premier, false), causes: top(s.causes, 2),
+      geo: s.nGeo ? { lat: s.lat / s.nGeo, lon: s.lon / s.nGeo } : null,
+      tickets: s.xs.slice(0, 6).map(function (x) { return { num: x.f.num, recu: x.f.recu, resultat: x.resultat, duree: x.f.duree, rapport: x.f.rapport }; }) };
+  });
+  var ligneVille = function (s) {
+    return [s.cle, s.n, pct(s.n, total.n), s.gtrN ? pct(s.gtrOk, s.gtrN) + ' (' + s.gtrOk + ' sur ' + s.gtrN + ')' : '', s.prov, s.nonCorr, s.dommage, fduree(s.min), fduree(s.nMin ? s.min / s.nMin : 0), top(s.boites, 3), top(s.natures, 2)];
+  };
+  var definitives = F.filter(function (x) { return /^oui$/i.test(x.f.definitive); }).length, avecReponse = F.filter(function (x) { return /^(oui|non)$/i.test(x.f.definitive); }).length;
+  return {
+    kpi: { clotures: total.n, aujourdhui: F.filter(function (x) { return x.recu >= TODAY; }).length, rapportsLus: F.filter(function (x) { return x.lu; }).length,
+           tempsMoyen: fduree(total.nMin ? total.min / total.nMin : 0), gtrOk: total.gtrOk, gtrN: total.gtrN, pctGtr: pct(total.gtrOk, total.gtrN),
+           definitives: definitives, avecReponse: avecReponse, pctDefinitif: pct(definitives, avecReponse), depuis: total.premier ? fd(total.premier, false) : '' },
+    histoBoite: histoBoite,
+    clotures: { entetes: ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Début', 'Fin', 'Durée', 'Demande le', 'GTR', 'Échéance GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'Nature du défaut', 'Cause du défaut', 'Compte-rendu du technicien', 'Rapport'],
+      lignes: F.map(function (x) { var f = x.f;
+        return [f.recu, f.num, x.commune, x.tech, f.debut, f.fin, f.duree, f.demande, x.regle, fd(x.echeance), x.dansGtr === null ? '' : x.dansGtr ? 'oui' : 'non', x.resultat,
+                x.boites.join(', '), f.nature, f.cause, court(f.resume, 400), f.rapport || '']; }) },
+    boites: { entetes: ['Boîte', 'PM', 'Commune', 'Interventions', 'dont provisoires', 'dont non corrigées', 'Temps total', 'Temps moyen', 'Première', 'Dernière', 'Dernier résultat', 'Causes', 'Tickets'],
+      lignes: boites.map(function (s) {
+        return [s.cle, premier(s.pms), premier(s.communes), s.n, s.prov, s.nonCorr, fduree(s.min), fduree(s.nMin ? s.min / s.nMin : 0), fd(s.premier, false), fd(s.dernier, false), s.dernierX.resultat, top(s.causes, 2),
+                s.xs.map(function (x) { return x.f.num; }).join(', ')]; }) },
+    villes: { entetes: ['Commune', 'Interventions', 'Part du total', 'GTR respectée', 'dont provisoires', 'dont non corrigées', 'dont dommage réseau', 'Temps total', 'Temps moyen', 'Boîtes les plus touchées', 'Défauts les plus fréquents'],
+      lignes: (total.n ? [ligneVille(total)] : []).concat(villes.map(ligneVille)) }
+  };
+}
+
 /** donnees = { entetes, lignes, fins, adresses } (voir donnees() dans Code.gs). */
 function analyser(donnees, NOW) {
   var R = REGLAGES, TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
@@ -183,11 +279,13 @@ function analyser(donnees, NOW) {
   // tickets créés par mail depuis le dernier import et pas encore dans l'export : ajoutés comme « Qualifiée » (à planifier).
   // Un import fait après le mail qui ne contient pas le ticket l'enlève (il est sorti du filtre).
   var lignes = (donnees.entetes || []).indexOf('N°') >= 0 ? (donnees.lignes || []).slice() : [], dansExport = {}, parMail = {};
-  lignes.forEach(function (r) { var n = String(r[col['N°']] || '').trim(); dansExport[n] = 1; dansExport[n.split('#')[0]] = 1; });
+  lignes.forEach(function (r) { var n = String(r[col['N°']] || '').trim(); dansExport[n] = 1; if (n.indexOf('#') < 0) dansExport[n + '#'] = 1; });
+  // même ticket = même n° exact : un ticket rouvert (#1) n'est pas le #0. Sans « #n » d'un côté, on compare sans.
+  function dejaDansExport(num) { return dansExport[num] || dansExport[num.split('#')[0] + '#'] || (num.indexOf('#') < 0 && lignes.some(function (r) { return String(r[col['N°']] || '').trim().split('#')[0] === num; })); }
   var importe = donnees.importeLe ? new Date(donnees.importeLe) : null;
   (donnees.creations || []).forEach(function (c) {
     var recu = dt(c.recu);
-    if (!c.num || dansExport[c.num] || dansExport[c.num.split('#')[0]] || parMail[c.num] || !recu || (importe && recu <= importe)) return;
+    if (!c.num || dejaDansExport(c.num) || parMail[c.num] || !recu || (importe && recu <= importe)) return;
     parMail[c.num] = 1;
     var r = entetes.map(function () { return ''; }), mettre = function (k, v) { if (col[k] != null) r[col[k]] = v; };
     mettre('N°', c.num); mettre('Statut', 'Qualifiée'); mettre('Type inter.', c.type); mettre('Créée', c.recu);
@@ -208,11 +306,20 @@ function analyser(donnees, NOW) {
     if (k && v) (notesTapees[k] = notesTapees[k] || []).push(v);
   });
   // fins d'intervention reçues par mail : la plus récente par n° de ticket (et par n° sans « #… »)
-  var fins = {};
+  var fins = {}, finsBase = {}, finsSansIteration = {}, finParJeton = {};
   (donnees.fins || []).forEach(function (f) {
     if (!f.num) return;
-    [f.num, f.num.split('#')[0]].forEach(function (k) { if (!fins[k] || dt(f.recu) > dt(fins[k].recu)) fins[k] = f; });
+    var recu = dt(f.recu), base = f.num.split('#')[0], j = jetonTicket(f.num);
+    function garder(table, k) { if (!table[k] || recu > dt(table[k].recu)) table[k] = f; }
+    garder(fins, f.num); garder(finsBase, base);
+    if (f.num.indexOf('#') < 0) garder(finsSansIteration, base);
+    if (j) garder(finParJeton, j);
   });
+  // la fin d'un ticket : le mail qui porte exactement son n° (un ticket rouvert #1 n'est pas clôturé par la fin du #0)
+  function finDe(num) {
+    var base = num.split('#')[0];
+    return fins[num] || (num.indexOf('#') < 0 ? finsBase[base] : finsSansIteration[base]) || null;
+  }
   var T = lignes.map(function (r) {
     var g = function (c) { return col[c] == null ? '' : String(r[col[c]] == null ? '' : r[col[c]]).trim(); };
     var num = g('N°');
@@ -259,8 +366,11 @@ function analyser(donnees, NOW) {
     var info = RE_INFO_SITE.exec(desc);
     t.infoSite = info ? info[1].toUpperCase() : '';
     t.iteration = /#(\d+)$/.test(num) ? +/#(\d+)$/.exec(num)[1] : 0;
-    var fin = fins[num] || fins[t.base];
+    var fin = finDe(num);
     t.fin = fin || null;
+    t.suiteMotifs = fin ? motifsSuite(fin) : [];
+    // « Suite à l'intervention BB-… » : l'intervention d'avant, avec son rapport si son mail de fin a été reçu
+    t.precedents = t.refs.map(function (ref) { return { num: ref, fin: finParJeton[jetonTicket(ref)] || null }; });
     t.annule = RE_STATUT_ANNULE.test(t.statut);
     t.finStatut = !t.annule && RE_STATUT_FIN.test(t.statut);
     // date de fin : mail, sinon colonne de fin de l'export, sinon date planifiée
@@ -344,6 +454,25 @@ function analyser(donnees, NOW) {
   });
   // un ticket terminé reste en vert le jour de sa fin, puis disparaît de la carte le lendemain
   var visibles = T.filter(function (t) { return !t.termine || (t.finLe && t.finLe >= TODAY); });
+  // Interventions clôturées depuis 30 jours dont le rapport appelle une suite, avec le ticket de suite s'il existe déjà
+  // (un ticket qui cite son n°, ou le même ticket rouvert : #0 → #1)
+  var techDe = {}, vuesFin = {}, suites = [];
+  (donnees.sortis || []).forEach(function (s) { if (s.num && s.tech) techDe[s.num] = s.tech; });
+  T.forEach(function (t) { if (t.tech) techDe[t.num] = t.tech; });
+  var stats = statistiques(donnees, NOW, techDe);
+  (donnees.fins || []).slice().sort(function (a, b) { return dt(b.recu) - dt(a.recu); }).forEach(function (f) {
+    var recu = dt(f.recu), j = jetonTicket(f.num);
+    if (!f.num || vuesFin[f.num] || !recu || NOW - recu > 30 * 86400e3) return;
+    vuesFin[f.num] = 1;
+    var motifs = motifsSuite(f);
+    if (!motifs.length) return;
+    var base = f.num.split('#')[0];
+    var suivis = T.filter(function (t) {
+      return !t.termine && !t.sorti && t.num !== f.num && (t.base === base || (j && t.refs.some(function (r) { return jetonTicket(r) === j; })));
+    });
+    suites.push({ fin: f, recu: recu, motifs: motifs, tech: techDe[f.num] || '',
+                  tickets: suivis.map(function (t) { return { num: t.num, statut: t.statut }; }) });
+  });
   // ce qui manque dans l'export pour une analyse complète
   var avert = [];
   if ((donnees.entetes || []).indexOf('N°') >= 0) {
@@ -360,6 +489,8 @@ function analyser(donnees, NOW) {
     avertissements: avert,
     viennentDeFinir: viennentDeFinir,
     urgentsProches: urgentsProches,
+    suites: suites,
+    stats: stats,
     tous: T,
     tickets: visibles,
     nouveaux: T.filter(function (t) { return t.categorie === 'nouveau'; }).sort(function (a, b) { return (!!b.caser - !!a.caser) || (b.creee - a.creee); }),
@@ -471,7 +602,7 @@ function controles(res, NOW) {
       var ca = Math.min.apply(null, a.map(function (x) { return x.creee ? +x.creee : +NOW; })), cb = Math.min.apply(null, b.map(function (x) { return x.creee ? +x.creee : +NOW; }));
       return (nb - na) || (ca - cb);
     });
-  var lies = [];
+  var lies = [], groupeDe = {};
   G.forEach(function (g, i) {
     var raisons = {};
     g.forEach(function (a) { g.forEach(function (b) { var l = liens[a.num + '|' + b.num]; if (l) Object.keys(l).forEach(function (r) { raisons[r] = 1; }); }); });
@@ -479,6 +610,11 @@ function controles(res, NOW) {
     g.slice().sort(function (a, b) { return (a.creee ? +a.creee : +NOW) - (b.creee ? +b.creee : +NOW); }).forEach(function (t) {
       lies.push(['G' + (i + 1), texte, t.num, t.statutExport, fd(t.planif), t.tech, fd(t.creee), t.ville, t.adresse, t.immeuble,
                  t.boites.join(', '), t.cls.join(', '), court(t.desc, 200)]);
+    });
+    g.forEach(function (t) {
+      groupeDe[t.num] = { groupe: 'G' + (i + 1), raisons: texte, membres: g.filter(function (x) { return x !== t; }).map(function (x) {
+        return { num: x.num, statut: x.statutExport, planif: x.planif && !x.deplanifie ? fd(x.planif) : '', tech: x.tech, ville: x.ville, ko: !!x.gtrKo };
+      }) };
     });
     g.forEach(function (t) {
       if (!t.aPlanifier) return;
@@ -508,7 +644,13 @@ function controles(res, NOW) {
   INC.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1].num < b[1].num ? -1 : a[1].num > b[1].num ? 1 : 0; });
   return {
     incoherences: INC.map(function (i) { return [i[0], i[1].num, i[1].statutExport, i[2], i[3], i[1].tech, i[1].ville, i[1].adresse]; }),
-    lies: lies, pm: pm
+    lies: lies, pm: pm, groupeDe: groupeDe,
+    clotures: res.stats.clotures, statsBoites: res.stats.boites, statsVilles: res.stats.villes,
+    // sans ticket de suite d'abord, puis les plus récentes
+    suites: (res.suites || []).slice().sort(function (a, b) { return ((a.tickets.length ? 1 : 0) - (b.tickets.length ? 1 : 0)) || (b.recu - a.recu); }).map(function (s) {
+      return [s.fin.recu, s.fin.num, s.fin.commune || '', s.tech, s.motifs.join(', '),
+              s.tickets.map(function (t) { return t.num + ' (' + t.statut + ')'; }).join(', '), court(s.fin.resume, 300), s.fin.rapport || ''];
+    })
   };
 }
 </script>
