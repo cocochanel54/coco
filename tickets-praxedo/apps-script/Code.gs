@@ -13,7 +13,7 @@
  *   Suites à prévoir    : les interventions clôturées en provisoire, non corrigées ou avec un dommage signalé, et leur
  *                         ticket de suite quand il existe
  *   Clôtures            : chaque intervention clôturée, avec ses horaires, sa durée, sa GTR respectée ou non, son résultat
- *   Stats boîtes, Stats villes : d'après les rapports lus, où on intervient le plus, le temps passé, les provisoires,
+ *   Stats boîtes, Stats villes, Stats semaines : d'après les rapports lus, où on intervient le plus, le temps passé, les provisoires,
  *                         la part de GTR respectées (sur les 90 derniers jours)
  *   Incohérences, Tickets liés, PM chargés : les listes de contrôle de l'Excel, refaites à chaque import,
  *                         à chaque mail de création ou de fin, et au moins une fois par heure
@@ -41,7 +41,7 @@ var ONGLET_ADRESSES = 'Adresses';
 var ONGLET_SORTIS = "Sortis de l'export";
 var ONGLET_CREATIONS = 'Créations';
 var ONGLET_INCOHERENCES = 'Incohérences', ONGLET_LIES = 'Tickets liés', ONGLET_PM = 'PM chargés', ONGLET_SUITES = 'Suites à prévoir';
-var ONGLET_CLOTURES = 'Clôtures', ONGLET_STATS_BOITES = 'Stats boîtes', ONGLET_STATS_VILLES = 'Stats villes';
+var ONGLET_CLOTURES = 'Clôtures', ONGLET_STATS_BOITES = 'Stats boîtes', ONGLET_STATS_VILLES = 'Stats villes', ONGLET_STATS_SEMAINES = 'Stats semaines';
 var ONGLET_ACCES = 'Accès';
 var ONGLET_NOTES = 'Notes', ENTETES_NOTES = ['N° ticket', 'Note'];
 var COULEURS_GRAVITE = { '1 - Urgent': '#F8CBAD', '2 - Important': '#FFE699', '3 - À vérifier': '#DDEBF7', '4 - Info': '#EDEDED' };
@@ -50,7 +50,7 @@ var RECHERCHE_CREATIONS = 'subject:"CREATION INTERVENTION"';
 var ENTETES_SORTIS = ['Sorti le', 'N°', 'Statut avant', 'Planifiée', 'Technicien', 'Adresse', 'CP', 'Ville site', 'Site'];
 var ENTETES_FINS = ['Reçu le', 'N° ticket', 'Commune', 'Intervention du', 'Rapport', 'Objet du mail', 'Id du mail',
   'Rapport lu', 'Début', 'Fin', 'Durée', 'Défaut corrigé', 'Réparation définitive', 'Dommage réseau', 'Compte-rendu du technicien',
-  'Boîte(s)', 'PM (site)', 'Nature du défaut', 'Cause du défaut', 'Adresse', 'Demande le', 'Étiquettes GTR', 'Technicien'];
+  'Boîte(s)', 'PM (site)', 'Nature du défaut', 'Cause du défaut', 'Adresse', 'Demande le', 'Étiquettes GTR', 'Autres éléments du rapport', 'Technicien'];
 var JOURS_HISTORIQUE = 90;     // la carte et les statistiques portent sur les clôtures des 90 derniers jours
 var RAPPORTS_PAR_PASSAGE = 4;  // rapports PDF lus à chaque passage (les plus récents d'abord), pour garder des passages courts
 var ENTETES_ADRESSES = ['Adresse cherchée', 'Latitude', 'Longitude', 'Adresse trouvée', 'Score', 'Type', 'Commune', 'CP'];
@@ -409,7 +409,7 @@ function lireDonnees_() {
   var fins = ss.getSheetByName(ONGLET_FINS).getDataRange().getDisplayValues().slice(1).filter(recent).map(function (r) {
     return { recu: r[0], num: r[1], commune: r[2], jour: r[3], rapport: r[4], lu: r[7] || '', debut: r[8] || '', fin: r[9] || '',
              duree: r[10] || '', corrige: r[11] || '', definitive: r[12] || '', dommage: r[13] || '', resume: r[14] || '',
-             boites: r[15] || '', pm: r[16] || '', nature: r[17] || '', cause: r[18] || '', adresse: r[19] || '', demande: r[20] || '', etiquettes: r[21] || '', tech: r[22] || '' };
+             boites: r[15] || '', pm: r[16] || '', nature: r[17] || '', cause: r[18] || '', adresse: r[19] || '', demande: r[20] || '', etiquettes: r[21] || '', autres: r[22] || '', tech: r[23] || '' };
   });
   var fn = feuille_(ONGLET_NOTES, ENTETES_NOTES);
   var notes = fn.getDataRange().getDisplayValues().slice(1).map(function (r) { return { num: r[0], note: r[1] }; })
@@ -453,11 +453,12 @@ function majControles_() {
   ecrireOnglet_(ONGLET_SUITES, ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Pourquoi une suite', 'Ticket de suite', 'Compte-rendu du technicien', 'Rapport'],
     c.suites, function (l) { return l[5] ? null : '#FFE699'; }, [120, 160, 170, 150, 220, 200, 480, 260]);
   ecrireOnglet_(ONGLET_CLOTURES, c.clotures.entetes, c.clotures.lignes, function (l) { return l[10] === 'non' ? '#F8CBAD' : /^À suivre/.test(l[11]) ? '#FFE699' : null; },
-    [120, 160, 170, 150, 120, 120, 80, 120, 200, 120, 90, 200, 190, 150, 180, 480, 260]);
-  ecrireOnglet_(ONGLET_STATS_BOITES, c.statsBoites.entetes, c.statsBoites.lignes, function (l) { return l[4] || l[5] ? '#FFE699' : null; },
+    [120, 160, 170, 150, 120, 120, 80, 120, 200, 120, 90, 200, 190, 150, 180, 480, 260, 480]);
+  ecrireOnglet_(ONGLET_STATS_BOITES, c.statsBoites.entetes, c.statsBoites.lignes, function (l) { return /^À suivre/.test(l[10]) ? '#FFE699' : null; },
     [190, 150, 170, 90, 90, 90, 90, 90, 100, 100, 220, 240, 420]);
   ecrireOnglet_(ONGLET_STATS_VILLES, c.statsVilles.entetes, c.statsVilles.lignes, function (l, i) { return i === 0 ? '#DDEBF7' : null; },
     [220, 90, 90, 100, 90, 90, 90, 90, 90, 320, 280]);
+  ecrireOnglet_(ONGLET_STATS_SEMAINES, c.statsSemaines.entetes, c.statsSemaines.lignes, null, [130, 100, 100, 90, 110, 110, 110, 150, 150]);
   PropertiesService.getScriptProperties().setProperty('CONTROLES_LE', maintenant_());
   return { incoherences: c.incoherences.length, lies: c.lies.length, pm: c.pm.length, avertissements: res.avertissements };
 }
@@ -514,7 +515,7 @@ function lireRapports_(max) {
         var base = function (x) { return String(x).split('#')[0].toUpperCase(); };
         if (!c.num && !c.debut && !c.resume) ligne = ['illisible'];
         else if (c.num && base(c.num) !== base(v[i][1])) ligne = ['autre ticket'];
-        else { ligne = ['oui', c.debut, c.fin, c.duree, c.corrige, c.definitive, c.dommage, c.resume || c.actions, c.boites, c.pm, c.nature, c.cause, c.adresse, c.demande, c.etiquettes]; lus++; if (c.adresse) aPlacer.push(c.adresse); }
+        else { ligne = ['oui', c.debut, c.fin, c.duree, c.corrige, c.definitive, c.dommage, c.resume || c.actions, c.boites, c.pm, c.nature, c.cause, c.adresse, c.demande, c.etiquettes, c.autres]; lus++; if (c.adresse) aPlacer.push(c.adresse); }
       } catch (err) {
         console.warn('Rapport ' + v[i][1] + ' : ' + err);
         ligne = ['erreur ' + ((+String(etat).replace(/\D/g, '') || 0) + 1)];
@@ -707,6 +708,21 @@ function champsRapport_(t) {
   if (ma) { var la = ma[1].split('\n'), commune = la.pop(); adresse = [la.join(' '), ma[2], commune].filter(function (x) { return x; }).join(' ').replace(/\s+/g, ' ').trim(); }
   // ce qui fixe la GTR : les étiquettes du début de la description ([Niveau 3], [04h HO]…) et « OTR 10J OUVRES » s'il est écrit
   var md = /(?:^|\n)Description\n([\s\S]*)/.exec(coupe < 0 ? t : t.slice(0, coupe)), desc = md ? md[1] : '';
+  // les autres réponses du rapport, gardées telles quelles dans une colonne (pas encore exploitées par la carte)
+  var autres = [];
+  [["fin d'impact client", /date de fin d['’]impact[^\n?]*(?:\n[^\n?]*)?\?\s*(\d{2}\/\d{2}\/\d{4})/i, /heure de fin d['’]impact[^\n?]*(?:\n[^\n?]*)?\?\s*(\d{1,2}:\d{2})/i],
+   ['localisation du défaut', /Localisation du défaut[^\n]*\n([^\n]+)/i],
+   ['plusieurs intervenants', /Plusieurs intervenants[\s\S]{0,60}?\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
+   ['accès à une PTO', /accès à au moins\s+une PTO\s*\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
+   ['coupleur de la jarretière', /coupleur la jarretière[\s\S]{0,40}?\?\s*([^\n]+)/i],
+   ['validée par le NOC ou le Patrimoine', /validée par le\s+NOC ou le Patrimoine\s*\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
+   ['matériel utilisé', /Du matériel[^\n?]{0,30}\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
+   ['Cerfa, plainte ou constat', /Cerfa\s*\/\s*Plainte\s*\/\s*Constat\n(Oui|Non)(?![a-zà-ÿ])/i],
+   ['expertise', /agit-il d['’]une expertise\s*\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
+   ['mise à jour NETGEO nécessaire', /mise\s+à jour NETGEO est-elle\s+nécessaire\s*\?\s*(Oui|Non)(?![a-zà-ÿ])/i]].forEach(function (x) {
+    var v = reponse(x[1]), h = x[2] ? un(x[2]) : '';
+    if (v) autres.push(x[0] + ' : ' + v + (h ? ' ' + h : ''));
+  });
   var otr = /OTR\s*\d+\s*J\s*OUVR[A-ZÉ]*/i.exec(desc);
   var etiquettes = (desc.slice(0, 250).match(/\[[^\]\n]{1,30}\]/g) || []).join('') + (otr ? ' GTR: ' + otr[0] : '');
   return {
@@ -723,7 +739,7 @@ function champsRapport_(t) {
     // la boîte où le technicien est intervenu (celle qu'il cite), sinon celle du ticket
     boites: (bTerrain.length ? bTerrain : boites(coupe < 0 ? t : t.slice(0, coupe))).join(', '),
     pm: un(/(?:^|\n)Site\n([^\n]+)/),
-    adresse: adresse, etiquettes: etiquettes,
+    adresse: adresse, etiquettes: etiquettes, autres: autres.join(' · '),
     nature: reponse(/Nature du défaut[^\n]*\n([^\n]+)/i),
     cause: reponse(/Cause du défaut[^\n]*\n([^\n]+)/i)
   };

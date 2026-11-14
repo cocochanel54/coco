@@ -256,10 +256,12 @@ function statistiques(donnees, NOW, techDe) {
            tempsMoyen: fduree(total.nMin ? total.min / total.nMin : 0), gtrOk: total.gtrOk, gtrN: total.gtrN, pctGtr: pct(total.gtrOk, total.gtrN),
            definitives: definitives, avecReponse: avecReponse, pctDefinitif: pct(definitives, avecReponse), depuis: total.premier ? fd(total.premier, false) : '' },
     histoBoite: histoBoite,
-    clotures: { entetes: ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Début', 'Fin', 'Durée', 'Demande le', 'GTR', 'Échéance GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'Nature du défaut', 'Cause du défaut', 'Compte-rendu du technicien', 'Rapport'],
+    // une ligne légère par clôture, pour les graphiques (bilan) : date, commune, boîtes, à reprendre ou non, GTR, minutes
+    liste: F.map(function (x) { return { t: +x.recu, commune: x.commune, boites: x.boites, suite: x.motifs.length > 0, lu: x.lu, dansGtr: x.dansGtr, min: x.min }; }),
+    clotures: { entetes: ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Début', 'Fin', 'Durée', 'Demande le', 'GTR', 'Échéance GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'Nature du défaut', 'Cause du défaut', 'Compte-rendu du technicien', 'Rapport', 'Autres éléments du rapport'],
       lignes: F.map(function (x) { var f = x.f;
         return [f.recu, f.num, x.commune, x.tech, f.debut, f.fin, f.duree, f.demande, x.regle, fd(x.echeance), x.dansGtr === null ? '' : x.dansGtr ? 'oui' : 'non', x.resultat,
-                x.boites.join(', '), f.nature, f.cause, court(f.resume, 400), f.rapport || '']; }) },
+                x.boites.join(', '), f.nature, f.cause, court(f.resume, 400), f.rapport || '', f.autres || '']; }) },
     boites: { entetes: ['Boîte', 'PM', 'Commune', 'Interventions', 'dont provisoires', 'dont non corrigées', 'Temps total', 'Temps moyen', 'Première', 'Dernière', 'Dernier résultat', 'Causes', 'Tickets'],
       lignes: boites.map(function (s) {
         return [s.cle, premier(s.pms), premier(s.communes), s.n, s.prov, s.nonCorr, fduree(s.min), fduree(s.nMin ? s.min / s.nMin : 0), fd(s.premier, false), fd(s.dernier, false), s.dernierX.resultat, top(s.causes, 2),
@@ -267,6 +269,49 @@ function statistiques(donnees, NOW, techDe) {
     villes: { entetes: ['Commune', 'Interventions', 'Part du total', 'GTR respectée', 'dont provisoires', 'dont non corrigées', 'dont dommage réseau', 'Temps total', 'Temps moyen', 'Boîtes les plus touchées', 'Défauts les plus fréquents'],
       lignes: (total.n ? [ligneVille(total)] : []).concat(villes.map(ligneVille)) }
   };
+}
+
+/**
+ * Les chiffres des graphiques, à partir de stats.liste :
+ * - semaines : les clôtures par semaine (du lundi au dimanche), sur 12 semaines au plus, sans les semaines vides du début ;
+ * - communes, boites : le cumul sur la période choisie ('tout', '30j', 'semaine' = cette semaine, 'semaineDerniere').
+ * Partout : n = clôtures, suite = dont à reprendre (réparation provisoire, défaut non corrigé ou dommage signalé).
+ */
+function bilan(liste, periode, NOW) {
+  function lundi(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+  function numeroSemaine(d) {   // n° ISO : la semaine du premier jeudi de l'année est la semaine 1
+    var j = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 3 - ((d.getDay() + 6) % 7)), premier = new Date(j.getFullYear(), 0, 4);
+    return 1 + Math.round(((j - premier) / 86400e3 - 3 + ((premier.getDay() + 6) % 7)) / 7);
+  }
+  var MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  function jourCourt(d) { return d.getDate() + ' ' + MOIS[d.getMonth()]; }
+  function vide(o) { o.n = 0; o.suite = 0; o.nonLus = 0; o.gtrOk = 0; o.gtrN = 0; o.min = 0; o.nMin = 0; return o; }
+  function cumul(o, x) { o.n++; if (x.suite) o.suite++; if (!x.lu) o.nonLus++; if (x.dansGtr !== null) { o.gtrN++; if (x.dansGtr) o.gtrOk++; } if (x.min) { o.min += x.min; o.nMin++; } }
+  function finir(o) { o.gtr = o.gtrN ? Math.round(100 * o.gtrOk / o.gtrN) + ' %' : ''; o.temps = fduree(o.nMin ? o.min / o.nMin : 0); o.tempsTotal = fduree(o.min); return o; }
+  var cette = lundi(NOW), semaines = [], i;
+  for (i = 11; i >= 0; i--) {
+    var deb = plusJours(cette, -7 * i);
+    semaines.push(vide({ debut: deb, fin: plusJours(deb, 6), label: 'S' + numeroSemaine(deb), du: jourCourt(deb), au: jourCourt(plusJours(deb, 6)), enCours: i === 0 }));
+  }
+  (liste || []).forEach(function (x) {
+    var k = Math.round((lundi(new Date(x.t)) - semaines[0].debut) / (7 * 86400e3));
+    if (k >= 0 && k < semaines.length) cumul(semaines[k], x);
+  });
+  while (semaines.length > 4 && !semaines[0].n) semaines.shift();   // pas de longue série de semaines vides avant le début des données
+  semaines.forEach(finir);
+  var de = periode === 'semaine' ? cette : periode === 'semaineDerniere' ? plusJours(cette, -7) : periode === '30j' ? plusJours(NOW, -30) : null;
+  var a = periode === 'semaineDerniere' ? cette : null;
+  var C = {}, B = {}, total = vide({ nom: 'Total' });
+  (liste || []).forEach(function (x) {
+    if ((de && x.t < +de) || (a && x.t >= +a)) return;
+    cumul(total, x);
+    cumul(C[x.commune] || (C[x.commune] = vide({ nom: x.commune })), x);
+    x.boites.forEach(function (b) { cumul(B[b] || (B[b] = vide({ nom: b })), x); });
+  });
+  function rangs(o) { return Object.keys(o).map(function (k) { return finir(o[k]); }).sort(function (p, q) { return (q.n - p.n) || (q.suite - p.suite) || (p.nom < q.nom ? -1 : 1); }); }
+  return { semaines: semaines, communes: rangs(C), boites: rangs(B), total: finir(total),
+           libelle: periode === 'semaine' ? 'cette semaine (depuis le ' + jourCourt(cette) + ')' : periode === 'semaineDerniere' ? 'la semaine dernière (du ' + jourCourt(de) + ' au ' + jourCourt(plusJours(cette, -1)) + ')'
+                  : periode === '30j' ? 'les 30 derniers jours' : 'toute la période' };
 }
 
 /** donnees = { entetes, lignes, fins, adresses } (voir donnees() dans Code.gs). */
@@ -470,7 +515,7 @@ function analyser(donnees, NOW) {
     var suivis = T.filter(function (t) {
       return !t.termine && !t.sorti && t.num !== f.num && (t.base === base || (j && t.refs.some(function (r) { return jetonTicket(r) === j; })));
     });
-    suites.push({ fin: f, recu: recu, motifs: motifs, tech: techDe[f.num] || '',
+    suites.push({ fin: f, recu: recu, motifs: motifs, tech: f.tech || techDe[f.num] || '',
                   tickets: suivis.map(function (t) { return { num: t.num, statut: t.statut }; }) });
   });
   // ce qui manque dans l'export pour une analyse complète
@@ -646,6 +691,8 @@ function controles(res, NOW) {
     incoherences: INC.map(function (i) { return [i[0], i[1].num, i[1].statutExport, i[2], i[3], i[1].tech, i[1].ville, i[1].adresse]; }),
     lies: lies, pm: pm, groupeDe: groupeDe,
     clotures: res.stats.clotures, statsBoites: res.stats.boites, statsVilles: res.stats.villes,
+    statsSemaines: { entetes: ['Semaine', 'Du', 'Au', 'Clôtures', 'dont à reprendre', 'Rapports non lus', 'GTR respectée', 'Temps moyen sur place', 'Temps total sur place'],
+      lignes: bilan(res.stats.liste, 'tout', NOW).semaines.map(function (s) { return [s.label + (s.enCours ? ' (en cours)' : ''), fd(s.debut, false), fd(s.fin, false), s.n, s.suite, s.nonLus, s.gtr, s.temps, s.tempsTotal]; }) },
     // sans ticket de suite d'abord, puis les plus récentes
     suites: (res.suites || []).slice().sort(function (a, b) { return ((a.tickets.length ? 1 : 0) - (b.tickets.length ? 1 : 0)) || (b.recu - a.recu); }).map(function (s) {
       return [s.fin.recu, s.fin.num, s.fin.commune || '', s.tech, s.motifs.join(', '),

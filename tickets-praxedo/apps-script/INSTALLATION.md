@@ -32,7 +32,7 @@ Sans les statuts de fin, la carte se débrouille quand même : un ticket présen
 
 1. En haut de l'éditeur, choisis la fonction **installer** puis **Exécuter**.
 2. Google demande une autorisation : **Examiner les autorisations** → ton compte → **Paramètres avancés** → **Accéder à Carte tickets** → **Autoriser**. Le script lit les mails dont l'objet contient « FIN INTERVENTION » (ceux que tu transfères), écrit dans ce Sheet et place les adresses sur la carte.
-3. Les onglets **Tickets**, **Fins d'intervention**, **Créations**, **Sortis de l'export**, **Notes**, **Accès** et **Adresses** sont créés, et Gmail sera lu toutes les 5 minutes.
+3. Les onglets **Tickets**, **Fins d'intervention**, **Créations**, **Sortis de l'export**, **Notes**, **Accès** et **Adresses** sont créés (les onglets de contrôle et de bilan apparaissent au premier import), et Gmail sera lu toutes les 5 minutes.
 
 ## 4. Importer un export Praxedo
 
@@ -75,6 +75,20 @@ Sur les PC où la sécurité de l'entreprise bloque le lien de la carte, utilise
 3. Dépose le fichier dans Teams. Tes collègues le **téléchargent puis l'ouvrent** dans leur navigateur.
 
 C'est la carte complète (zoom, fiches des tickets, couleurs, listes de contrôle), sans lien Google et sans code, mais c'est une **photo** : les données sont celles du moment où tu as fabriqué le fichier. Refais-le quand tu veux une version à jour. Les numéros de téléphone des descriptions y sont masqués. Il contient les adresses et les descriptions des tickets : ne le dépose que dans l'équipe.
+
+## Les rapports d'intervention, le bilan et les graphiques
+
+Chaque mail « [FIN INTERVENTION] » contient un lien vers le rapport Praxedo (un PDF). Le script le lit tout seul, 4 rapports au plus toutes les 5 minutes, et remplit les colonnes de l'onglet **Fins d'intervention** : heure de début et de fin, durée sur place, défaut corrigé ou non, réparation définitive ou non, dommage réseau signalé, compte-rendu du technicien, boîte où il est intervenu, PM, nature et cause du défaut, technicien, et les autres réponses du rapport dans une colonne à part. Il n'ouvre que les liens de Praxedo. « Rapport lu » vaut **oui**, **illisible**, **autre ticket**, **lien refusé** ou **erreur 1 à 3** (3 essais).
+
+Avec ces rapports, le Sheet tient à jour (sur les 90 derniers jours) :
+
+- **Suites à prévoir** : les clôtures en provisoire, non corrigées ou avec un dommage signalé, et leur ticket de suite quand il existe (en jaune : pas encore de ticket de suite).
+- **Clôtures** : une ligne par intervention clôturée, avec la durée, la GTR respectée ou non (de la date de la demande à la fin de l'intervention) et le résultat.
+- **Stats boîtes**, **Stats villes**, **Stats semaines** : où on intervient le plus, le temps passé, les provisoires, la part de GTR respectées.
+
+Sur la carte (conduite d'activité) : les **chiffres clés** en haut, les **boîtes à répétition** (un anneau avec le nombre d'interventions, orange si la dernière réparation est à reprendre ; un clic donne l'historique et les rapports), le bouton **Bilan en graphiques** (clôtures par semaine, communes et boîtes où on intervient le plus, avec le choix de la période) et, dans **Listes de contrôle**, les onglets Suites à prévoir, Clôtures, Boîtes et Villes. La fiche d'un ticket donne ses **tickets liés** (un trait les relie quand la fiche est ouverte), l'intervention d'avant avec son rapport, et ce qu'on sait déjà de sa boîte.
+
+Tout ça se remplit au fil des mails de fin : au début, il y a peu de chiffres.
 
 ## Au quotidien
 

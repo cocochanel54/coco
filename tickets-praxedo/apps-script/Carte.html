@@ -15,6 +15,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 .leg h1{font-size:15px;margin:0 0 2px}.leg label{display:block;margin:3px 0;cursor:pointer}
 .leg label.sous{margin-left:22px;cursor:default;font-size:13px}
 .leg h2{font-size:13px;margin:10px 0 4px}
+#aide{margin:6px 0 2px}#aide summary{cursor:pointer;color:#444;font-size:12.5px}#aide small{display:block;margin-top:4px}
 #etat{display:block;color:#555;font-size:12px}
 .dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:1px solid #0006}
 .nv{display:block;width:100%;text-align:left;font:inherit;font-size:12.5px;border:1px solid #ddd;border-radius:6px;padding:5px 7px;margin:4px 0;cursor:pointer;color:inherit;background:#fff}
@@ -65,6 +66,52 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 #controles td{padding:4px 6px;border-bottom:1px solid #eee;vertical-align:top}
 #controles tr.cliquable{cursor:pointer}#controles tr.cliquable:hover td{outline:1px solid #8aa}
 .g1{background:#f8cbad}.g2{background:#ffe699}.g3{background:#ddebf7}.g4{background:#ededed}
+/* ---------- bilan en graphiques : couleurs par rôle (bleu = clôtures, orange = dont à reprendre) ---------- */
+.viz-root{color-scheme:light;--surface-1:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--series-1:#2a78d6;--series-2:#eb6834}
+#bilan{position:absolute;z-index:1200;left:10px;top:10px;right:320px;bottom:10px;background:var(--surface-1);color:var(--text-primary);border-radius:10px;box-shadow:0 2px 14px #0005;overflow:auto;padding:14px 18px 18px;box-sizing:border-box}
+#bilan header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+#bilan h2{font-size:18px;margin:0}
+#bilan figure{margin:16px 0 0;min-width:0}
+#bilan figcaption{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+#bilan figcaption b{font-size:14px}
+#bilan .note{color:var(--text-secondary);font-size:12px}
+.legendeViz{display:flex;gap:6px 18px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--text-secondary)}
+.legendeViz i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.filtres{display:flex;gap:6px;flex-wrap:wrap;margin-top:20px;align-items:center;font-size:13px;color:var(--text-secondary)}
+.filtres button{font:inherit;padding:4px 11px;border:1px solid var(--axis);border-radius:14px;background:var(--surface-1);cursor:pointer;color:var(--text-primary)}
+.filtres button[aria-pressed="true"]{background:var(--text-primary);color:var(--surface-1);border-color:var(--text-primary)}
+.deux{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:0 30px}
+.rang{display:grid;grid-template-columns:minmax(96px,40%) 1fr;gap:10px;align-items:center;padding:3px 4px;border-radius:4px}
+.rang .nom{font-size:12.5px;overflow-wrap:anywhere}
+.rang .piste{display:flex;align-items:center;gap:2px;min-width:0}
+.rang .piste i{display:block;height:14px;min-width:3px;background:var(--series-1);flex:none}
+.rang .piste i.s2{background:var(--series-2)}
+.rang .piste i:last-of-type{border-radius:0 4px 4px 0}
+.rang .val{margin-left:6px;font-size:12.5px;font-variant-numeric:tabular-nums}
+.rang:hover,.rang:focus-visible,.colonnes .slot:hover,.colonnes .slot:focus-visible{background:#0b0b0b0d}
+.rang:hover i,.rang:focus-visible i,.colonnes .slot:hover i,.colonnes .slot:focus-visible i{filter:brightness(1.12)}
+.colonnes{position:relative;padding:20px 0 0 30px}
+.colonnes .trace{position:relative;height:170px}
+.colonnes .grille{position:absolute;left:0;right:0;height:0;border-top:1px solid var(--grid)}
+.colonnes .grille.base{border-top-color:var(--axis)}
+.colonnes .grille span{position:absolute;right:100%;margin-right:6px;transform:translateY(-50%);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.colonnes .slots{position:absolute;inset:0;display:flex;align-items:flex-end}
+.colonnes .slot{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;border-radius:4px}
+.colonnes .slot i{display:block;width:min(24px,60%);background:var(--series-1)}
+.colonnes .slot i.s2{background:var(--series-2)}
+.colonnes .slot i + i{margin-top:2px}
+.colonnes .slot i:first-of-type{border-radius:4px 4px 0 0}
+.colonnes .slot .val{font-size:11.5px;margin-bottom:3px;font-variant-numeric:tabular-nums}
+.colonnes .axeX{display:flex;margin-top:6px}
+.colonnes .axeX span{flex:1;min-width:0;text-align:center;font-size:11.5px;color:var(--text-secondary)}
+.colonnes .axeX small{display:block;color:var(--muted);font-size:10.5px}
+#infobulle{position:fixed;z-index:4000;pointer-events:none;background:#0b0b0b;color:#fcfcfb;border-radius:6px;padding:7px 10px;font-size:12px;max-width:270px;box-shadow:0 2px 8px #0006}
+#infobulle b{display:block;font-size:15px}#infobulle span{display:block;color:#c3c2b7;margin-bottom:3px}
+.tv{margin-top:8px;overflow:auto;max-height:230px}
+.tv table{border-collapse:collapse;font-size:12px;width:100%}
+.tv th{text-align:left;border-bottom:1px solid var(--axis);padding:3px 6px;color:var(--text-secondary);font-weight:600;position:sticky;top:0;background:var(--surface-1)}
+.tv td{padding:3px 6px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums}
+@media (max-width:900px){#bilan{right:10px}}
 @media (max-width:760px){#controles{width:auto;right:10px;max-height:50%}}
 @media (max-width:900px){#kpi{max-width:calc(100% - 66px)}#kpi .plus{display:none}}
 @media (max-width:560px){.leg{top:auto;bottom:10px;left:10px;right:10px;width:auto;max-height:42%}#controles{top:70px;bottom:auto;max-height:45%}
@@ -90,6 +137,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé aujourd'hui <b id="nb-termine"></b></label>
 <label class="sous"><span class="dot" style="background:#2e9e5b;border:3px solid #e67e22;width:7px;height:7px"></span>dont à suivre : non corrigé, provisoire ou dommage <b id="nb-aSuivre"></b></label>
 <label><input type="checkbox" data-k="nouveau" checked><span class="dot" style="background:#8e44ad"></span>Nouveau (moins de 24 h) <b id="nb-nouveau"></b></label>
+<label class="sous"><span class="dot" style="background:#8e44ad;border:3px solid #d62728;width:7px;height:7px"></span>dont GTR KO ou à moins de 48 h <b id="nb-nouveauUrgent"></b></label>
 <label><input type="checkbox" data-k="justifie" checked><span class="dot" style="background:#8b939c"></span>Justifié / en attente <b id="nb-justifie"></b></label>
 <label class="sous"><span class="dot" style="background:#8b939c;border:3px solid #e67e22;width:7px;height:7px"></span>dont à relancer ou à vérifier <b id="nb-relance"></b></label>
 <label><input type="checkbox" data-k="retard" checked><span class="dot" style="background:#d62728"></span>GTR KO, à planifier <b id="nb-retard"></b></label>
@@ -98,13 +146,14 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <label><input type="checkbox" data-k="planifie" checked><span class="dot" style="background:#1f77b4"></span>Déjà planifié <b id="nb-planifie"></b></label>
 <label class="sous"><span class="dot" style="background:#1f77b4;border:3px solid #d62728;width:7px;height:7px"></span>dont GTR KO <b id="nb-planifieKo"></b></label>
 <label><input type="checkbox" data-k="boites" checked><span class="dot" style="background:#e6e7f5;border:3px solid #3b3f8f;width:7px;height:7px"></span>Boîtes à répétition ou à reprendre <b id="nb-boites"></b></label>
-<small>Anneau avec un nombre : boîte où on est intervenu plusieurs fois (orange : dernière réparation provisoire ou non corrigée). Contour rouge : GTR KO (ou à moins de 48 h pour un nouveau). Trait pointillé : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée (rouge ou orange : GTR KO ou bientôt KO, violet : nouveau). Cercle vert : technicien qui vient de clôturer (moins d'1 h), avec les tickets à planifier à moins de 1 km.</small>
+<details id="aide"><summary>Comment lire la carte</summary><small>Anneau avec un nombre : boîte où on est intervenu plusieurs fois (orange : dernière réparation provisoire ou non corrigée). Contour rouge : GTR KO (ou à moins de 48 h pour un nouveau). Trait pointillé : intervention déjà planifiée à moins de 1 km, pour programmer dans la foulée (rouge ou orange : GTR KO ou bientôt KO, violet : nouveau). Cercle vert : technicien qui vient de clôturer (moins d'1 h), avec les tickets à planifier à moins de 1 km.</small></details>
 <div id="blocMoi" hidden><h2>Mes interventions</h2>
   <label for="moi" style="cursor:default">Mon nom dans Praxedo</label>
   <select id="moi"><option value="">— choisir —</option></select>
   <small>Tes interventions ont un contour noir épais.</small>
 </div>
 <button id="ouvrirControles" class="bouton" type="button" hidden>Listes de contrôle</button>
+<button id="ouvrirBilan" class="bouton" type="button" hidden>Bilan en graphiques</button>
 <div id="listes"></div>
 <p style="margin:10px 0 0"><button id="changerCode" class="lien" type="button">Changer de code</button></p>
 </div></div>
@@ -123,6 +172,30 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
   </header>
   <div class="tableau" id="tableau"></div>
 </div>
+<div id="bilan" class="viz-root" hidden role="dialog" aria-label="Bilan des interventions">
+  <header><h2>Bilan des interventions</h2><span class="note" id="bilanNote"></span><button class="lien" type="button" id="fermerBilan" style="margin-left:auto">Fermer</button></header>
+  <div class="legendeViz"><span><i style="background:var(--series-1)"></i>Clôtures sans suite à donner</span><span><i style="background:var(--series-2)"></i>Clôtures à reprendre : réparation provisoire, défaut non corrigé ou dommage signalé</span><span>Le nombre au bout de chaque barre est le total des clôtures.</span></div>
+  <figure>
+    <figcaption><b>Interventions clôturées par semaine</b><button class="lien" type="button" data-tv="tvSemaines">Voir le tableau</button></figcaption>
+    <div id="gSemaines" class="colonnes"></div><div id="tvSemaines" class="tv" hidden></div>
+  </figure>
+  <div class="filtres" role="group" aria-label="Période des deux graphiques qui suivent"><span>Période :</span>
+    <button type="button" data-p="tout" aria-pressed="true">Toute la période</button><button type="button" data-p="30j" aria-pressed="false">30 derniers jours</button>
+    <button type="button" data-p="semaine" aria-pressed="false">Cette semaine</button><button type="button" data-p="semaineDerniere" aria-pressed="false">Semaine dernière</button>
+    <span id="bilanPeriode"></span>
+  </div>
+  <div class="deux">
+    <figure>
+      <figcaption><b>Communes où on intervient le plus</b><button class="lien" type="button" data-tv="tvCommunes">Voir le tableau</button></figcaption>
+      <div id="gCommunes"></div><div class="note" id="resteCommunes"></div><div id="tvCommunes" class="tv" hidden></div>
+    </figure>
+    <figure>
+      <figcaption><b>Boîtes où on intervient le plus</b><button class="lien" type="button" data-tv="tvBoites">Voir le tableau</button></figcaption>
+      <div id="gBoites"></div><div class="note" id="resteBoites"></div><div id="tvBoites" class="tv" hidden></div>
+    </figure>
+  </div>
+</div>
+<div id="infobulle" hidden></div>
 <?!= inclure_('Analyse') ?>
 <script>
 var C = {termine: '#2e9e5b', nouveau: '#8e44ad', justifie: '#8b939c', retard: '#d62728', bientot: '#ff7f0e', aplanifier: '#ffd43b', planifie: '#1f77b4'}, RELANCE = '#e67e22';
@@ -203,7 +276,7 @@ selMoi.onchange = function () { ecrire('carteMoi', selMoi.value); if (dernier) a
 
 // ---------- listes de contrôle (conduite d'activité) ----------
 var panneau = document.getElementById('controles'), filtreG = document.getElementById('filtreGravite');
-document.getElementById('ouvrirControles').onclick = function () { panneau.hidden = false; tableauControles(); };
+document.getElementById('ouvrirControles').onclick = function () { bilanEl.hidden = true; panneau.hidden = false; tableauControles(); };
 document.getElementById('fermerControles').onclick = function () { panneau.hidden = true; };
 document.querySelectorAll('#controles .onglet').forEach(function (b) {
   b.onclick = function () {
@@ -232,7 +305,7 @@ function tableauControles() {
     if (ongletCtrl === 'incoherences') g = ' g' + l[0].charAt(0);
     else if (ongletCtrl === 'suites' && !l[5]) g = ' g2';
     else if (ongletCtrl === 'clotures') g = l[6] === 'non' ? ' g1' : /^À suivre/.test(l[7]) ? ' g2' : '';
-    else if (ongletCtrl === 'boites' && (l[4] || l[5])) g = ' g2';
+    else if (ongletCtrl === 'boites' && /^À suivre/.test(l[9])) g = ' g2';
     else if (ongletCtrl === 'villes' && i === 0) g = ' g3';
     if (ongletCtrl === 'suites' && !marqueurs[num]) num = (l[5].match(/^[^ ,]+/) || [''])[0];  // intervention sortie de la carte : on montre son ticket de suite
     var clic = (num && marqueurs[num]) || (boite && marqueursBoites[boite]);
@@ -263,6 +336,113 @@ function ficheBoite(h) {
     }).join('') + '</ul>' + (h.n > h.tickets.length ? '<small>… et ' + (h.n - h.tickets.length) + ' plus anciennes</small>' : '') + '</div>';
 }
 
+// ---------- bilan en graphiques (conduite d'activité) ----------
+// Barres et colonnes dessinées en HTML, sans bibliothèque : le fichier « carte du jour » les affiche aussi hors ligne.
+var bilanEl = document.getElementById('bilan'), bulle = document.getElementById('infobulle'), periode = 'tout';
+function el(tag, classe, texte) { var e = document.createElement(tag); if (classe) e.className = classe; if (texte != null) e.textContent = texte; return e; }
+function pluriel(n, mot) { return n + ' ' + mot + (n > 1 ? 's' : ''); }
+// l'infobulle : la valeur d'abord, puis le nom, puis une ligne par série avec un trait de sa couleur
+function montrerBulle(cible, lignes, ev) {
+  bulle.textContent = '';
+  lignes.forEach(function (l) {
+    var d = el(l[0] === 'b' ? 'b' : l[0] === 's' ? 'span' : 'div', '', l[1]);
+    if (l[2]) { var k = el('i'); k.style.cssText = 'display:inline-block;width:10px;height:2px;margin-right:6px;vertical-align:middle;background:' + l[2]; d.insertBefore(k, d.firstChild); }
+    bulle.appendChild(d);
+  });
+  bulle.hidden = false;
+  var r = cible.getBoundingClientRect(), x = ev ? ev.clientX : r.left + r.width / 2, y = ev ? ev.clientY : r.top + 8;
+  bulle.style.left = Math.max(6, Math.min(window.innerWidth - bulle.offsetWidth - 6, x + 14)) + 'px';
+  bulle.style.top = (y - bulle.offsetHeight - 12 < 6 ? y + 18 : y - bulle.offsetHeight - 12) + 'px';
+}
+function brancherBulle(cible, lignes, nomAccessible) {
+  cible.tabIndex = 0;
+  cible.setAttribute('role', 'img'); cible.setAttribute('aria-label', nomAccessible);
+  cible.addEventListener('pointermove', function (ev) { montrerBulle(cible, lignes, ev); });
+  cible.addEventListener('pointerleave', function () { bulle.hidden = true; });
+  cible.addEventListener('focus', function () { montrerBulle(cible, lignes); });
+  cible.addEventListener('blur', function () { bulle.hidden = true; });
+}
+function lignesBulle(o, titre) {
+  var css = getComputedStyle(bilanEl), l = [['b', pluriel(o.n, 'clôture')], ['s', titre]];
+  if (o.n) l.push(['d', (o.n - o.suite) + ' sans suite à donner', css.getPropertyValue('--series-1').trim()], ['d', o.suite + ' à reprendre', css.getPropertyValue('--series-2').trim()]);
+  if (o.gtr) l.push(['d', 'GTR respectée : ' + o.gtr + ' (' + o.gtrOk + ' sur ' + o.gtrN + ')']);
+  if (o.temps) l.push(['d', 'Temps moyen sur place : ' + o.temps]);
+  if (o.nonLus) l.push(['d', pluriel(o.nonLus, 'rapport') + ' pas encore lu' + (o.nonLus > 1 ? 's' : '')]);
+  return l;
+}
+function phrase(o, titre) { return titre + ' : ' + pluriel(o.n, 'clôture') + (o.suite ? ', dont ' + o.suite + ' à reprendre' : ''); }
+// barres horizontales classées : un nom, une barre et un chiffre par ligne, les 10 premières
+function barres(id, idReste, rows, mots) {
+  var c = document.getElementById(id), max = rows.length ? rows[0].n : 1;
+  c.textContent = '';
+  if (!rows.length) c.appendChild(el('p', 'note', 'Aucune clôture sur cette période.'));
+  rows.slice(0, 10).forEach(function (o) {
+    var r = el('div', 'rang'), piste = el('span', 'piste');
+    r.appendChild(el('span', 'nom', o.nom));
+    [[o.n - o.suite, ''], [o.suite, 's2']].forEach(function (seg) { if (seg[0] > 0) { var b = el('i', seg[1]); b.style.width = (86 * seg[0] / max) + '%'; piste.appendChild(b); } });
+    piste.appendChild(el('span', 'val', String(o.n)));
+    r.appendChild(piste);
+    brancherBulle(r, lignesBulle(o, o.nom), phrase(o, o.nom));
+    c.appendChild(r);
+  });
+  var reste = rows.slice(10), n = reste.reduce(function (a, o) { return a + o.n; }, 0);
+  document.getElementById(idReste).textContent = reste.length ? '+ ' + reste.length + ' ' + (reste.length > 1 ? 'autres ' + mots[1] : 'autre ' + mots[0]) + ' (' + pluriel(n, 'clôture') + ') : voir le tableau.' : '';
+}
+// colonnes empilées par semaine : clôtures en bleu, dont à reprendre en orange au sommet, le total au-dessus
+function colonnes(semaines) {
+  var c = document.getElementById('gSemaines'), H = 170;
+  c.textContent = '';
+  var max = Math.max.apply(null, semaines.map(function (s) { return s.n; }).concat([1]));
+  var pas = max <= 5 ? 1 : max <= 10 ? 2 : max <= 25 ? 5 : max <= 50 ? 10 : max <= 100 ? 20 : max <= 250 ? 50 : 100, haut = Math.ceil(max / pas) * pas;
+  var trace = el('div', 'trace'), slots = el('div', 'slots'), axe = el('div', 'axeX');
+  for (var v = 0; v <= haut; v += pas) { var g = el('div', 'grille' + (v ? '' : ' base')); g.style.bottom = (100 * v / haut) + '%'; g.appendChild(el('span', '', String(v))); trace.appendChild(g); }
+  semaines.forEach(function (s) {
+    var slot = el('div', 'slot'), titre = 'Semaine ' + s.label.slice(1) + ' · du ' + s.du + ' au ' + s.au + (s.enCours ? ' (en cours)' : '');
+    if (s.n) slot.appendChild(el('span', 'val', String(s.n)));
+    [[s.suite, 's2'], [s.n - s.suite, '']].forEach(function (seg) { if (seg[0] > 0) { var b = el('i', seg[1]); b.style.height = Math.max(2, H * seg[0] / haut) + 'px'; slot.appendChild(b); } });
+    brancherBulle(slot, lignesBulle(s, titre), phrase(s, titre));
+    slots.appendChild(slot);
+    var x = el('span', '', s.label); x.appendChild(el('small', '', s.enCours ? 'en cours' : s.du)); axe.appendChild(x);
+  });
+  trace.appendChild(slots); c.appendChild(trace); c.appendChild(axe);
+}
+// la vue « tableau » de chaque graphique : les mêmes chiffres, tous, lisibles sans la couleur ni le survol
+function tableauBilan(id, entetes, lignes) {
+  var t = el('table'), tr = el('tr'), tb = el('tbody');
+  entetes.forEach(function (e) { tr.appendChild(el('th', '', e)); });
+  lignes.forEach(function (l) { var r = el('tr'); l.forEach(function (v) { r.appendChild(el('td', '', String(v))); }); tb.appendChild(r); });
+  var th = el('thead'); th.appendChild(tr); t.appendChild(th); t.appendChild(tb);
+  var c = document.getElementById(id); c.textContent = ''; c.appendChild(t);
+}
+function dessinerBilan() {
+  if (!dernier || bilanEl.hidden) return;
+  var st = dernier.res.stats, k = st.kpi, b = bilan(st.liste, periode, dernier.NOW);
+  document.getElementById('bilanNote').textContent = k.clotures
+    ? pluriel(k.clotures, 'clôture') + ' depuis le ' + k.depuis + ', dont ' + pluriel(k.rapportsLus, 'rapport') + ' lu' + (k.rapportsLus > 1 ? 's' : '') + (PHOTO ? ' · données du ' + heure(dernier.d.photoLe) : '')
+    : "Aucune clôture reçue pour l'instant : les graphiques se remplissent avec les mails de fin d'intervention.";
+  document.getElementById('bilanPeriode').textContent = pluriel(b.total.n, 'clôture') + ' sur ' + b.libelle;
+  colonnes(b.semaines);
+  barres('gCommunes', 'resteCommunes', b.communes, ['commune', 'communes']);
+  barres('gBoites', 'resteBoites', b.boites, ['boîte', 'boîtes']);
+  tableauBilan('tvSemaines', ['Semaine', 'Du', 'Au', 'Clôtures', 'dont à reprendre', 'GTR respectée', 'Temps moyen sur place'],
+    b.semaines.map(function (s) { return [s.label + (s.enCours ? ' (en cours)' : ''), s.du, s.au, s.n, s.suite, s.gtr, s.temps]; }));
+  var cols = ['Clôtures', 'dont à reprendre', 'GTR respectée', 'Temps moyen sur place', 'Temps total sur place'], ligne = function (o) { return [o.nom, o.n, o.suite, o.gtr, o.temps, o.tempsTotal]; };
+  tableauBilan('tvCommunes', ['Commune'].concat(cols), b.communes.map(ligne));
+  tableauBilan('tvBoites', ['Boîte'].concat(cols), b.boites.map(ligne));
+}
+document.getElementById('ouvrirBilan').onclick = function () { panneau.hidden = true; bilanEl.hidden = false; dessinerBilan(); };
+document.getElementById('fermerBilan').onclick = function () { bilanEl.hidden = true; bulle.hidden = true; };
+document.querySelectorAll('.filtres button').forEach(function (b) {
+  b.onclick = function () {
+    periode = b.dataset.p;
+    document.querySelectorAll('.filtres button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    dessinerBilan();
+  };
+});
+document.querySelectorAll('#bilan button[data-tv]').forEach(function (b) {
+  b.onclick = function () { var t = document.getElementById(b.dataset.tv); t.hidden = !t.hidden; b.textContent = t.hidden ? 'Voir le tableau' : 'Masquer le tableau'; };
+});
+
 // ---------- carte ----------
 function afficher(d) {
   var NOW = new Date(), res = analyser(d, NOW), nb = {};
@@ -282,7 +462,8 @@ function afficher(d) {
     ? ' · carte du jour du ' + heure(d.photoLe) + ' · export du ' + heure(d.importeLe)
     : ' · mis à jour à ' + fd(NOW).slice(11) + ' · export du ' + heure(d.importeLe) + ' · mails lus à ' + heure(d.luLe).slice(11));
   document.getElementById('ouvrirControles').hidden = role !== 'ca';
-  if (role !== 'ca') panneau.hidden = true;
+  document.getElementById('ouvrirBilan').hidden = role !== 'ca';
+  if (role !== 'ca') { panneau.hidden = true; bilanEl.hidden = true; }
   document.getElementById('blocMoi').hidden = role !== 'tech';
   // liste des noms de techniciens présents dans les tickets
   var moi = lire('carteMoi'), noms = uniques(res.tickets.map(function (t) { return t.tech; }).filter(function (x) { return x; }));
@@ -292,7 +473,7 @@ function afficher(d) {
 
   Object.keys(calques).forEach(function (k) { calques[k].clearLayers(); nb[k] = 0; });
   marqueurs = {};
-  var pts = [], nbPlanifieKo = 0, nbASuivre = 0;
+  var pts = [], nbPlanifieKo = 0, nbASuivre = 0, nbNouveauUrgent = 0;
   liensDe = {}; marqueursBoites = {};
   // les boîtes où on est intervenu au moins 2 fois, ou dont la dernière réparation est à reprendre : un anneau avec le nombre
   Object.keys(res.stats.histoBoite).forEach(function (b) {
@@ -312,6 +493,7 @@ function afficher(d) {
     var rouge = (k === 'nouveau' && t.prio === 1) || (k === 'planifie' && t.gtrKo);  // contour rouge : GTR KO
     var aSuivre = k === 'termine' && t.suiteMotifs && t.suiteMotifs.length > 0;        // contour orange : le rapport appelle une suite
     if (aSuivre) nbASuivre++;
+    if (k === 'nouveau' && t.prio === 1) nbNouveauUrgent++;
     nb[k]++;
     if (k === 'planifie' && t.gtrKo) nbPlanifieKo++;
     pts.push([t.geo.lat, t.geo.lon]);
@@ -374,6 +556,7 @@ function afficher(d) {
   Object.keys(nb).forEach(function (k) { document.getElementById('nb-' + k).textContent = '(' + nb[k] + ')'; });
   document.getElementById('nb-planifieKo').textContent = '(' + nbPlanifieKo + ')';
   document.getElementById('nb-aSuivre').textContent = '(' + nbASuivre + ')';
+  document.getElementById('nb-nouveauUrgent').textContent = '(' + nbNouveauUrgent + ')';
   // chiffres clés
   var k = res.stats.kpi, ko = 0, bientotKo = 0, aPlan = 0;
   res.tickets.forEach(function (t) { if (t.aPlanifier) aPlan++; if (t.urgent) { if (t.rang === 0) ko++; else bientotKo++; } });
@@ -447,6 +630,7 @@ function afficher(d) {
   }
   if (premier && pts.length) { map.fitBounds(pts, {padding: [30, 30]}); premier = false; }
   tableauControles();
+  dessinerBilan();
   if (!minuterie && !PHOTO) minuterie = setInterval(charger, 2 * 60 * 1000);
 }
 
