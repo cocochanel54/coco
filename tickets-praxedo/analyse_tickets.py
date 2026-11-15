@@ -32,7 +32,8 @@ NOUVEAU_H = 24          # un ticket à planifier reste « nouveau » (violet sur
 # (souvent 3 mois) : elle n'est pas utilisée. Un ticket sans niveau n'a pas de GTR.
 #   [4H HO] / [8H HO] dans la description : 4 ou 8 heures ouvrées
 #   « OTR 5J OUVRES » écrit dans la description : ce nombre de jours ouvrés
-#   Niveau 1 : 4 heures (24 h/24) · Niveau 2 hors RDV client : 1 jour ouvré · Niveau 3 : 5 jours ouvrés · Niveau 4 : 10 jours ouvrés
+#   Niveau 1 : 4 heures (24 h/24) · Niveau 2 sans [RDVCLI] : le lendemain ouvré, le surlendemain si arrivé à 18 h ou après
+#   (ou un week-end / jour férié) · Niveau 3 : 5 jours ouvrés · Niveau 4 : 10 jours ouvrés
 #   Niveau 2 avec RDV client : pas de délai fixe, il dépend du RDV
 GTR_NIVEAU = {1: ("heures", 4), 2: ("jours ouvrés", 1), 3: ("jours ouvrés", 5), 4: ("jours ouvrés", 10)}
 HO_DEBUT, HO_FIN = 8, 18  # heures ouvrées : de 8 h à 18 h, du lundi au vendredi hors jours fériés
@@ -129,6 +130,20 @@ def jours_ouvres(depart, n, dept=""):
     return d
 
 
+def niveau2(c, dept=""):
+    """Niveau 2 sans RDV client : le jour ouvré suivant ; arrivé à 18 h ou après, un week-end ou un jour férié,
+    il compte comme arrivé le jour ouvré suivant : le surlendemain. Échéance : la fin de ce jour-là (23 h 59)."""
+    j = c.replace(hour=0, minute=0, second=0, microsecond=0)
+    if not ouvre(j, dept) or c.hour >= HO_FIN:
+        j += timedelta(1)
+        while not ouvre(j, dept):
+            j += timedelta(1)
+    j += timedelta(1)
+    while not ouvre(j, dept):
+        j += timedelta(1)
+    return j.replace(hour=23, minute=59)
+
+
 def heures_ouvrees(depart, n, dept=""):
     d, reste = depart, timedelta(hours=n)
     while True:
@@ -158,6 +173,8 @@ def regle_gtr(t):
         return f"GTR écrite « OTR {n}J » : {n} j ouvrés", jours_ouvres(c, n, t["dept"]) if c else None
     if t["niveau"] == 2 and t["rdv"]:
         return "Niveau 2 avec RDV client : selon le RDV", None
+    if t["niveau"] == 2:
+        return "Niveau 2 hors RDV : le lendemain (le surlendemain si arrivé à 18 h ou après)", niveau2(c, t["dept"]) if c else None
     if t["niveau"] in GTR_NIVEAU:
         unite, n = GTR_NIVEAU[t["niveau"]]
         hors = " hors RDV" if t["niveau"] == 2 else ""
@@ -717,7 +734,8 @@ feuille(ws, ["Règle", "Délai compté depuis la création", "Tickets concernés
     ["[8H HO] dans la description", "8 heures ouvrées", sum(n for r, n in regles.items() if r.startswith("[8H HO]"))],
     ["« OTR xJ OUVRES » dans la description", "x jours ouvrés", sum(n for r, n in regles.items() if r.startswith("GTR écrite"))],
     ["Niveau 1", f"{GTR_NIVEAU[1][1]} heures (24 h/24)", sum(n for r, n in regles.items() if r.startswith("Niveau 1 :"))],
-    ["Niveau 2 hors RDV client", f"{GTR_NIVEAU[2][1]} jour(s) ouvré(s)", sum(n for r, n in regles.items() if r.startswith("Niveau 2 hors RDV"))],
+    ["Niveau 2 sans [RDVCLI]", "le lendemain (jour ouvré) ; le surlendemain si arrivé à 18 h ou après, un week-end ou un jour férié",
+     sum(n for r, n in regles.items() if r.startswith("Niveau 2 hors RDV"))],
     ["Niveau 2 avec RDV client", "Pas de délai fixe (selon le RDV)", regles.get("Niveau 2 avec RDV client : selon le RDV", 0)],
     ["Niveau 3", f"{GTR_NIVEAU[3][1]} jours ouvrés", sum(n for r, n in regles.items() if r.startswith("Niveau 3 :"))],
     ["Niveau 4", f"{GTR_NIVEAU[4][1]} jours ouvrés", sum(n for r, n in regles.items() if r.startswith("Niveau 4 :"))],

@@ -10,7 +10,8 @@ var REGLAGES = {
   RELANCE_JO: 10,    // ticket justifié : relance tous les 10 jours ouvrés
   FIN_CERCLE_MIN: 60, // un technicien qui vient de clôturer : cercle autour de lui pendant 60 minutes
   HO_DEBUT: 8, HO_FIN: 18,  // heures ouvrées
-  // GTR comptée depuis la création : niveau 1 = 4 h, niveau 2 hors RDV = 1 j ouvré, niveau 3 = 5 j ouvrés, niveau 4 = 10 j ouvrés
+  // GTR comptée depuis la création : niveau 1 = 4 h, niveau 2 sans [RDVCLI] = le lendemain ouvré (le surlendemain si arrivé à 18 h ou après),
+  // niveau 3 = 5 j ouvrés, niveau 4 = 10 j ouvrés
   GTR_NIVEAU: { 1: ['heures', 4], 2: ['jours', 1], 3: ['jours', 5], 4: ['jours', 10] }
 };
 
@@ -119,6 +120,15 @@ function joursOuvres(depart, n, dept) {
   while (n > 0) { d = plusJours(d, 1); if (ouvre(d, dept)) n--; }
   return d;
 }
+// Niveau 2 sans RDV client : à faire le jour ouvré suivant. Arrivé à 18 h ou après, un week-end ou un jour férié, il compte comme
+// arrivé le jour ouvré suivant : à faire le surlendemain. L'échéance est la fin de ce jour-là (23 h 59).
+function niveau2(c, dept) {
+  var j = new Date(c.getFullYear(), c.getMonth(), c.getDate());
+  if (!ouvre(j, dept) || c.getHours() >= REGLAGES.HO_FIN) { do { j = plusJours(j, 1); } while (!ouvre(j, dept)); }
+  do { j = plusJours(j, 1); } while (!ouvre(j, dept));
+  j.setHours(23, 59, 0, 0);
+  return j;
+}
 function heuresOuvrees(depart, n, dept) {
   var d = new Date(depart.getTime()), reste = n * 3600e3, R = REGLAGES;
   for (;;) {
@@ -146,6 +156,7 @@ function regleGtr(t) {
   m = /OTR\s*(\d+)\s*J\s*OUVR/i.exec(t.desc);
   if (m) return ['GTR écrite « OTR ' + m[1] + 'J » : ' + m[1] + ' j ouvrés', c && joursOuvres(c, +m[1], t.dept)];
   if (t.niveau === 2 && t.rdv) return ['Niveau 2 avec RDV client : selon le RDV', null];
+  if (t.niveau === 2) return ['Niveau 2 hors RDV : le lendemain (le surlendemain si arrivé à 18 h ou après)', c && niveau2(c, t.dept)];
   var g = R.GTR_NIVEAU[t.niveau];
   if (g) {
     if (g[0] === 'heures') return ['Niveau ' + t.niveau + ' : ' + g[1] + ' h', c && new Date(c.getTime() + g[1] * 3600e3)];
