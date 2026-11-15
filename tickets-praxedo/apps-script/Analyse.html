@@ -785,7 +785,18 @@ function listesDuJour(res, ctrl, NOW, infos) {
   var J = T.filter(function (t) { return t.categorie === 'justifie' && t.suivi; }).sort(function (a, b) {
     return (b.suivi.due - a.suivi.due) || ((a.suivi.prochaine ? +a.suivi.prochaine : 9e15) - (b.suivi.prochaine ? +b.suivi.prochaine : 9e15));
   });
+  // données des graphiques de l'Excel (les mêmes que le bilan de la carte, sur 90 jours) : trois tableaux côte à côte
+  var bl = bilan(res.stats.liste, 'tout', NOW), GS = bl.semaines, GC = bl.communes.slice(0, 10), GB = bl.boites.slice(0, 10), LG = [];
+  for (var i = 0; i < Math.max(GS.length, GC.length, GB.length); i++) {
+    var s = GS[i], c = GC[i], b = GB[i];
+    LG.push([s ? s.label + (s.enCours ? ' (en cours)' : '') : '', s ? s.du : '', s ? s.au : '', s ? s.n - s.suite : '', s ? s.suite : '', s ? s.n : '', '',
+             c ? c.nom : '', c ? c.n - c.suite : '', c ? c.suite : '', c ? c.n : '', '',
+             b ? b.nom : '', b ? b.n - b.suite : '', b ? b.suite : '', b ? b.n : '']);
+  }
   return {
+    graphiques: { entetes: ['Semaine', 'Du', 'Au', 'Sans suite à donner', 'À reprendre', 'Clôtures', '', 'Commune', 'Sans suite à donner', 'À reprendre', 'Clôtures', '',
+                            'Boîte', 'Sans suite à donner', 'À reprendre', 'Clôtures'],
+                  lignes: LG, nSemaines: GS.length, nCommunes: GC.length, nBoites: GB.length },
     resume: { entetes: ['Indicateur', 'Valeur'], lignes: R, fonds: RF },
     aPlanifier: {
       entetes: ['Prio', 'N°', 'Catégorie', 'GTR', 'Échéance GTR', 'Règle GTR', 'Statut', 'Créé le', 'Ville', 'Adresse', 'PM (Site)', 'Boîte(s)',

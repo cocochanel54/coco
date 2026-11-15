@@ -206,16 +206,23 @@ var MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.she
  */
 function classeurDuJour_() {
   var a = analyse_(), d = lireDonnees_(), NOW = new Date(), res = a.analyser(d, NOW), c = a.controles(res, NOW);
-  var l = a.listesDuJour(res, c, NOW, { importeLe: d.importeLe, luLe: d.luLe });
+  var l = a.listesDuJour(res, c, NOW, { importeLe: d.importeLe, luLe: d.luLe }), g = l.graphiques;
   var feuilles = [
     { nom: 'Résumé', entetes: l.resume.entetes, lignes: l.resume.lignes, fonds: l.resume.fonds, largeurs: [460, 220], filtre: false },
+    // graphiques natifs d'Excel, comme le bilan de la carte ; leurs chiffres sont dans l'onglet « Données graphiques »
+    { nom: 'Graphiques', entetes: ['Clôtures des 90 derniers jours (chiffres dans l\'onglet « Données graphiques »)'], lignes: [], largeurs: [780],
+      graphiques: [
+        { titre: 'Clôtures par semaine (la dernière est en cours)', sens: 'col', donnees: 'Données graphiques', cat: 1, series: [3, 4], n: g.nSemaines, ligne: 1, taille: [760, 330] },
+        { titre: 'Les communes où on intervient le plus', sens: 'bar', donnees: 'Données graphiques', cat: 7, series: [8, 9], n: g.nCommunes, ligne: 19, taille: [760, 380] },
+        { titre: 'Les boîtes où on intervient le plus', sens: 'bar', donnees: 'Données graphiques', cat: 12, series: [13, 14], n: g.nBoites, ligne: 39, taille: [760, 380] }] },
     { nom: 'À planifier', entetes: l.aPlanifier.entetes, lignes: l.aPlanifier.lignes, fonds: l.aPlanifier.fonds,
       largeurs: [50, 160, 150, 140, 120, 220, 100, 130, 160, 220, 140, 170, 130, 120, 260, 260, 300, 480] },
     { nom: 'Justifiés', entetes: l.justifies.entetes, lignes: l.justifies.lignes, fonds: l.justifies.fonds,
       largeurs: [90, 300, 120, 120, 200, 160, 100, 60, 120, 80, 300, 160, 220, 140, 420] }
   ].concat(ongletsControle_(c).map(function (o) {
     return { nom: o.nom, entetes: o.entetes, lignes: o.lignes, largeurs: o.largeurs, fonds: o.lignes.map(function (x, i) { return o.couleur ? o.couleur(x, i) || null : null; }) };
-  }));
+  })).concat([{ nom: 'Données graphiques', entetes: g.entetes, lignes: g.lignes, filtre: false,
+    largeurs: [120, 70, 70, 120, 90, 70, 20, 200, 120, 90, 70, 20, 190, 120, 90, 70] }]);
   var tel = /(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g;
   feuilles.forEach(function (f) { f.lignes = f.lignes.map(function (r) { return r.map(function (v) { return typeof v === 'string' ? v.replace(tel, '[tél.]') : v; }); }); });
   return Utilities.newBlob(signes_(xlsx_(feuilles)), MIME_XLSX,
@@ -251,19 +258,24 @@ function xlsx_(feuilles) {
     return numXf[cle];
   }
   var vus = {}, filtres = [], DEBUT = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  var REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/', RELS = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
   var NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
-  var docs = feuilles.map(function (fe, n) {
+  feuilles.forEach(function (fe, n) {
     // nom d'onglet : 31 caractères au plus, sans : \ / ? * [ ], et unique
     var nom = String(fe.nom).replace(/[:\\\/?*\[\]]/g, ' ').slice(0, 31).trim() || 'Feuille ' + (n + 1);
     while (vus[nom.toLowerCase()]) nom = nom.slice(0, 27) + ' (' + (n + 1) + ')';
     vus[nom.toLowerCase()] = 1;
     fe.nomXl = nom;
+    fe.graphes = (fe.graphiques || []).filter(function (g) { return g.n > 0; });
+  });
+  var docs = feuilles.map(function (fe, n) {
+    var nom = fe.nomXl;
     var nc = fe.entetes.length, tout = [fe.entetes].concat(fe.lignes), rangees = [];
     tout.forEach(function (l, i) {
       var fond = i === 0 ? '1F4E78' : String((fe.fonds && fe.fonds[i - 1]) || '').replace('#', '').toUpperCase(), cel = [];
       for (var j = 0; j < nc; j++) {
         var v = l[j], ref = lettre(j) + (i + 1);
-        if (i === 0) { cel.push('<c r="' + ref + '" s="' + style(1, fond) + '" t="inlineStr"><is><t>' + x(v) + '</t></is></c>'); continue; }
+        if (i === 0) { if (v !== '' && v != null) cel.push('<c r="' + ref + '" s="' + style(1, fond) + '" t="inlineStr"><is><t>' + x(v) + '</t></is></c>'); continue; }
         if (v == null || v === '') { if (fond) cel.push('<c r="' + ref + '" s="' + style(0, fond) + '"/>'); continue; }
         if (typeof v === 'number' && isFinite(v)) { cel.push('<c r="' + ref + '" s="' + style(0, fond) + '"><v>' + v + '</v></c>'); continue; }
         v = String(v);
@@ -289,12 +301,36 @@ function xlsx_(feuilles) {
       }).join('') + '</cols><sheetData>' + rangees.join('') + '</sheetData>' +
       (filtre ? '<autoFilter ref="' + zone + '"/>' : '') +
       '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>' +
-      '<ignoredErrors><ignoredError sqref="' + zone + '" numberStoredAsText="1"/></ignoredErrors></worksheet>';
+      '<ignoredErrors><ignoredError sqref="' + zone + '" numberStoredAsText="1"/></ignoredErrors>' +
+      (fe.graphes.length ? '<drawing r:id="rId1"/>' : '') + '</worksheet>';
+  });
+  // graphiques : un dessin par onglet qui en a, un fichier par graphique
+  var fichiersGraphiques = [], dessins = 0, numGraphe = 0, typesEnPlus = '';
+  feuilles.forEach(function (fe, n) {
+    if (!fe.graphes.length) return;
+    var d = ++dessins, ancres = [], liensDessin = [];
+    fe.graphes.forEach(function (g, k) {
+      var num = ++numGraphe;
+      fichiersGraphiques.push(['xl/charts/chart' + num + '.xml', graphique(g)]);
+      typesEnPlus += '<Override PartName="/xl/charts/chart' + num + '.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>';
+      liensDessin.push('<Relationship Id="rId' + (k + 1) + '" Type="' + REL + 'chart" Target="../charts/chart' + num + '.xml"/>');
+      ancres.push('<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>' + g.ligne + '</xdr:row><xdr:rowOff>95250</xdr:rowOff></xdr:from>' +
+        '<xdr:ext cx="' + g.taille[0] * 9525 + '" cy="' + g.taille[1] * 9525 + '"/><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr>' +
+        '<xdr:cNvPr id="' + (k + 2) + '" name="Graphique ' + (k + 1) + '"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>' +
+        '<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">' +
+        '<c:chart r:id="rId' + (k + 1) + '"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor>');
+    });
+    fichiersGraphiques.push(['xl/drawings/drawing' + d + '.xml', DEBUT + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' +
+      'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="' + REL.replace(/\/$/, '') + '" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">' +
+      ancres.join('') + '</xdr:wsDr>']);
+    fichiersGraphiques.push(['xl/drawings/_rels/drawing' + d + '.xml.rels', DEBUT + RELS + liensDessin.join('') + '</Relationships>']);
+    fichiersGraphiques.push(['xl/worksheets/_rels/sheet' + (n + 1) + '.xml.rels', DEBUT + RELS +
+      '<Relationship Id="rId1" Type="' + REL + 'drawing" Target="../drawings/drawing' + d + '.xml"/></Relationships>']);
+    typesEnPlus += '<Override PartName="/xl/drawings/drawing' + d + '.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>';
   });
   var classeur = DEBUT + '<workbook ' + NS + '><bookViews><workbookView activeTab="0"/></bookViews><sheets>' +
     feuilles.map(function (fe, n) { return '<sheet name="' + x(fe.nomXl) + '" sheetId="' + (n + 1) + '" r:id="rId' + (n + 1) + '"/>'; }).join('') + '</sheets>' +
     (filtres.length ? '<definedNames>' + filtres.join('') + '</definedNames>' : '') + '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>';
-  var REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/', RELS = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
   var liens = DEBUT + RELS + feuilles.map(function (fe, n) {
     return '<Relationship Id="rId' + (n + 1) + '" Type="' + REL + 'worksheet" Target="worksheets/sheet' + (n + 1) + '.xml"/>';
   }).join('') + '<Relationship Id="rId' + (feuilles.length + 1) + '" Type="' + REL + 'styles" Target="styles.xml"/></Relationships>';
@@ -314,10 +350,52 @@ function xlsx_(feuilles) {
     '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
     feuilles.map(function (fe, n) {
       return '<Override PartName="/xl/worksheets/sheet' + (n + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
-    }).join('') + '</Types>';
+    }).join('') + typesEnPlus + '</Types>';
   var racine = DEBUT + RELS + '<Relationship Id="rId1" Type="' + REL + 'officeDocument" Target="xl/workbook.xml"/></Relationships>';
   return zip_([['[Content_Types].xml', types], ['_rels/.rels', racine], ['xl/workbook.xml', classeur], ['xl/_rels/workbook.xml.rels', liens],
-    ['xl/styles.xml', styles]].concat(docs.map(function (doc, n) { return ['xl/worksheets/sheet' + (n + 1) + '.xml', doc]; })));
+    ['xl/styles.xml', styles]].concat(docs.map(function (doc, n) { return ['xl/worksheets/sheet' + (n + 1) + '.xml', doc]; })).concat(fichiersGraphiques));
+
+  /**
+   * Un graphique en barres empilées (sens 'col' : colonnes par semaine ; 'bar' : barres horizontales, la plus grande en haut).
+   * Les données viennent d'un autre onglet (g.donnees), ligne 2 et suivantes ; les valeurs sont aussi recopiées dans le
+   * graphique pour qu'il s'affiche tout de suite. Couleurs : bleu « sans suite à donner », orange « à reprendre ».
+   */
+  function graphique(g) {
+    var src = feuilles.filter(function (f) { return f.nom === g.donnees; })[0], feuille = "'" + src.nomXl.replace(/'/g, "''") + "'!", barres = g.sens === 'bar';
+    var lignes = src.lignes.slice(0, g.n), COUL = ['2A78D6', 'EB6834'];
+    function plage(col) { return feuille + '$' + lettre(col) + '$2:$' + lettre(col) + '$' + (g.n + 1); }
+    function police(taille, couleur, gras) {
+      return '<a:defRPr sz="' + taille + '"' + (gras ? ' b="1"' : '') + '><a:solidFill><a:srgbClr val="' + couleur + '"/></a:solidFill><a:latin typeface="Arial"/></a:defRPr>';
+    }
+    function texte(taille, couleur) { return '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr>' + police(taille, couleur) + '</a:pPr><a:endParaRPr lang="fr-FR"/></a:p></c:txPr>'; }
+    var series = g.series.map(function (col, k) {
+      return '<c:ser><c:idx val="' + k + '"/><c:order val="' + k + '"/><c:tx><c:strRef><c:f>' + x(feuille + '$' + lettre(col) + '$1') + '</c:f>' +
+        '<c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>' + x(src.entetes[col]) + '</c:v></c:pt></c:strCache></c:strRef></c:tx>' +
+        '<c:spPr><a:solidFill><a:srgbClr val="' + COUL[k % 2] + '"/></a:solidFill><a:ln w="19050"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr>' +
+        '<c:invertIfNegative val="0"/><c:cat><c:strRef><c:f>' + x(plage(g.cat)) + '</c:f><c:strCache><c:ptCount val="' + g.n + '"/>' +
+        lignes.map(function (l, i) { return '<c:pt idx="' + i + '"><c:v>' + x(l[g.cat]) + '</c:v></c:pt>'; }).join('') + '</c:strCache></c:strRef></c:cat>' +
+        '<c:val><c:numRef><c:f>' + x(plage(col)) + '</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="' + g.n + '"/>' +
+        lignes.map(function (l, i) { return '<c:pt idx="' + i + '"><c:v>' + (+l[col] || 0) + '</c:v></c:pt>'; }).join('') + '</c:numCache></c:numRef></c:val></c:ser>';
+    }).join('');
+    return DEBUT + '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:roundedCorners val="0"/><c:chart>' +
+      '<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr>' + police(1200, '0B0B0B', true) + '</a:pPr><a:r><a:rPr lang="fr-FR" sz="1200" b="1">' +
+      '<a:solidFill><a:srgbClr val="0B0B0B"/></a:solidFill><a:latin typeface="Arial"/></a:rPr><a:t>' + x(g.titre) + '</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>' +
+      '<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/><c:barChart><c:barDir val="' + (barres ? 'bar' : 'col') + '"/><c:grouping val="stacked"/><c:varyColors val="0"/>' +
+      series + '<c:gapWidth val="' + (barres ? 80 : 150) + '"/><c:overlap val="100"/><c:axId val="1001"/><c:axId val="1002"/></c:barChart>' +
+      '<c:catAx><c:axId val="1001"/><c:scaling><c:orientation val="' + (barres ? 'maxMin' : 'minMax') + '"/></c:scaling><c:delete val="0"/>' +
+      '<c:axPos val="' + (barres ? 'l' : 'b') + '"/><c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/>' +
+      '<c:tickLblPos val="nextTo"/><c:spPr><a:ln w="9525"><a:solidFill><a:srgbClr val="BFBFBF"/></a:solidFill></a:ln></c:spPr>' + texte(900, '52514E') +
+      '<c:crossAx val="1002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>' +
+      '<c:valAx><c:axId val="1002"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="' + (barres ? 'b' : 'l') + '"/>' +
+      '<c:majorGridlines><c:spPr><a:ln w="9525"><a:solidFill><a:srgbClr val="E6E6E6"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>' +
+      '<c:numFmt formatCode="0" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>' +
+      '<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>' + texte(900, '52514E') + '<c:crossAx val="1001"/><c:crosses val="' + (barres ? 'max' : 'autoZero') + '"/>' +
+      '<c:crossBetween val="between"/></c:valAx><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>' +
+      '<c:legend><c:legendPos val="t"/><c:overlay val="0"/>' + texte(900, '0B0B0B') + '</c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>' +
+      '<c:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr>' +
+      '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900"><a:latin typeface="Arial"/></a:defRPr></a:pPr><a:endParaRPr lang="fr-FR"/></a:p></c:txPr></c:chartSpace>';
+  }
 }
 
 /** Archive ZIP sans compression (c'est ce qu'est un .xlsx) : fichiers = [[nom, texte]]. Renvoie un Uint8Array. */
@@ -467,6 +545,7 @@ function lireMails_(delaiMin) {
     var creees = 0, importe = null, rapports = 0;
     try { rapports = lireRapports_(RAPPORTS_PAR_PASSAGE); } catch (err) { console.warn('Rapports : ' + err); }
     try { creees = lireCreations_(fen.q); } catch (err) { complet = false; console.warn('Créations : ' + err); }
+    try { creees += relireCreations_(); } catch (err) { console.warn('Relecture des créations : ' + err); }
     try { importe = importerDepuisGmail_(fen.q); } catch (err) { complet = false; console.warn('Import par mail : ' + err); }
     // l'import refait déjà les contrôles ; sinon, après un mail de fin ou de création, et au moins une fois par heure
     var faits = props.getProperty('CONTROLES_LE');
@@ -522,6 +601,31 @@ function lireCreations_(fenetre) {
   f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_CREATIONS.length).setNumberFormat('@').setValues(ajout);
   geocoder_(ajout.map(function (l) { return [l[4], l[5], l[6]].filter(function (x) { return x; }).join(' '); }));
   return ajout.length;
+}
+
+/**
+ * Une seule fois après une mise à jour de la lecture des mails de création : relit ceux des 7 derniers jours (les tickets
+ * pas encore dans l'export), pour retrouver leur niveau et leur GTR. Au plus 60 mails.
+ */
+var LECTURE_CREATIONS = '2';
+function relireCreations_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('LECTURE_CREATIONS') === LECTURE_CREATIONS) return 0;
+  var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_CREATIONS), n = 0, adresses = [];
+  if (f && f.getLastRow() > 1) {
+    var v = f.getRange(2, 1, f.getLastRow() - 1, ENTETES_CREATIONS.length).getDisplayValues(), limite = Date.now() - 7 * 86400000;
+    for (var i = v.length - 1; i >= 0 && n < 60; i--) {
+      var m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(v[i][0]);
+      if (!m || new Date(+m[3], m[2] - 1, +m[1]).getTime() < limite || !v[i][9]) continue;
+      try {
+        var msg = GmailApp.getMessageById(v[i][9]), l = msg && ligneCreation_(msg.getSubject(), msg.getPlainBody(), msg.getDate(), v[i][9]);
+        if (l) { f.getRange(i + 2, 1, 1, l.length).setNumberFormat('@').setValues([l.map(texte_)]); adresses.push([l[4], l[5], l[6]].filter(function (x) { return x; }).join(' ')); n++; }
+      } catch (err) { console.warn('Relecture de la création ' + v[i][1] + ' : ' + err); }
+    }
+  }
+  if (adresses.length) geocoder_(adresses);
+  props.setProperty('LECTURE_CREATIONS', LECTURE_CREATIONS);
+  return n;
 }
 
 /**
@@ -1007,9 +1111,22 @@ function ligneCreation_(objet, corps, recu, id) {
   if (!m) return null;
   var commune = objet.slice(m.index + m[0].length).replace(/^\s*-\s*/, '').trim();
   var type = (/\]\s*Ticket\s+(.+?)\s+N°/i.exec(objet) || [])[1] || '';
-  var texte = String(corps).replace(/\r/g, '').replace(/<[^>\n]*>/g, '');  // le texte brut ajoute les liens en <https://…>
-  var bloc = /info ticket\s*:?[ \t]*\n([\s\S]*?)(?:\n\s*info client\s*:|$)/i.exec(texte);
-  var desc = bloc ? bloc[1].replace(/\n{3,}/g, '\n\n').trim() : '';
+  var texte = String(corps).replace(/\r/g, '').replace(/\u00a0/g, ' ').replace(/<[^>\n]*>/g, '');  // le texte brut ajoute les liens en <https://…>
+  // le bloc « info ticket » : ce qui suit le libellé jusqu'à « info Client », que le contenu soit à la ligne ou non
+  var i = texte.search(/info\s+ticket/i), desc = '';
+  if (i >= 0) {
+    var reste = texte.slice(i).replace(/^info\s+ticket[^:\n]{0,5}:?/i, ''), j = reste.search(/info\s+client/i);
+    desc = (j >= 0 ? reste.slice(0, j) : reste).replace(/^[\s*_]+|[\s*_]+$/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+  }
+  // niveau, GTR en heures et RDV client : s'ils ne sont pas en tête du bloc, on les cherche dans tout le mail (objet compris)
+  if (!/niveau\s*\d|\[\s*\d+\s*h\s*ho\s*\]/i.test(desc.slice(0, 250))) {
+    // entre crochets dans le mail ([Niveau 3]) ; sans crochets, seulement dans l'objet (« niveau 2 » d'un parking n'est pas une GTR)
+    var tout = objet + '\n' + texte, devant = [], mn = /\[\s*niveau\s*(\d)\s*\]/i.exec(tout) || /niveau\s*(\d)/i.exec(objet), mh = /\[\s*(\d+)\s*h\s*ho\s*\]/i.exec(tout);
+    if (mh) devant.push('[' + mh[1] + 'h HO]');
+    if (mn) devant.push('[Niveau ' + mn[1] + ']');
+    if (/\[\s*RDVCLI\s*\]/i.test(tout) && !/\[\s*RDVCLI\s*\]/i.test(desc.slice(0, 250))) devant.push('[RDVCLI]');
+    if (devant.length) desc = devant.join('') + (desc ? ' ' + desc : '');
+  }
   var champ = function (nom) {
     var r = new RegExp('^\\s*' + nom + '\\s*:\\s*(.*)$', 'im').exec(texte), v = r ? r[1].trim() : '';
     return /voir coordonn|^0+(\s|$)|^NA$/i.test(v) ? '' : v;

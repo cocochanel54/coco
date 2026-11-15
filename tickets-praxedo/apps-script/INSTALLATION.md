@@ -75,7 +75,7 @@ Sur les PC où la sécurité de l'entreprise bloque le lien de la carte ou Googl
 3. Dépose-les dans Teams. Tes collègues les **téléchargent puis les ouvrent** : la carte dans leur navigateur, l'Excel dans Excel.
 
 - **La carte** : la carte complète (zoom, fiches des tickets, couleurs, listes de contrôle).
-- **L'Excel** : un onglet **Résumé** avec les chiffres du jour, **À planifier** (par priorité, avec la GTR et l'intervention planifiée à côté), **Justifiés** (qui relancer et quand), puis les mêmes onglets que le Sheet : Suites à prévoir, Incohérences, Tickets liés, PM chargés, Clôtures, Stats boîtes, villes et semaines. Couleurs, filtres et liens « rapport » cliquables compris.
+- **L'Excel** : un onglet **Résumé** avec les chiffres du jour, **Graphiques** (clôtures par semaine, communes et boîtes où on intervient le plus, comme le bilan de la carte ; leurs chiffres sont dans l'onglet « Données graphiques »), **À planifier** (par priorité, avec la GTR et l'intervention planifiée à côté), **Justifiés** (qui relancer et quand), puis les mêmes onglets que le Sheet : Suites à prévoir, Incohérences, Tickets liés, PM chargés, Clôtures, Stats boîtes, villes et semaines. Couleurs, filtres et liens « rapport » cliquables compris.
 
 Pas de lien Google ni de code, mais ce sont des **photos** : les données sont celles du moment où tu as fabriqué les fichiers. Refais-les quand tu veux une version à jour. Les numéros de téléphone y sont masqués. Ils contiennent les adresses et les descriptions des tickets : ne les dépose que dans l'équipe.
 
