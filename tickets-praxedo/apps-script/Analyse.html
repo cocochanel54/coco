@@ -762,6 +762,7 @@ function listesDuJour(res, ctrl, NOW, infos) {
   ligne('Fichier fait le', fd(NOW));
   ligne('Dernier export Praxedo importé le', iso(infos.importeLe));
   ligne('Mails lus le', iso(infos.luLe));
+  if (infos.lienCarte) ligne("Carte en direct (avec ton code d'accès)", infos.lienCarte);
   titre('TICKETS À PLANIFIER');
   ligne('À planifier', nb(function (t) { return t.aPlanifier; }));
   ligne('dont GTR KO', nb(function (t) { return t.urgent && t.rang === 0; }));
@@ -810,11 +811,12 @@ function listesDuJour(res, ctrl, NOW, infos) {
                   lignes: LG, nSemaines: GS.length, nCommunes: GC.length, nBoites: GB.length },
     resume: { entetes: ['Indicateur', 'Valeur'], lignes: R, fonds: RF },
     aPlanifier: {
-      entetes: ['Prio', 'N°', 'Catégorie', 'GTR', 'Échéance GTR', 'Règle GTR', 'Statut', 'Créé le', 'Ville', 'Adresse', 'PM (Site)', 'Boîte(s)',
+      entetes: ['Prio', 'N°', 'Catégorie', 'GTR', 'Échéance GTR', 'Règle GTR', 'Statut', 'Créé le', 'Ville', 'Adresse', 'Google Maps', 'PM (Site)', 'Boîte(s)',
                 'Équipement', 'Déjà planifié le', 'Justification / note', 'Alertes', 'À caser avec (intervention déjà planifiée)', 'Description'],
       lignes: AP.map(function (t) {
         return [t.prio, t.num, CAT[t.categorie] || t.categorie, t.gtrTexte || '', fd(t.echeance), t.regle, t.statut,
-                fd(t.creee) + (t.creeeSource === 'numero' ? ' (estimée)' : ''), t.ville, t.adresse, t.site, t.boites.join(', '), t.equip,
+                fd(t.creee) + (t.creeeSource === 'numero' ? ' (estimée)' : ''), t.ville, t.adresse,
+                t.geo ? 'https://www.google.com/maps/search/?api=1&query=' + t.geo.lat + ',' + t.geo.lon : '', t.site, t.boites.join(', '), t.equip,
                 t.deplanifie ? fd(t.planif) : '', t.justif || t.noteTapee || '', uniques(t.alertes || []).join(' · '),
                 t.caser ? t.caser.n + ' · ' + t.caser.p + ' · ' + t.caser.tech + ' · à ' + t.caser.d : '', court(t.desc, 400)];
       }),

@@ -75,9 +75,21 @@ Sur les PC où la sécurité de l'entreprise bloque le lien de la carte ou Googl
 3. Dépose-les dans Teams. Tes collègues les **téléchargent puis les ouvrent** : la carte dans leur navigateur, l'Excel dans Excel.
 
 - **La carte** : la carte complète (zoom, fiches des tickets, couleurs, listes de contrôle).
-- **L'Excel** : un onglet **Résumé** avec les chiffres du jour, **Graphiques** (clôtures par semaine, communes et boîtes où on intervient le plus, comme le bilan de la carte ; leurs chiffres sont dans l'onglet « Données graphiques »), **À planifier** (par priorité, avec la GTR et l'intervention planifiée à côté), **Justifiés** (qui relancer et quand), puis les mêmes onglets que le Sheet : Suites à prévoir, Incohérences, Tickets liés, PM chargés, Clôtures, Stats boîtes, villes et semaines. Couleurs, filtres et liens « rapport » cliquables compris.
+- **L'Excel** : un onglet **Résumé** avec les chiffres du jour, **Graphiques** (clôtures par semaine, communes et boîtes où on intervient le plus, comme le bilan de la carte ; leurs chiffres sont dans l'onglet « Données graphiques »), **À planifier** (par priorité, avec la GTR, l'intervention planifiée à côté et un lien **Google Maps** vers chaque ticket), **Justifiés** (qui relancer et quand), puis les mêmes onglets que le Sheet : Suites à prévoir, Incohérences, Tickets liés, PM chargés, Clôtures, Stats boîtes, villes et semaines. Couleurs, filtres et liens « rapport » cliquables compris.
+
+Le Résumé de l'Excel donne aussi le lien de la carte en direct (il apparaît dès que quelqu'un a ouvert la carte avec la dernière version).
 
 Pas de lien Google ni de code, mais ce sont des **photos** : les données sont celles du moment où tu as fabriqué les fichiers. Refais-les quand tu veux une version à jour. Les numéros de téléphone y sont masqués. Ils contiennent les adresses et les descriptions des tickets : ne les dépose que dans l'équipe.
+
+## Envoi automatique chaque matin
+
+Pour que l'équipe reçoive l'Excel et la carte du jour sans que tu aies à les refaire :
+
+1. Dans le Sheet, onglet **Envoi du matin** (il apparaît après la mise à jour des onglets), écris les adresses mail en **colonne A**, une par ligne.
+2. Pour essayer tout de suite : **Carte tickets → Envoi du matin : envoyer maintenant**.
+3. Ensuite, c'est automatique : chaque **jour ouvré vers 7 h**, deux mails partent à ces adresses, d'abord l'**Excel du jour** (avec les chiffres du jour dans le texte), puis la **carte du jour**. Si la messagerie de l'entreprise bloque la carte (fichier .html), l'Excel arrive quand même.
+
+Rien ne part tant que la colonne A est vide ; pour arrêter, vide-la. Gmail limite les envois à environ 100 destinataires par jour : jusqu'à 40 adresses, c'est large. Ces fichiers contiennent les adresses des tickets : n'y mets que l'équipe.
 
 ## Les rapports d'intervention, le bilan et les graphiques
 
@@ -87,6 +99,7 @@ Avec ces rapports, le Sheet tient à jour (sur les 90 derniers jours) :
 
 - **Suites à prévoir** : les clôtures en provisoire, non corrigées ou avec un dommage signalé, et leur ticket de suite quand il existe (en jaune : pas encore de ticket de suite). Un défaut non corrigé dont le reste est **chez l'opérateur** n'en fait pas partie : jarretière absente au PM à l'arrivée, ou compte-rendu qui parle de jarretière ou de brassage et de l'opérateur (OC, FAI, Free, SFR, Bouygues, Orange…).
 - **Clôtures** : une ligne par intervention clôturée, avec la durée, la GTR respectée ou non (de la date de la demande à la fin de l'intervention ; la fin d'impact client, côté opérateur, est notée pour information) et le résultat (en gris : « reste côté opérateur (jarretière, brassage) », ce n'est pas une reprise pour nous). La colonne « À vérifier » signale un retour dans une boîte sous 30 jours, ou une fin d'impact notée avant l'arrivée du technicien.
+- **Graphiques** : les clôtures par semaine, les communes et les boîtes où on intervient le plus (sans suite à donner en bleu, à reprendre en orange), refaits tout seuls ; leurs chiffres sont à droite, à partir de la colonne R.
 - **Stats boîtes**, **Stats villes**, **Stats semaines** : où on intervient le plus, les **retours sous 30 jours** (une intervention dans une boîte déjà visitée moins de 30 jours avant), le temps passé, les provisoires, la part de GTR respectées. Sans le nombre de prises, ce sont des nombres d'interventions, pas des taux de panne.
 
 Sur la carte (conduite d'activité) : les **chiffres clés** en haut, les **boîtes à répétition** (un anneau avec le nombre d'interventions, orange si la dernière réparation est à reprendre ; un clic donne l'historique et les rapports), le bouton **Bilan en graphiques** (clôtures par semaine, communes et boîtes où on intervient le plus, avec le choix de la période) et, dans **Listes de contrôle**, les onglets Suites à prévoir, Clôtures, Boîtes et Villes. La fiche d'un ticket donne ses **tickets liés** (un trait les relie quand la fiche est ouverte), l'intervention d'avant avec son rapport, et ce qu'on sait déjà de sa boîte.

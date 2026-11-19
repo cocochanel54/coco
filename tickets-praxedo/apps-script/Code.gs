@@ -67,6 +67,10 @@ var MARGE_MAILS_S = 15 * 60, RELECTURE_LARGE_MS = 3600 * 1000;
 
 /** La carte. */
 function doGet() {
+  try {  // l'adresse de la carte, pour le lien de l'Excel du jour
+    var url = ScriptApp.getService().getUrl(), props = PropertiesService.getScriptProperties();
+    if (/\/exec$/.test(url || '') && props.getProperty('LIEN_CARTE') !== url) props.setProperty('LIEN_CARTE', url);
+  } catch (err) { /* sans importance pour la carte */ }
   return HtmlService.createTemplateFromFile('Carte').evaluate()
     .setTitle('Carte des tickets')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
@@ -82,6 +86,7 @@ function onOpen() {
     .addItem('Lire les mails maintenant', 'lireMailsMaintenant')
     .addItem('Mettre à jour les onglets de contrôle', 'mettreAJourControles')
     .addItem('Fichiers du jour : carte + Excel (pour Teams)…', 'ouvrirCarteDuJour')
+    .addItem('Envoi du matin : envoyer maintenant', 'envoyerMaintenant')
     .addItem("Codes d'accès à la carte", 'afficherCodes')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
     .addToUi();
@@ -204,9 +209,12 @@ var MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.she
  * L'Excel du jour : un résumé chiffré, les tickets à planifier par priorité, le suivi des justifiés, puis les mêmes
  * onglets que le Sheet (suites, incohérences, tickets liés, PM, clôtures, statistiques). N° de téléphone masqués.
  */
-function classeurDuJour_() {
+function classeurDuJour_() { return excelDuJour_().blob; }
+
+/** L'Excel du jour (blob) et les lignes de son résumé (pour le texte du mail du matin). */
+function excelDuJour_() {
   var a = analyse_(), d = lireDonnees_(), NOW = new Date(), res = a.analyser(d, NOW), c = a.controles(res, NOW);
-  var l = a.listesDuJour(res, c, NOW, { importeLe: d.importeLe, luLe: d.luLe }), g = l.graphiques;
+  var l = a.listesDuJour(res, c, NOW, { importeLe: d.importeLe, luLe: d.luLe, lienCarte: PropertiesService.getScriptProperties().getProperty('LIEN_CARTE') || '' }), g = l.graphiques;
   var feuilles = [
     { nom: 'Résumé', entetes: l.resume.entetes, lignes: l.resume.lignes, fonds: l.resume.fonds, largeurs: [460, 220], filtre: false },
     // graphiques natifs d'Excel, comme le bilan de la carte ; leurs chiffres sont dans l'onglet « Données graphiques »
@@ -216,7 +224,7 @@ function classeurDuJour_() {
         { titre: 'Les communes où on intervient le plus', sens: 'bar', donnees: 'Données graphiques', cat: 7, series: [8, 9], n: g.nCommunes, ligne: 19, taille: [760, 380] },
         { titre: 'Les boîtes où on intervient le plus', sens: 'bar', donnees: 'Données graphiques', cat: 12, series: [13, 14], n: g.nBoites, ligne: 39, taille: [760, 380] }] },
     { nom: 'À planifier', entetes: l.aPlanifier.entetes, lignes: l.aPlanifier.lignes, fonds: l.aPlanifier.fonds,
-      largeurs: [50, 160, 150, 140, 120, 220, 100, 130, 160, 220, 140, 170, 130, 120, 260, 260, 300, 480] },
+      largeurs: [50, 160, 150, 140, 120, 220, 100, 130, 160, 220, 90, 140, 170, 130, 120, 260, 260, 300, 480] },
     { nom: 'Justifiés', entetes: l.justifies.entetes, lignes: l.justifies.lignes, fonds: l.justifies.fonds,
       largeurs: [90, 300, 120, 120, 200, 160, 100, 60, 120, 80, 300, 160, 220, 140, 420] }
   ].concat(ongletsControle_(c).map(function (o) {
@@ -225,8 +233,8 @@ function classeurDuJour_() {
     largeurs: [120, 70, 70, 120, 90, 70, 20, 200, 120, 90, 70, 20, 190, 120, 90, 70] }]);
   var tel = /(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g;
   feuilles.forEach(function (f) { f.lignes = f.lignes.map(function (r) { return r.map(function (v) { return typeof v === 'string' ? v.replace(tel, '[tél.]') : v; }); }); });
-  return Utilities.newBlob(signes_(xlsx_(feuilles)), MIME_XLSX,
-    'Tickets_du_jour_' + Utilities.formatDate(NOW, 'Europe/Paris', "yyyy-MM-dd_HH'h'mm") + '.xlsx');
+  return { resume: l.resume.lignes, blob: Utilities.newBlob(signes_(xlsx_(feuilles)), MIME_XLSX,
+    'Tickets_du_jour_' + Utilities.formatDate(NOW, 'Europe/Paris', "yyyy-MM-dd_HH'h'mm") + '.xlsx') };
 }
 
 /**
@@ -280,7 +288,7 @@ function xlsx_(feuilles) {
         if (typeof v === 'number' && isFinite(v)) { cel.push('<c r="' + ref + '" s="' + style(0, fond) + '"><v>' + v + '</v></c>'); continue; }
         v = String(v);
         if (/^https:\/\/[^\s"]+$/.test(v) && v.length < 250) {
-          var lib = fe.entetes[j] === 'Rapport' ? 'rapport' : 'lien';
+          var lib = { 'Rapport': 'rapport', 'Google Maps': 'ouvrir', 'Valeur': 'ouvrir' }[fe.entetes[j]] || 'lien';
           cel.push('<c r="' + ref + '" s="' + style(2, fond) + '" t="str"><f>' + x('HYPERLINK("' + v + '","' + lib + '")') + '</f><v>' + lib + '</v></c>');
           continue;
         }
@@ -515,7 +523,9 @@ function noterSortis_(ss, anciens, nouveaux) {
 
 /** Déclencheur toutes les 5 minutes : lit les mails arrivés dans Gmail. Au plus une lecture par minute. */
 function lireMails() {
-  return lireMails_(60);
+  var n = lireMails_(60);
+  try { envoiDuMatin_(); } catch (err) { console.warn('Envoi du matin : ' + err); }
+  return n;
 }
 
 /** Menu « Lire les mails maintenant ». Réservé au propriétaire. */
@@ -734,14 +744,111 @@ function mettreAJourControles() {
 function majControles_() {
   var a = analyse_(), NOW = new Date(), res = a.analyser(lireDonnees_(), NOW), c = a.controles(res, NOW);
   ongletsControle_(c).forEach(function (o) { ecrireOnglet_(o.nom, o.entetes, o.lignes, o.couleur, o.largeurs); });
+  try { graphiquesSheet_(a.listesDuJour(res, c, NOW, {}).graphiques); } catch (err) { console.warn('Graphiques : ' + err); }
+  try { adressesEnvoi_(); } catch (err) { console.warn('Onglet ' + ONGLET_ENVOI + ' : ' + err); }
   PropertiesService.getScriptProperties().setProperty('CONTROLES_LE', maintenant_());
   return { incoherences: c.incoherences.length, lies: c.lies.length, pm: c.pm.length, avertissements: res.avertissements };
+}
+
+/**
+ * Onglet « Graphiques » du Sheet : les trois graphiques de l'Excel du jour (clôtures par semaine, communes et boîtes où on
+ * intervient le plus, sur 90 jours), refaits à chaque mise à jour des onglets. Leurs chiffres sont à droite, colonne R.
+ */
+var ONGLET_GRAPHIQUES = 'Graphiques';
+function graphiquesSheet_(g) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), f = ss.getSheetByName(ONGLET_GRAPHIQUES) || ss.insertSheet(ONGLET_GRAPHIQUES);
+  f.getCharts().forEach(function (c) { f.removeChart(c); });
+  f.clear();
+  var C0 = 18, n = g.entetes.length, tout = [g.entetes].concat(g.lignes);
+  // noms et dates en texte (« 9 nov. » ne doit pas devenir une date), nombres en nombres
+  f.getRange(1, C0, tout.length, n).setNumberFormat('@');
+  g.entetes.forEach(function (h, j) { if (g.lignes.length && /^(Sans suite|À reprendre|Clôtures)/.test(h)) f.getRange(2, C0 + j, g.lignes.length, 1).setNumberFormat('0'); });
+  f.getRange(1, C0, tout.length, n).setValues(tout);
+  f.getRange(1, C0, 1, n).setFontWeight('bold');
+  var texte = { color: '#52514e', fontSize: 10 }, axe = { textStyle: texte, gridlines: { color: '#e6e6e6' }, baselineColor: '#bfbfbf' };
+  [['col', 1, 3, g.nSemaines, 1, 'Clôtures par semaine (la dernière est en cours)', 330],
+   ['bar', 7, 8, g.nCommunes, 19, 'Les communes où on intervient le plus', 380],
+   ['bar', 12, 13, g.nBoites, 39, 'Les boîtes où on intervient le plus', 380]].forEach(function (x) {
+    if (!x[3]) return;
+    var b = x[0] === 'col' ? f.newChart().asColumnChart() : f.newChart().asBarChart();
+    f.insertChart(b.addRange(f.getRange(1, C0 + x[1], x[3] + 1, 1)).addRange(f.getRange(1, C0 + x[2], x[3] + 1, 2)).setNumHeaders(1)
+      .setPosition(x[4], 1, 0, 0)
+      .setOption('title', x[5]).setOption('titleTextStyle', { color: '#0b0b0b', fontSize: 13, bold: true })
+      .setOption('isStacked', true).setOption('colors', ['#2a78d6', '#eb6834'])
+      .setOption('legend', { position: 'top', textStyle: { color: '#0b0b0b', fontSize: 10 } })
+      .setOption('bar', { groupWidth: x[0] === 'col' ? '45%' : '60%' })
+      .setOption('hAxis', axe).setOption('vAxis', axe)
+      .setOption('width', 760).setOption('height', x[6]).build());
+  });
+}
+
+/**
+ * Envoi du matin : chaque jour ouvré à partir de 7 h (au passage suivant de la lecture des mails, avant midi), l'Excel du
+ * jour puis la carte du jour, en deux mails (si la messagerie bloque la carte, l'Excel arrive quand même), aux adresses de
+ * l'onglet « Envoi du matin ». Rien n'est envoyé tant que l'onglet est vide. Une seule fois par jour.
+ */
+var ONGLET_ENVOI = 'Envoi du matin', HEURE_ENVOI = 7;
+function envoiDuMatin_() {
+  var props = PropertiesService.getScriptProperties(), d = new Date();
+  var jour = Utilities.formatDate(d, 'Europe/Paris', 'yyyy-MM-dd'), heure = +Utilities.formatDate(d, 'Europe/Paris', 'H');
+  if (props.getProperty('ENVOI_MATIN_LE') === jour || heure < HEURE_ENVOI || heure >= 12) return 0;
+  var p = jour.split('-');
+  if (!analyse_().ouvre(new Date(+p[0], p[1] - 1, +p[2], 12), '54')) return 0;   // week-end ou jour férié
+  var dest = adressesEnvoi_();
+  if (!dest.length) return 0;
+  var verrou = LockService.getScriptLock();
+  if (!verrou.tryLock(5000)) return 0;
+  try {
+    if (props.getProperty('ENVOI_MATIN_LE') === jour) return 0;
+    props.setProperty('ENVOI_MATIN_LE', jour);   // une fois par jour, même si un des deux mails échoue
+    return envoyerFichiers_(dest);
+  } finally { verrou.releaseLock(); }
+}
+
+/** Menu « Envoi du matin : envoyer maintenant » : le même envoi, tout de suite (pour essayer). Réservé au propriétaire. */
+function envoyerMaintenant() {
+  proprietaire_();
+  var dest = adressesEnvoi_(), ui = SpreadsheetApp.getUi();
+  if (!dest.length) { ui.alert('Ajoute d\'abord les adresses dans l\'onglet « ' + ONGLET_ENVOI + ' » (une par ligne, colonne A).'); return; }
+  envoyerFichiers_(dest);
+  ui.alert('L\'Excel et la carte du jour sont partis à ' + dest.length + ' adresse' + (dest.length > 1 ? 's' : '') + ' (deux mails).');
+}
+
+/** Les adresses de l'onglet « Envoi du matin » (colonne A), sans doublon. L'onglet est créé s'il n'existe pas. */
+function adressesEnvoi_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), f = ss.getSheetByName(ONGLET_ENVOI);
+  if (!f) {
+    f = feuille_(ONGLET_ENVOI, ['Adresse mail', 'Remarque', 'À savoir']);
+    f.getRange(2, 3).setValue('Une adresse par ligne, en colonne A. Chaque jour ouvré vers 7 h, l\'Excel du jour puis la carte du jour partent à ces ' +
+      'adresses, en deux mails. Tant que la colonne A est vide, rien n\'est envoyé.');
+    f.setColumnWidth(1, 260); f.setColumnWidth(2, 200); f.setColumnWidth(3, 520);
+    f.getRange(2, 3).setWrap(true);
+  }
+  var vus = {}, out = [];
+  if (f.getLastRow() > 1) f.getRange(2, 1, f.getLastRow() - 1, 1).getDisplayValues().forEach(function (r) {
+    var a = String(r[0] || '').trim().toLowerCase();
+    if (/^[^\s@,;]+@[^\s@,;]+\.[a-z]{2,}$/.test(a) && !vus[a]) { vus[a] = 1; out.push(a); }
+  });
+  return out;
+}
+
+/** Deux mails : l'Excel du jour avec le résumé dans le texte, puis la carte du jour. */
+function envoyerFichiers_(dest) {
+  var quand = Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'), x = excelDuJour_();
+  var resume = x.resume.map(function (l) { return l[1] === '' ? '\n' + l[0] : l[0] + ' : ' + l[1]; }).join('\n').trim();
+  GmailApp.sendEmail(dest.join(','), 'Tickets du ' + quand + ' : l\'Excel du jour',
+    'Bonjour,\n\nEn pièce jointe : l\'Excel du jour (à planifier, justifiés, suites, incohérences, clôtures, statistiques et graphiques).\n' +
+    'La carte du jour arrive dans un second mail.\n\n' + resume + '\n', { attachments: [x.blob], name: 'Carte des tickets' });
+  GmailApp.sendEmail(dest.join(','), 'Tickets du ' + quand + ' : la carte du jour',
+    'Bonjour,\n\nEn pièce jointe : la carte du jour. Télécharge le fichier puis ouvre-le dans un navigateur (Edge, Chrome…). ' +
+    'C\'est une photo de ce matin : elle ne se met pas à jour.\n', { attachments: [Utilities.newBlob(construireCarteDuJour_(), 'text/html', nomCarteDuJour_())], name: 'Carte des tickets' });
+  return dest.length;
 }
 
 /** Les fonctions du fichier Analyse (les mêmes que la carte), pour s'en servir côté serveur. */
 function analyse_() {
   var src = HtmlService.createHtmlOutputFromFile('Analyse').getContent().replace(/^\s*<script>/, '').replace(/<\/script>\s*$/, '');
-  return new Function(src + '\nreturn { analyser: analyser, controles: controles, listesDuJour: listesDuJour };')();
+  return new Function(src + '\nreturn { analyser: analyser, controles: controles, listesDuJour: listesDuJour, ouvre: ouvre };')();
 }
 
 /**
