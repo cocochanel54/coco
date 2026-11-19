@@ -81,6 +81,15 @@ Le Résumé de l'Excel donne aussi le lien de la carte en direct (il apparaît d
 
 Pas de lien Google ni de code, mais ce sont des **photos** : les données sont celles du moment où tu as fabriqué les fichiers. Refais-les quand tu veux une version à jour. Les numéros de téléphone y sont masqués. Ils contiennent les adresses et les descriptions des tickets : ne les dépose que dans l'équipe.
 
+## Annuler un ticket
+
+Quand un ticket est annulé dans Praxedo, aucun mail n'arrive : la carte ne le sait qu'au prochain export. Pour le retirer tout de suite :
+
+- **Carte tickets → Annuler un ticket…**, tape son n° (par exemple `BB-20261111T0296#0`), et si tu veux la raison après un espace ;
+- ou, depuis le téléphone (l'application Google Sheets n'a pas le menu), écris le n° en colonne A de l'onglet **Annulés**.
+
+Le ticket disparaît de la carte, des listes, de l'Excel et des mails du matin, et il ne passe pas en vert « terminé » quand il sort de l'export. Avec `#0`, `#1`… seule cette fois-là est annulée (un ticket rouvert reste) ; sans `#`, toutes les fois du ticket. Pour le rétablir, efface sa ligne dans l'onglet **Annulés**.
+
 ## Envoi automatique chaque matin
 
 Pour que l'équipe reçoive l'Excel et la carte du jour sans que tu aies à les refaire :

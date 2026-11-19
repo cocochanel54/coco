@@ -44,6 +44,7 @@ var ONGLET_CREATIONS = 'Créations';
 var ONGLET_INCOHERENCES = 'Incohérences', ONGLET_LIES = 'Tickets liés', ONGLET_PM = 'PM chargés', ONGLET_SUITES = 'Suites à prévoir';
 var ONGLET_CLOTURES = 'Clôtures', ONGLET_STATS_BOITES = 'Stats boîtes', ONGLET_STATS_VILLES = 'Stats villes', ONGLET_STATS_SEMAINES = 'Stats semaines';
 var ONGLET_ACCES = 'Accès';
+var ONGLET_ANNULES = 'Annulés', ENTETES_ANNULES = ['N° ticket', 'Annulé le', 'Pourquoi'];
 var ONGLET_NOTES = 'Notes', ENTETES_NOTES = ['N° ticket', 'Note'];
 var COULEURS_GRAVITE = { '1 - Urgent': '#F8CBAD', '2 - Important': '#FFE699', '3 - À vérifier': '#DDEBF7', '4 - Info': '#EDEDED' };
 var ENTETES_CREATIONS = ['Reçu le', 'N° ticket', 'Type', 'Commune (objet)', 'Adresse', 'CP', 'Ville', 'Nom client', 'Description', 'Id du mail'];
@@ -87,6 +88,7 @@ function onOpen() {
     .addItem('Mettre à jour les onglets de contrôle', 'mettreAJourControles')
     .addItem('Fichiers du jour : carte + Excel (pour Teams)…', 'ouvrirCarteDuJour')
     .addItem('Envoi du matin : envoyer maintenant', 'envoyerMaintenant')
+    .addItem('Annuler un ticket…', 'annulerTicket')
     .addItem("Codes d'accès à la carte", 'afficherCodes')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
     .addToUi();
@@ -727,7 +729,11 @@ function lireDonnees_() {
   ss.getSheetByName(ONGLET_ADRESSES).getDataRange().getValues().slice(1).forEach(function (r) {
     adresses[r[0]] = r[1] === '' ? null : { lat: +r[1], lon: +r[2], label: r[3], score: +r[4], type: r[5], city: r[6], postcode: String(r[7]) };
   });
-  return { entetes: t[0], lignes: t.slice(1), fins: fins, creations: creations, sortis: sortis, notes: notes, adresses: adresses,
+  // tickets annulés dans Praxedo, notés à la main (il n'y a pas de mail d'annulation)
+  var fa = ss.getSheetByName(ONGLET_ANNULES);
+  var annules = fa ? fa.getDataRange().getDisplayValues().slice(1).map(function (r) { return { num: String(r[0] || '').trim(), le: r[1] || '', pourquoi: r[2] || '' }; })
+    .filter(function (a) { return a.num; }) : [];
+  return { entetes: t[0], lignes: t.slice(1), fins: fins, creations: creations, sortis: sortis, notes: notes, adresses: adresses, annules: annules,
            importeLe: props.getProperty('IMPORTE_LE') || '', luLe: props.getProperty('LU_LE') || '' };
 }
 
@@ -746,6 +752,7 @@ function majControles_() {
   ongletsControle_(c).forEach(function (o) { ecrireOnglet_(o.nom, o.entetes, o.lignes, o.couleur, o.largeurs); });
   try { graphiquesSheet_(a.listesDuJour(res, c, NOW, {}).graphiques); } catch (err) { console.warn('Graphiques : ' + err); }
   try { adressesEnvoi_(); } catch (err) { console.warn('Onglet ' + ONGLET_ENVOI + ' : ' + err); }
+  try { ongletAnnules_(); } catch (err) { console.warn('Onglet ' + ONGLET_ANNULES + ' : ' + err); }
   PropertiesService.getScriptProperties().setProperty('CONTROLES_LE', maintenant_());
   return { incoherences: c.incoherences.length, lies: c.lies.length, pm: c.pm.length, avertissements: res.avertissements };
 }
@@ -843,6 +850,45 @@ function envoyerFichiers_(dest) {
     'Bonjour,\n\nEn pièce jointe : la carte du jour. Télécharge le fichier puis ouvre-le dans un navigateur (Edge, Chrome…). ' +
     'C\'est une photo de ce matin : elle ne se met pas à jour.\n', { attachments: [Utilities.newBlob(construireCarteDuJour_(), 'text/html', nomCarteDuJour_())], name: 'Carte des tickets' });
   return dest.length;
+}
+
+/**
+ * Tickets annulés dans Praxedo : il n'y a pas de mail d'annulation, donc on les note dans l'onglet « Annulés » (à la main,
+ * ou par le menu « Annuler un ticket… »). Ils disparaissent de la carte, des listes, de l'Excel et des mails du matin.
+ * Pour rétablir un ticket : effacer sa ligne.
+ */
+function ongletAnnules_() {
+  var neuf = !SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_ANNULES), f = feuille_(ONGLET_ANNULES, ENTETES_ANNULES);
+  if (neuf) {
+    f.getRange(1, 4).setValue('À savoir').setFontWeight('bold');
+    f.getRange(2, 4).setValue('Un n° de ticket par ligne en colonne A (la date et la raison sont facultatives). Avec « #0 », « #1 »… seule cette fois-là ' +
+      'est annulée ; sans « # », toutes les fois du ticket. Le ticket disparaît de la carte, des listes et de l\'Excel. Pour le rétablir, efface sa ligne.').setWrap(true);
+    f.setColumnWidth(1, 200); f.setColumnWidth(2, 130); f.setColumnWidth(3, 260); f.setColumnWidth(4, 480);
+  }
+  return f;
+}
+
+/** Menu « Annuler un ticket… » : demande le n° (et la raison), l'ajoute à l'onglet Annulés, puis refait les onglets. */
+function annulerTicket() {
+  proprietaire_();
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('Annuler un ticket', 'N° du ticket, par exemple BB-20261111T0296#0. Tu peux ajouter la raison après un espace.', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var m = /^\s*(\S+)\s*([\s\S]*)$/.exec(r.getResponseText() || '');
+  if (!m) return;
+  var num = m[1].toUpperCase(), f = ongletAnnules_();
+  f.getRange(f.getLastRow() + 1, 1, 1, 3).setNumberFormat('@')
+    .setValues([[num, Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm'), m[2].trim()].map(texte_)]);
+  // le n° est-il connu (dernier export ou mails de création) ?
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), connus = {};
+  [[ONGLET_TICKETS, 'N°'], [ONGLET_CREATIONS, 'N° ticket']].forEach(function (o) {
+    var fe = ss.getSheetByName(o[0]), v = fe ? fe.getDataRange().getDisplayValues() : [], c = v.length ? v[0].indexOf(o[1]) : -1;
+    if (c >= 0) v.slice(1).forEach(function (l) { var n = String(l[c] || '').trim().toUpperCase(); connus[n] = 1; connus[n.split('#')[0]] = 1; });
+  });
+  majControles_();
+  ui.alert('Ticket ' + num + ' annulé : il n\'apparaît plus sur la carte, dans les listes ni dans l\'Excel.' +
+    (connus[num] ? '' : '\n\nAttention : ce n° n\'est ni dans le dernier export ni dans les mails de création. Vérifie-le dans l\'onglet « ' + ONGLET_ANNULES + ' ».') +
+    '\n\nPour le rétablir, efface sa ligne dans l\'onglet « ' + ONGLET_ANNULES + ' ».');
 }
 
 /** Les fonctions du fichier Analyse (les mêmes que la carte), pour s'en servir côté serveur. */

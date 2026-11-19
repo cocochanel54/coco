@@ -407,6 +407,11 @@ function analyser(donnees, NOW) {
     var base = num.split('#')[0];
     return fins[num] || (num.indexOf('#') < 0 ? finsBase[base] : finsSansIteration[base]) || null;
   }
+  // tickets annulés dans Praxedo (pas de mail) et notés à la main dans l'onglet « Annulés » du Sheet :
+  // un n° avec « #0 », « #1 »… vaut pour cette fois-là seulement, un n° sans « # » pour toutes les fois du ticket
+  var annulesMain = {};
+  (donnees.annules || []).forEach(function (a) { var k = String(a.num || '').replace(/\s+/g, '').toUpperCase(); if (k) annulesMain[k] = a; });
+  function annuleMain(num) { var n = String(num || '').toUpperCase(); return annulesMain[n] || annulesMain[n.split('#')[0]] || null; }
   var T = lignes.map(function (r) {
     var g = function (c) { return col[c] == null ? '' : String(r[col[c]] == null ? '' : r[col[c]]).trim(); };
     var num = g('N°');
@@ -434,7 +439,7 @@ function analyser(donnees, NOW) {
       if (mn) { creee = new Date(+mn[1], mn[2] - 1, +mn[3], 8, 0); creeeSource = 'numero'; }
     }
     var t = {
-      num: num, base: num.split('#')[0], statut: g('Statut'), planif: dt(g('Planifiée')),
+      num: num, base: num.split('#')[0], statut: annuleMain(num) ? 'Annulée (onglet Annulés)' : g('Statut'), annuleMain: annuleMain(num), planif: dt(g('Planifiée')),
       tech: [g('Nom technicien'), g('Prénom technicien')].filter(function (x) { return x; }).join(' '),
       site: site, equip: g('Equipement'), creee: creee, creeeSource: creeeSource, avant: dt(g('À faire avant')),
       adresse: g('Adresse'), cp: cp, ville: g('Ville site'), desc: desc, tags: tags, niveau: niv ? +niv[1] : null,
@@ -467,7 +472,7 @@ function analyser(donnees, NOW) {
     t.ouvert = ouvert;
     t.aPlanifier = !t.termine && (t.statut === 'Qualifiée' || t.statut === 'Pré-planifiée');
     t.deplanifie = t.statut === 'Qualifiée' && !!t.planif;
-    if (parMail[num]) { t.parMail = true; t.statut = "Reçu par mail de création (pas encore dans l'export)"; }
+    if (parMail[num] && !t.annule) { t.parMail = true; t.statut = "Reçu par mail de création (pas encore dans l'export)"; }
     var rg = regleGtr(t); t.regle = rg[0]; t.echeance = rg[1] || null;
     var e = t.echeance;
     if (ouvert && e && e < NOW && t.justif) t.alertes.push('Retard justifié (' + fretard(NOW - e) + ')');
@@ -532,7 +537,7 @@ function analyser(donnees, NOW) {
   var vus = {};
   (donnees.sortis || []).slice().reverse().forEach(function (s) {
     var le = dt(s.le);
-    if (!s.num || nums[s.num] || vus[s.num] || !le || le < TODAY) return;
+    if (!s.num || nums[s.num] || vus[s.num] || !le || le < TODAY || annuleMain(s.num)) return;   // annulé : pas en vert « terminé »
     vus[s.num] = 1;
     var adr = [s.adresse, s.cp, s.ville].filter(function (x) { return x; }).join(' ');
     T.push({ num: s.num, base: s.num.split('#')[0], statut: s.statut, planif: dt(s.planif), tech: s.tech, site: s.site, adresse: s.adresse,
@@ -788,6 +793,8 @@ function listesDuJour(res, ctrl, NOW, infos) {
   });
   ligne('Groupes de tickets liés', uniques(ctrl.lies.map(function (l) { return l[0]; })).length);
   ligne('PM chargés', ctrl.pm.length);
+  var nbAnnules = res.tous.filter(function (t) { return t.annuleMain; }).length;
+  if (nbAnnules) ligne('Tickets annulés à la main (onglet Annulés)', nbAnnules);
   if (res.avertissements.length) { titre('À SAVOIR'); res.avertissements.forEach(function (a) { ligne(a, ''); }); }
 
   // à planifier : par priorité, puis échéance GTR
