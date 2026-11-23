@@ -120,6 +120,7 @@ function installer() {
 function afficherCodes() {
   var a = acces_();
   SpreadsheetApp.getUi().alert("Codes pour ouvrir la carte :\n\nConduite d'activité : " + a.ca + '\nTechniciens : ' + a.tech +
+    '\nAnnulations (la personne qui gère les annulations) : ' + a.annul + (a.mailsAnnul.length ? ' · par mail : ' + a.mailsAnnul.join(', ') : ' · son adresse mail : colonne D de l\'onglet Accès') +
     "\n\nPour les changer (et couper l'accès à ceux qui ont l'ancien), modifie-les dans l'onglet « Accès ».");
 }
 
@@ -550,6 +551,7 @@ function lireMails_(delaiMin) {
     var ajout = [];
     messages_(RECHERCHE_GMAIL + fen.q, 100).forEach(function (m) {
       if (vus[m.getId()]) return;
+      if (/annul/i.test(m.getSubject())) return;
       var l = ligneFin_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
       if (l) { while (l.length < ENTETES_FINS.length) l.push(''); ajout.push(l); vus[m.getId()] = 1; }
     });
@@ -558,6 +560,7 @@ function lireMails_(delaiMin) {
     try { rapports = lireRapports_(RAPPORTS_PAR_PASSAGE); } catch (err) { console.warn('Rapports : ' + err); }
     try { creees = lireCreations_(fen.q); } catch (err) { complet = false; console.warn('Créations : ' + err); }
     try { creees += relireCreations_(); } catch (err) { console.warn('Relecture des créations : ' + err); }
+    try { creees += lireAnnulations_(fen.q); } catch (err) { console.warn('Annulations par mail : ' + err); }
     try { importe = importerDepuisGmail_(fen.q); } catch (err) { complet = false; console.warn('Import par mail : ' + err); }
     // l'import refait déjà les contrôles ; sinon, après un mail de fin ou de création, et au moins une fois par heure
     var faits = props.getProperty('CONTROLES_LE');
@@ -598,6 +601,46 @@ function messages_(recherche, max) {
   return out;
 }
 
+/**
+ * Annulations par mail : la personne qui gère les annulations transfère à ce Gmail le mail de création du ticket (ou écrit un
+ * mail) avec « ANNULÉ » dans l'objet. Le n° est pris dans l'objet, sinon dans le texte du mail. Seules les adresses de la
+ * colonne D de la ligne « Annulations » de l'onglet Accès (et le propriétaire) sont écoutées. Chaque mail est lu une fois.
+ */
+var RECHERCHE_ANNULATIONS = 'subject:(annulé OR annulée OR annule OR annulation OR annuler)';
+function lireAnnulations_(fenetre) {
+  var a = acces_(), permis = a.mailsAnnul.slice(), props = PropertiesService.getScriptProperties(), n = 0;
+  try { permis.push(String(Session.getEffectiveUser().getEmail() || '').toLowerCase()); } catch (err) { /* sans */ }
+  var vus = JSON.parse(props.getProperty('ANNUL_MAILS') || '[]'), deja = {}, f = null, presents = null;
+  vus.forEach(function (id) { deja[id] = 1; });
+  messages_(RECHERCHE_ANNULATIONS + fenetre, 50).forEach(function (m) {
+    var id = m.getId(), objet = m.getSubject() || '';
+    if (deja[id] || !/annul/i.test(objet)) return;
+    deja[id] = 1; vus.push(id);
+    var de = String((/<([^>]+)>/.exec(m.getFrom()) || [null, m.getFrom()])[1] || '').trim().toLowerCase();
+    if (permis.indexOf(de) < 0) { console.warn('Annulation par mail ignorée : ' + de + " n'est pas dans l'onglet Accès"); return; }
+    var nums = numerosTickets_(objet);
+    if (!nums.length) nums = numerosTickets_(m.getPlainBody() || '');
+    if (!nums.length) return;
+    f = f || ongletAnnules_();
+    presents = presents || f.getDataRange().getDisplayValues().slice(1).map(function (r) { return String(r[0] || '').replace(/\s+/g, '').toUpperCase(); });
+    nums.forEach(function (num) {
+      if (presents.indexOf(num) >= 0) return;
+      f.appendRow([num, Utilities.formatDate(m.getDate(), 'Europe/Paris', 'dd/MM/yyyy HH:mm'), 'par mail de ' + de].map(texte_));
+      presents.push(num); n++;
+    });
+  });
+  props.setProperty('ANNUL_MAILS', JSON.stringify(vus.slice(-300)));
+  return n;
+}
+
+/** Les n° de tickets d'un texte : BB-20261111T0296#0, QRB-…, ou « N° 284320 ». */
+function numerosTickets_(t) {
+  var out = [], m, re = /\b[A-Z]{2,4}-\d{8}T\d{4}(?:#\d+)?/gi, re2 = /N°\s*(\d{5,})/gi;
+  while ((m = re.exec(t))) { var k = m[0].toUpperCase(); if (out.indexOf(k) < 0) out.push(k); }
+  while ((m = re2.exec(t))) if (out.indexOf(m[1]) < 0) out.push(m[1]);
+  return out;
+}
+
 /** Mails « [CREATION INTERVENTION] » : une ligne par ticket créé, et son adresse placée sur la carte. */
 function lireCreations_(fenetre) {
   var f = feuille_(ONGLET_CREATIONS, ENTETES_CREATIONS);
@@ -606,6 +649,7 @@ function lireCreations_(fenetre) {
   var ajout = [];
   messages_(RECHERCHE_CREATIONS + fenetre, 100).forEach(function (m) {
     if (vus[m.getId()]) return;
+    if (/annul/i.test(m.getSubject())) return;   // mail de création transféré pour annuler le ticket : lu par lireAnnulations_
     var l = ligneCreation_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
     if (l) { ajout.push(l.map(texte_)); vus[m.getId()] = 1; }
   });
@@ -688,9 +732,7 @@ function doPost(e) {
  * Relit Gmail si la dernière lecture date de plus de 2 minutes.
  */
 function donnees(code) {
-  var a = acces_(), c = String(code || '').trim();
-  var role = c && c === a.ca ? 'ca' : c && c === a.tech ? 'tech' : null;
-  if (!role) { Utilities.sleep(1000); throw new Error('Code incorrect'); }
+  var dr = droits_(code), role = dr.role;
   var props = PropertiesService.getScriptProperties();
   var lu = props.getProperty('LU_LE');
   if (!lu || Date.now() - new Date(lu).getTime() > 2 * 60 * 1000) {
@@ -698,7 +740,48 @@ function donnees(code) {
   }
   var d = lireDonnees_();
   d.role = role;
+  d.peutAnnuler = dr.annul;
   return d;
+}
+
+/**
+ * Ce que permet un code d'accès : role 'ca' (conduite d'activité) ou 'tech' ; annul = peut retirer un ticket annulé
+ * (code « Annulations », qui voit aussi tout comme la conduite d'activité). Un mauvais code attend 1 s puis est refusé.
+ */
+function droits_(code) {
+  var a = acces_(), c = String(code || '').trim();
+  if (c && a.annul && c === a.annul) return { role: 'ca', annul: true };
+  var role = c && c === a.ca ? 'ca' : c && c === a.tech ? 'tech' : null;
+  if (!role) { Utilities.sleep(1000); throw new Error('Code incorrect'); }
+  return { role: role, annul: false };
+}
+
+/**
+ * Depuis la carte, avec le code « Annulations » seulement : retire un ticket annulé dans Praxedo (une ligne de plus dans
+ * l'onglet Annulés, avec la date et « depuis la carte »). Les onglets du Sheet sont refaits au passage suivant (5 min).
+ */
+function annulerDepuisCarte(code, num, raison) {
+  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations.');
+  num = String(num || '').replace(/\s+/g, '').toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9#._-]{3,39}$/.test(num)) throw new Error('N° de ticket invalide.');
+  var r = String(raison || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  ongletAnnules_().appendRow([num, Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm'), (r ? r + ' · ' : '') + 'depuis la carte'].map(texte_));
+  PropertiesService.getScriptProperties().deleteProperty('CONTROLES_LE');
+  return num;
+}
+
+/** Depuis la carte, avec le code « Annulations » : remet un ticket retiré par erreur (efface ses lignes de l'onglet Annulés). */
+function retablirDepuisCarte(code, num) {
+  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations.');
+  num = String(num || '').replace(/\s+/g, '').toUpperCase();
+  var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_ANNULES), n = 0;
+  if (!f || !num) return 0;
+  var v = f.getDataRange().getDisplayValues();
+  for (var i = v.length - 1; i >= 1; i--) {
+    if (String(v[i][0] || '').replace(/\s+/g, '').toUpperCase() === num) { f.getRange(i + 1, 1, 1, 3).clearContent(); n++; }  // la note de la colonne D reste
+  }
+  if (n) PropertiesService.getScriptProperties().deleteProperty('CONTROLES_LE');
+  return n;
 }
 
 function lireDonnees_() {
@@ -862,7 +945,8 @@ function ongletAnnules_() {
   if (neuf) {
     f.getRange(1, 4).setValue('À savoir').setFontWeight('bold');
     f.getRange(2, 4).setValue('Un n° de ticket par ligne en colonne A (la date et la raison sont facultatives). Avec « #0 », « #1 »… seule cette fois-là ' +
-      'est annulée ; sans « # », toutes les fois du ticket. Le ticket disparaît de la carte, des listes et de l\'Excel. Pour le rétablir, efface sa ligne.').setWrap(true);
+      'est annulée ; sans « # », toutes les fois du ticket. Le ticket disparaît de la carte, des listes et de l\'Excel. Pour le rétablir, efface sa ligne. ' +
+      'La personne qui gère les annulations peut aussi le faire par mail (« ANNULÉ » + n° du ticket) ou sur la carte avec son code (onglet Accès).').setWrap(true);
     f.setColumnWidth(1, 200); f.setColumnWidth(2, 130); f.setColumnWidth(3, 260); f.setColumnWidth(4, 480);
   }
   return f;
@@ -1224,15 +1308,26 @@ function champsRapport_(t) {
 /** Codes d'accès à la carte, dans l'onglet Accès (créés au hasard la première fois, modifiables). */
 function acces_() {
   var f = feuille_(ONGLET_ACCES, ['Qui', 'Code', 'Ce qu\'ils voient']);
+  var code = function () { return String(Math.floor(100000 + Math.random() * 900000)); };
   if (f.getLastRow() < 3) {
-    var code = function () { return String(Math.floor(100000 + Math.random() * 900000)); };
     f.getRange(2, 1, 2, 3).setNumberFormat('@').setValues([
-      ["Conduite d'activité", code(), 'La carte (tickets, priorités, nouveaux, terminés) et les listes Incohérences, Tickets liés, PM chargés. Rien à modifier.'],
+      ["Conduite d'activité", code(), 'La carte (tickets, priorités, nouveaux, terminés), les listes de contrôle et le bilan. Rien à modifier.'],
       ['Techniciens', code(), 'La carte (tickets, priorités, nouveaux, terminés) et leurs interventions. Rien à modifier.']]);
     f.setColumnWidth(1, 160); f.setColumnWidth(2, 100); f.setColumnWidth(3, 600);
   }
-  var v = f.getRange(2, 2, 2, 1).getDisplayValues();
-  return { ca: v[0][0].trim(), tech: v[1][0].trim() };
+  // la personne qui gère les annulations : son code (carte) et son adresse mail en colonne D (annulation par mail)
+  if (f.getLastRow() < 4) {
+    var v0 = f.getRange(2, 2, 2, 1).getDisplayValues(), c = code();
+    while (c === v0[0][0].trim() || c === v0[1][0].trim()) c = code();
+    f.getRange(4, 1, 1, 3).setNumberFormat('@').setValues([['Annulations', c, 'Comme la conduite d\'activité, et peut retirer de la carte un ticket annulé dans ' +
+      'Praxedo (et le remettre). En colonne D : son adresse mail, pour annuler par mail (« ANNULÉ » dans l\'objet, avec le n° du ticket).']]);
+    f.getRange(1, 4).setValue('Adresse mail (annulations par mail)').setFontWeight('bold');
+    f.getRange(4, 4).setNumberFormat('@');
+    f.setColumnWidth(4, 280);
+  }
+  var v = f.getRange(2, 2, 3, 1).getDisplayValues(), mails = String(f.getRange(4, 4).getDisplayValue() || '').toLowerCase().split(/[\s,;]+/);
+  return { ca: v[0][0].trim(), tech: v[1][0].trim(), annul: v[2][0].trim(),
+           mailsAnnul: mails.filter(function (m) { return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(m); }) };
 }
 
 /** Bloque les fonctions qui modifient le Sheet quand elles ne sont pas lancées par son propriétaire (depuis le Sheet ou l'éditeur). */

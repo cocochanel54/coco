@@ -64,7 +64,7 @@ La carte demande un **code** à la première ouverture (gardé ensuite sur le t�
 - **Conduite d'activité** : la carte, et le bouton **Listes de contrôle** (Incohérences, Tickets liés, PM chargés, filtrables par gravité ; un clic sur une ligne montre le ticket sur la carte).
 - **Techniciens** : la carte (tickets, priorités, nouveaux, terminés). Chacun choisit son nom dans **Mes interventions** : ses interventions ont un contour noir, et la liste montre aussi les tickets à côté des siennes.
 
-Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte : l'import et les mises à jour ne marchent que pour toi, depuis le Sheet. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
+Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte, sauf la personne qui a le code **Annulations** (troisième ligne de l'onglet Accès) : elle peut retirer un ticket annulé dans Praxedo, et le remettre. L'import et les mises à jour ne marchent que pour toi, depuis le Sheet. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
 
 ## Là où Google est bloqué : la carte et l'Excel du jour
 
@@ -83,12 +83,15 @@ Pas de lien Google ni de code, mais ce sont des **photos** : les données sont c
 
 ## Annuler un ticket
 
-Quand un ticket est annulé dans Praxedo, aucun mail n'arrive : la carte ne le sait qu'au prochain export. Pour le retirer tout de suite :
+Quand un ticket est annulé dans Praxedo, aucun mail n'arrive : la carte ne le sait qu'au prochain export. Pour le retirer tout de suite, c'est **la personne qui gère les annulations** qui s'en occupe :
 
-- **Carte tickets → Annuler un ticket…**, tape son n° (par exemple `BB-20261111T0296#0`), et si tu veux la raison après un espace ;
-- ou, depuis le téléphone (l'application Google Sheets n'a pas le menu), écris le n° en colonne A de l'onglet **Annulés**.
+1. **Une fois** : dans l'onglet **Accès**, écris son adresse mail en **colonne D** de la ligne **Annulations**, et donne-lui le code de cette ligne.
+2. **Par mail, depuis Outlook** (même quand Google est bloqué) : elle transfère à ton Gmail le mail de création du ticket en ajoutant **ANNULÉ** au début de l'objet. Elle peut aussi écrire un mail avec **ANNULÉ** dans l'objet et le n° du ticket (`BB-20261111T0296#0`) dans l'objet ou le texte. Dans les 5 minutes, le ticket est retiré. Les mails des autres adresses sont ignorés.
+3. **Sur la carte, avec son code** : dans la fiche du ticket, **« Annulé dans Praxedo ? Retirer ce ticket »**. En cas d'erreur : **Listes de contrôle → Annulés → Remettre**.
 
-Le ticket disparaît de la carte, des listes, de l'Excel et des mails du matin, et il ne passe pas en vert « terminé » quand il sort de l'export. Avec `#0`, `#1`… seule cette fois-là est annulée (un ticket rouvert reste) ; sans `#`, toutes les fois du ticket. Pour le rétablir, efface sa ligne dans l'onglet **Annulés**.
+Toi, tu peux aussi le faire depuis le Sheet : **Carte tickets → Annuler un ticket…**, ou écrire le n° en colonne A de l'onglet **Annulés** (pour le rétablir : efface sa ligne).
+
+Le ticket disparaît de la carte, des listes, de l'Excel et des mails du matin, et il ne passe pas en vert « terminé » quand il sort de l'export. Avec `#0`, `#1`… seule cette fois-là est annulée (un ticket rouvert reste) ; sans `#`, toutes les fois du ticket. L'onglet **Annulés** garde qui l'a fait et quand.
 
 ## Envoi automatique chaque matin
 

@@ -28,6 +28,8 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 .nv.urgent{background:#fdecea;border-color:#f3c0bb}.nv.urgent b{color:#b00}
 .pop .autour{margin:4px 0 0;padding:0;list-style:none}.pop .autour li{margin:2px 0}.pop .autour b{font-size:inherit}
 .pop a[data-aller]{color:#174a8b;font-weight:600}
+.pop .annuler{margin-top:8px;padding-top:6px;border-top:1px solid #e3e3e3}.pop .annuler input{font:inherit;width:100%;box-sizing:border-box;margin:4px 0}
+#info{color:#1d7444;font-weight:600;margin-top:4px}
 .nv:hover,.nv:focus-visible{border-color:#333;outline:none}
 .pop b{font-size:14px}.pop small{color:#555}.pop .foulee{color:#6c2e91;font-weight:600}.pop .fin{color:#1d7444;font-weight:600}
 .lien{border:0;background:none;font:inherit;color:#555;cursor:pointer;padding:0;text-decoration:underline}
@@ -133,7 +135,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
   </form>
 </div>
 <div class="leg"><button id="plier" class="lien" type="button" aria-expanded="true">Masquer</button><h1>Tickets Praxedo</h1>
-<small id="etat">Chargement…</small><div id="erreur"></div><div id="avert" hidden></div>
+<small id="etat">Chargement…</small><div id="erreur"></div><div id="info" role="status" hidden></div><div id="avert" hidden></div>
 <div id="corps">
 <label><input type="checkbox" data-k="termine" checked><span class="dot" style="background:#2e9e5b"></span>Terminé aujourd'hui <b id="nb-termine"></b></label>
 <label class="sous"><span class="dot" style="background:#2e9e5b;border:3px solid #e67e22;width:7px;height:7px"></span>dont à suivre : non corrigé, provisoire ou dommage <b id="nb-aSuivre"></b></label>
@@ -167,6 +169,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
     <button class="onglet" type="button" data-o="clotures" aria-selected="false">Clôtures</button>
     <button class="onglet" type="button" data-o="boites" aria-selected="false">Boîtes</button>
     <button class="onglet" type="button" data-o="villes" aria-selected="false">Villes</button>
+    <button class="onglet" type="button" data-o="annules" aria-selected="false">Annulés</button>
     <label for="filtreGravite">Gravité</label>
     <select id="filtreGravite"><option value="">Toutes</option><option>1 - Urgent</option><option>2 - Important</option><option>3 - À vérifier</option><option>4 - Info</option></select>
     <button class="lien fermer" type="button" id="fermerControles">Fermer</button>
@@ -200,7 +203,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 <?!= inclure_('Analyse') ?>
 <script>
 var C = {termine: '#2e9e5b', nouveau: '#8e44ad', justifie: '#8b939c', retard: '#d62728', bientot: '#ff7f0e', aplanifier: '#ffd43b', planifie: '#1f77b4'}, RELANCE = '#e67e22';
-var map = L.map('map'), premier = true, marqueurs = {}, marqueursBoites = {}, dernier = null, role = null, ongletCtrl = 'incoherences', minuterie = null;
+var map = L.map('map'), premier = true, marqueurs = {}, marqueursBoites = {}, dernier = null, role = null, peutAnnuler = false, ongletCtrl = 'incoherences', minuterie = null;
 function lire(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
 function ecrire(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) { /* stockage indisponible */ } }
 var code = lire('carteCode');
@@ -266,6 +269,42 @@ document.addEventListener('click', function (e) {
   var a = e.target.closest && e.target.closest('a[data-aller]');
   if (a) { e.preventDefault(); aller(a.dataset.aller); }
 });
+// code « Annulations » : retirer un ticket annulé dans Praxedo (il va dans l'onglet Annulés du Sheet), ou le remettre
+function blocAnnuler(num) {
+  return '<div class="annuler" data-num="' + esc(num) + '"><button type="button" class="lien" data-annuler>Annulé dans Praxedo ? Retirer ce ticket</button></div>';
+}
+function info(t) {
+  var el = document.getElementById('info');
+  el.textContent = t; el.hidden = false;
+  clearTimeout(info.minuterie); info.minuterie = setTimeout(function () { el.hidden = true; }, 10000);
+}
+document.addEventListener('click', function (e) {
+  var cible = e.target.closest ? e.target : null;
+  if (!cible) return;
+  var bloc = cible.closest('.annuler'), num = bloc && bloc.dataset.num;
+  if (cible.closest('[data-annuler]')) {
+    bloc.innerHTML = '<label>Raison (facultatif)<input type="text" maxlength="120" placeholder="annulé par Altitude…"></label>' +
+      '<button type="button" data-confirmer>Retirer de la carte</button> <button type="button" class="lien" data-renoncer>Non</button>';
+    bloc.querySelector('input').focus();
+  } else if (cible.closest('[data-renoncer]')) {
+    bloc.outerHTML = blocAnnuler(num);
+  } else if (cible.closest('[data-confirmer]')) {
+    var b = cible.closest('[data-confirmer]');
+    b.disabled = true; b.textContent = 'Envoi…';
+    google.script.run.withSuccessHandler(function () {
+      map.closePopup(); info('Ticket ' + num + ' retiré. Pour le remettre : Listes de contrôle → Annulés.'); charger();
+    }).withFailureHandler(function (err) {
+      b.disabled = false; b.textContent = 'Retirer de la carte';
+      bloc.insertAdjacentHTML('beforeend', '<br><b style="color:#b00">' + esc((err && err.message) || err) + '</b>');
+    }).annulerDepuisCarte(code, num, bloc.querySelector('input').value);
+  } else if (cible.closest('[data-remettre]')) {
+    var r = cible.closest('[data-remettre]'), n = r.dataset.remettre;
+    r.disabled = true; r.textContent = 'Envoi…';
+    google.script.run.withSuccessHandler(function () { info('Ticket ' + n + ' remis sur la carte.'); charger(); })
+      .withFailureHandler(function (err) { r.disabled = false; r.textContent = 'Remettre'; info((err && err.message) || String(err)); })
+      .retablirDepuisCarte(code, n);
+  }
+});
 
 // ---------- accès ----------
 var acces = document.getElementById('acces'), msgAcces = document.getElementById('msgAcces');
@@ -313,11 +352,19 @@ function tableauControles() {
     lies: [['Groupe', 'Pourquoi liés', 'N°', 'Statut', 'Planifiée', 'Technicien', 'Ville', 'Adresse'], c.lies.map(function (l) { return l.slice(0, 9).filter(function (_, i) { return i !== 6; }); }), 2, -1],
     pm: [['PM (Site)', 'Tickets ouverts', 'dont à planifier', 'Communes', 'Créés entre', 'Équipement', 'Tickets'], c.pm, -1, -1],
     suites: [['Clôturée le', 'N°', 'Commune', 'Technicien', 'Pourquoi une suite', 'Ticket de suite', 'Compte-rendu du technicien'], c.suites, 1, -1],
-    clotures: [clo[0], clo[1], clo[0].indexOf('N°'), -1], boites: [boi[0], boi[1], -1, boi[0].indexOf('Boîte')], villes: [vil[0], vil[1], -1, -1]
+    clotures: [clo[0], clo[1], clo[0].indexOf('N°'), -1], boites: [boi[0], boi[1], -1, boi[0].indexOf('Boîte')], villes: [vil[0], vil[1], -1, -1],
+    // tickets retirés (annulés dans Praxedo), les plus récents d'abord, avec « Remettre » en cas d'erreur
+    annules: [['N°', 'Retiré le', 'Pourquoi', ''], (dernier.d.annules || []).slice().sort(function (a, b) { return (dt(b.le) || 0) - (dt(a.le) || 0); })
+      .map(function (a) { return [a.num, a.le, a.pourquoi, '']; }), -1, -1]
   }[ongletCtrl];
   var en = function (nom) { return defs[0].indexOf(nom); };
   var h = '<table><thead><tr>' + defs[0].map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
   defs[1].forEach(function (l, i) {
+    if (ongletCtrl === 'annules') {
+      h += '<tr><td>' + esc(l[0]) + '</td><td>' + esc(l[1]) + '</td><td>' + esc(l[2]) + '</td><td>' +
+        (peutAnnuler ? '<button type="button" class="lien" data-remettre="' + esc(l[0]) + '">Remettre</button>' : '') + '</td></tr>';
+      return;
+    }
     var num = defs[2] >= 0 ? l[defs[2]] : '', boite = defs[3] >= 0 ? l[defs[3]] : '', g = '';
     if (ongletCtrl === 'incoherences') g = ' g' + l[0].charAt(0);
     else if (ongletCtrl === 'suites' && !l[5]) g = ' g2';
@@ -328,7 +375,8 @@ function tableauControles() {
     var clic = (num && marqueurs[num]) || (boite && marqueursBoites[boite]);
     h += '<tr class="' + (clic ? 'cliquable' : '') + g + '" data-num="' + esc(num) + '" data-boite="' + esc(boite) + '">' + l.slice(0, defs[0].length).map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>';
   });
-  h += '</tbody></table>' + (defs[1].length ? '' : '<p style="padding:10px">' + (/clotures|boites|villes/.test(ongletCtrl) ? 'Aucune clôture reçue pour l\'instant : ces tableaux se remplissent avec les mails de fin d\'intervention.' : 'Rien à signaler.') + '</p>');
+  h += '</tbody></table>' + (defs[1].length ? '' : '<p style="padding:10px">' + (/clotures|boites|villes/.test(ongletCtrl) ? 'Aucune clôture reçue pour l\'instant : ces tableaux se remplissent avec les mails de fin d\'intervention.'
+      : ongletCtrl === 'annules' ? 'Aucun ticket retiré pour l\'instant.' + (peutAnnuler ? ' Pour en retirer un : sa fiche sur la carte, « Annulé dans Praxedo ? », ou un mail « ANNULÉ » avec son n°.' : '') : 'Rien à signaler.') + '</p>');
   var t = document.getElementById('tableau');
   t.innerHTML = h;
   t.querySelectorAll('tr.cliquable').forEach(function (tr) {
@@ -468,6 +516,7 @@ function afficher(d) {
   var ctrl = controles(res, NOW);
   dernier = {d: d, res: res, NOW: NOW, ctrl: ctrl};
   role = d.role;
+  peutAnnuler = !!d.peutAnnuler && !PHOTO;   // code « Annulations » : bouton « Retirer ce ticket » dans les fiches
   acces.hidden = true; msgAcces.textContent = '';
   if (!PHOTO) ecrire('carteCode', code);
   document.getElementById('changerCode').hidden = !!PHOTO;
@@ -564,7 +613,7 @@ function afficher(d) {
       return x.replace(/^Échéance dépassée de /, 'GTR KO depuis ').replace(/^Échéance dans moins de 48 h et pas planifié$/, t.gtrTexte || x);
     });
     if (al.length) html += '<br><b style="color:#b00">' + esc(al.join(' · ')) + '</b>';
-    html += '<br><small>' + esc(court(t.desc, 220)) + '</small></div>';
+    html += '<br><small>' + esc(court(t.desc, 220)) + '</small>' + (peutAnnuler && !t.termine ? blocAnnuler(t.num) : '') + '</div>';
     m.bindPopup(html, {maxWidth: 320});
     m.numTicket = t.num;
     m.addTo(calques[k]);
