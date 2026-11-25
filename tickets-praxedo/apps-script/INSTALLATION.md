@@ -1,8 +1,21 @@
-# Installer la carte des tickets en direct (une seule fois, environ 15 minutes, sur ordinateur)
+# Carte des tickets Praxedo : mode opératoire
 
-La carte se met à jour à chaque export Praxedo que tu importes : nouveaux tickets, plannings, et interventions terminées en vert. Plus tu importes souvent, plus elle est à jour.
+La carte se met à jour à chaque export Praxedo que tu importes et à chaque mail de création ou de fin d'intervention : nouveaux tickets, plannings, interventions terminées en vert. Ça tourne dans ton compte Google, comme Journée agent, même quand ton PC est éteint.
 
-Ça tourne dans ton compte Google, comme Journée agent.
+## Tu as déjà la carte : passer à la nouvelle version (10 minutes)
+
+1. Ouvre ton Sheet **Carte tickets**, puis **Extensions → Apps Script** (ou **script.google.com → Mes projets**, le projet dont la page **Exécutions** montre « lireMails » toutes les 5 minutes).
+2. Clique **Code.gs**, **Ctrl+A**, colle le nouveau **Code**. Pareil pour **Analyse** et **Carte**. **Import** ne change pas.
+3. **Ctrl+S**. Les envois automatiques (rapports, mails du matin) prennent le nouveau code dès cet enregistrement.
+4. **Déployer → Gérer les déploiements** → crayon → **Version : Nouvelle version** → **Déployer**. Le lien de la carte ne change pas. (Pas « Nouveau déploiement » : ça créerait un autre lien.)
+5. Dans le Sheet, **F5**, puis **Carte tickets → Mettre à jour les onglets de contrôle**. De nouveaux onglets apparaissent : **Qualité**, **Graphiques**, **Envoi du matin**, **Annulés**, **Corrélés**.
+6. **Onglet Accès**, ligne **Annulations et corrélations** : écris en **colonne D** l'adresse mail de la personne qui gère les annulations et les corrélations (et la tienne si tu veux le faire depuis Outlook, séparée par une virgule). Donne-lui le code de cette ligne.
+7. **Onglet Envoi du matin** : les adresses qui recevront l'Excel et la carte chaque jour ouvré vers 7 h (une par ligne, en colonne A).
+8. Pour voir les mails tout de suite : **Carte tickets → Rapports par mail** et **Carte tickets → Envoi du matin : envoyer maintenant**. Ensuite tout part seul : rapport chaque soir vers 17 h, bilan de la semaine le dimanche, bilan du mois le 1er.
+
+Les rapports des 30 derniers jours sont relus une fois dans les heures qui suivent (câbles, positions au PM, références client), pour l'analyse qualité.
+
+# Première installation (une seule fois, environ 15 minutes, sur ordinateur)
 
 ## 1. Régler le filtre Praxedo
 
@@ -59,10 +72,11 @@ La page se recharge toute seule toutes les 2 minutes.
 
 ## 6. Donner l'accès aux techniciens et à la conduite d'activité
 
-La carte demande un **code** à la première ouverture (gardé ensuite sur le téléphone ou le PC). Il y en a deux, dans l'onglet **Accès** du Sheet (ou menu **Carte tickets → Codes d'accès à la carte**) :
+La carte demande un **code** à la première ouverture (gardé ensuite sur le téléphone ou le PC). Il y en a trois, dans l'onglet **Accès** du Sheet (ou menu **Carte tickets → Codes d'accès à la carte**) :
 
-- **Conduite d'activité** : la carte, et le bouton **Listes de contrôle** (Incohérences, Tickets liés, PM chargés, filtrables par gravité ; un clic sur une ligne montre le ticket sur la carte).
+- **Conduite d'activité** : la carte, les chiffres clés, le **Bilan en graphiques** et les **Listes de contrôle** (Incohérences, Tickets liés, PM chargés, Suites à prévoir, Clôtures, Boîtes, Villes, Qualité, Annulés, Corrélés ; un clic sur une ligne montre le ticket sur la carte).
 - **Techniciens** : la carte (tickets, priorités, nouveaux, terminés). Chacun choisit son nom dans **Mes interventions** : ses interventions ont un contour noir, et la liste montre aussi les tickets à côté des siennes.
+- **Annulations et corrélations** : tout ce que voit la conduite d'activité, plus les boutons pour retirer un ticket annulé et regrouper des tickets (voir plus bas). À ne donner qu'à la personne qui les gère.
 
 Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte, sauf la personne qui a le code **Annulations et corrélations** (troisième ligne de l'onglet Accès) : elle peut retirer un ticket annulé dans Praxedo ou regrouper des tickets sous un ticket principal, et les remettre. L'import et les mises à jour ne marchent que pour toi, depuis le Sheet. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
 
@@ -158,8 +172,9 @@ Tout ça se remplit au fil des mails de fin : au début, il y a peu de chiffres.
 - **Tickets liés** : tickets d'un même immeuble, d'une même boîte, d'une même PTO ou référence client, « suite de » un autre ticket, ou au même endroit.
 - **PM chargés** : PM avec au moins 3 tickets ouverts (défaut collectif possible).
 
-Pour un vrai fichier Excel (à envoyer, par exemple) : **Fichier → Télécharger → Microsoft Excel (.xlsx)**. Pour les refaire tout de suite : **Carte tickets → Mettre à jour les onglets de contrôle**.
+Pour un vrai fichier Excel à envoyer : **Carte tickets → Fichiers du jour** (voir plus haut). Pour refaire les onglets tout de suite : **Carte tickets → Mettre à jour les onglets de contrôle**.
 
+**Les couleurs de la carte :**
 
 - **Vert** : terminé aujourd'hui (mail de fin, statut de fin dans l'export, ou ticket sorti de l'export). Il disparaît de la carte le lendemain. La liste « Fins d'intervention aujourd'hui » est dans la légende.
 - **Violet** : nouveau depuis moins de 24 h (export ou mail de création), avec un trait vers l'intervention déjà planifiée la plus proche.
@@ -170,7 +185,7 @@ Pour un vrai fichier Excel (à envoyer, par exemple) : **Fichier → Télécharg
 - **Cercle vert de 1 km** : un technicien vient de clôturer à cet endroit (mail de fin reçu depuis moins d'1 heure). La liste « Viennent de clôturer » et la fiche du ticket donnent les tickets à planifier dans le cercle, GTR KO d'abord ; un clic sur un n° montre le ticket. La carte ne sait pas quand une intervention commence, seulement quand elle est clôturée.
 - **Bandeau orange** en haut de la légende (conduite d'activité) : ce qui manque dans l'export, par exemple des dates de création estimées.
 - Un mail de fin pour un ticket absent de l'export apparaît dans la liste « Mails de fin pour des tickets absents de l'export ».
-- Un ticket annulé n'apparaît pas sur la carte.
+- Un ticket annulé, ou regroupé sous un autre ticket, n'apparaît pas sur la carte.
 
 **Tes notes** : écris-les dans l'onglet **Notes** (colonne A : le n° du ticket, avec ou sans « #0 » ; colonne B : la note), jamais dans l'onglet Tickets, qui est remplacé à chaque import. Elles restent d'un import à l'autre, apparaissent dans la fiche du ticket sur la carte (dans les 2 minutes), et plusieurs lignes pour un même ticket s'ajoutent.
 
@@ -184,4 +199,4 @@ Pour un vrai fichier Excel (à envoyer, par exemple) : **Fichier → Télécharg
 
 Le Sheet et son code sont dans ton compte Google, pas sur un PC : depuis n'importe quel ordinateur, connecte-toi à ce compte (celui qui reçoit les mails FIN INTERVENTION). Le code se retrouve dans le Sheet (**Extensions → Apps Script**) ou directement sur **script.google.com → Mes projets**. Le bon projet est celui dont la page **Exécutions** montre « lireMails » toutes les 5 minutes : renomme-le **Carte tickets** pour le retrouver facilement.
 
-Colle le nouveau code, puis **Déployer → Gérer les déploiements** → crayon → **Version : Nouvelle version** → **Déployer**. L'URL ne change pas.
+Colle le nouveau code, **Ctrl+S**, puis **Déployer → Gérer les déploiements** → crayon → **Version : Nouvelle version** → **Déployer**. L'URL ne change pas. Dans le Sheet : **F5**, puis **Carte tickets → Mettre à jour les onglets de contrôle**.
