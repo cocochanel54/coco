@@ -171,6 +171,7 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
     <button class="onglet" type="button" data-o="villes" aria-selected="false">Villes</button>
     <button class="onglet" type="button" data-o="qualite" aria-selected="false">Qualité</button>
     <button class="onglet" type="button" data-o="annules" aria-selected="false">Annulés</button>
+    <button class="onglet" type="button" data-o="correles" aria-selected="false">Corrélés</button>
     <label for="filtreGravite">Gravité</label>
     <select id="filtreGravite"><option value="">Toutes</option><option>1 - Urgent</option><option>2 - Important</option><option>3 - À vérifier</option><option>4 - Info</option></select>
     <button class="lien fermer" type="button" id="fermerControles">Fermer</button>
@@ -270,9 +271,19 @@ document.addEventListener('click', function (e) {
   var a = e.target.closest && e.target.closest('a[data-aller]');
   if (a) { e.preventDefault(); aller(a.dataset.aller); }
 });
-// code « Annulations » : retirer un ticket annulé dans Praxedo (il va dans l'onglet Annulés du Sheet), ou le remettre
+// code « Annulations et corrélations » : retirer un ticket annulé dans Praxedo (onglet Annulés du Sheet), regrouper des
+// tickets sous celui-ci (onglet Corrélés), ou les remettre
+var candidatsDe = {};   // pour chaque ticket : les tickets liés qu'on peut regrouper dessous
 function blocAnnuler(num) {
-  return '<div class="annuler" data-num="' + esc(num) + '"><button type="button" class="lien" data-annuler>Annulé dans Praxedo ? Retirer ce ticket</button></div>';
+  return '<div class="annuler" data-num="' + esc(num) + '"><button type="button" class="lien" data-annuler>Annulé dans Praxedo ? Retirer ce ticket</button>' +
+    '<br><button type="button" class="lien" data-regrouper>Regrouper des tickets sous celui-ci (corrélation)</button></div>';
+}
+// une fiche qui grandit (formulaire ouvert) : on la redescend sous le bandeau des chiffres clés si besoin
+function recadrerFiche() {
+  var el = document.querySelector('.leaflet-popup'), k = document.getElementById('kpi');
+  if (!el) return;
+  var haut = k.hidden ? 10 : k.getBoundingClientRect().bottom + 6, r = el.getBoundingClientRect();
+  if (r.top < haut) map.panBy([0, r.top - haut]);
 }
 function info(t) {
   var el = document.getElementById('info');
@@ -287,6 +298,7 @@ document.addEventListener('click', function (e) {
     bloc.innerHTML = '<label>Raison (facultatif)<input type="text" maxlength="120" placeholder="annulé par Altitude…"></label>' +
       '<button type="button" data-confirmer>Retirer de la carte</button> <button type="button" class="lien" data-renoncer>Non</button>';
     bloc.querySelector('input').focus();
+    recadrerFiche();
   } else if (cible.closest('[data-renoncer]')) {
     bloc.outerHTML = blocAnnuler(num);
   } else if (cible.closest('[data-confirmer]')) {
@@ -298,6 +310,33 @@ document.addEventListener('click', function (e) {
       b.disabled = false; b.textContent = 'Retirer de la carte';
       bloc.insertAdjacentHTML('beforeend', '<br><b style="color:#b00">' + esc((err && err.message) || err) + '</b>');
     }).annulerDepuisCarte(code, num, bloc.querySelector('input').value);
+  } else if (cible.closest('[data-regrouper]')) {
+    var cands = candidatsDe[num] || [];
+    bloc.innerHTML = '<b>Regrouper sous ' + esc(num) + '</b> (les autres disparaissent de la carte)' +
+      (cands.length ? cands.map(function (x) { return '<label style="display:block;font-weight:normal"><input type="checkbox" value="' + esc(x.num) + '" style="width:auto;margin:0 6px 0 0">' +
+        esc(x.num) + (x.statut ? ' · ' + esc(x.statut) : '') + (x.ko ? ' · GTR KO' : '') + '</label>'; }).join('') : '<br><small>Aucun ticket lié trouvé : écris leurs n° ci-dessous.</small>') +
+      '<label>Autres n° (séparés par des espaces)<input type="text" data-autres maxlength="400"></label>' +
+      '<label>Raison (facultatif)<input type="text" data-raison maxlength="120" placeholder="même câble coupé…"></label>' +
+      '<button type="button" data-confirmer-groupe>Regrouper</button> <button type="button" class="lien" data-renoncer>Non</button>';
+    recadrerFiche();
+  } else if (cible.closest('[data-confirmer-groupe]')) {
+    var bg = cible.closest('[data-confirmer-groupe]'), choix = [];
+    bloc.querySelectorAll('input[type=checkbox]:checked').forEach(function (c) { choix.push(c.value); });
+    bloc.querySelector('[data-autres]').value.split(/[\s,;]+/).forEach(function (x) { if (x) choix.push(x.toUpperCase()); });
+    if (!choix.length) { info('Coche ou écris au moins un ticket à regrouper.'); return; }
+    bg.disabled = true; bg.textContent = 'Envoi…';
+    google.script.run.withSuccessHandler(function (n) {
+      map.closePopup(); info(n + ' ticket' + (n > 1 ? 's' : '') + ' regroupé' + (n > 1 ? 's' : '') + ' sous ' + num + '. Pour dégrouper : Listes de contrôle → Corrélés.'); charger();
+    }).withFailureHandler(function (err) {
+      bg.disabled = false; bg.textContent = 'Regrouper';
+      bloc.insertAdjacentHTML('beforeend', '<br><b style="color:#b00">' + esc((err && err.message) || err) + '</b>');
+    }).correlerDepuisCarte(code, num, choix, bloc.querySelector('[data-raison]').value);
+  } else if (cible.closest('[data-degrouper]')) {
+    var dg = cible.closest('[data-degrouper]'), nd = dg.dataset.degrouper;
+    dg.disabled = true; dg.textContent = 'Envoi…';
+    google.script.run.withSuccessHandler(function () { info('Ticket ' + nd + ' sorti de son groupe : il revient sur la carte.'); charger(); })
+      .withFailureHandler(function (err) { dg.disabled = false; dg.textContent = 'Dégrouper'; info((err && err.message) || String(err)); })
+      .degrouperDepuisCarte(code, nd);
   } else if (cible.closest('[data-remettre]')) {
     var r = cible.closest('[data-remettre]'), n = r.dataset.remettre;
     r.disabled = true; r.textContent = 'Envoi…';
@@ -359,11 +398,19 @@ function tableauControles() {
     qualite: [qua[0], qua[1], qua[0].indexOf('N°'), -1],
     // tickets retirés (annulés dans Praxedo), les plus récents d'abord, avec « Remettre » en cas d'erreur
     annules: [['N°', 'Retiré le', 'Pourquoi', ''], (dernier.d.annules || []).slice().sort(function (a, b) { return (dt(b.le) || 0) - (dt(a.le) || 0); })
-      .map(function (a) { return [a.num, a.le, a.pourquoi, '']; }), -1, -1]
+      .map(function (a) { return [a.num, a.le, a.pourquoi, '']; }), -1, -1],
+    // tickets regroupés sous un ticket principal, avec « Dégrouper » en cas d'erreur
+    correles: [['N° regroupé', 'Sous le ticket', 'Le', 'Par / pourquoi', ''], (dernier.d.correles || []).slice().sort(function (a, b) { return (dt(b.le) || 0) - (dt(a.le) || 0); })
+      .map(function (c) { return [c.num, c.principal, c.le, c.pourquoi, '']; }), -1, -1]
   }[ongletCtrl];
   var en = function (nom) { return defs[0].indexOf(nom); };
   var h = '<table><thead><tr>' + defs[0].map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
   defs[1].forEach(function (l, i) {
+    if (ongletCtrl === 'correles') {
+      h += '<tr><td>' + esc(l[0]) + '</td><td>' + (marqueurs[l[1]] ? '<a href="#" data-aller="' + esc(l[1]) + '">' + esc(l[1]) + '</a>' : esc(l[1])) + '</td><td>' + esc(l[2]) + '</td><td>' + esc(l[3]) + '</td><td>' +
+        (peutAnnuler ? '<button type="button" class="lien" data-degrouper="' + esc(l[0]) + '">Dégrouper</button>' : '') + '</td></tr>';
+      return;
+    }
     if (ongletCtrl === 'annules') {
       h += '<tr><td>' + esc(l[0]) + '</td><td>' + esc(l[1]) + '</td><td>' + esc(l[2]) + '</td><td>' +
         (peutAnnuler ? '<button type="button" class="lien" data-remettre="' + esc(l[0]) + '">Remettre</button>' : '') + '</td></tr>';
@@ -381,7 +428,9 @@ function tableauControles() {
     h += '<tr class="' + (clic ? 'cliquable' : '') + g + '" data-num="' + esc(num) + '" data-boite="' + esc(boite) + '">' + l.slice(0, defs[0].length).map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>';
   });
   h += '</tbody></table>' + (defs[1].length ? '' : '<p style="padding:10px">' + (/clotures|boites|villes/.test(ongletCtrl) ? 'Aucune clôture reçue pour l\'instant : ces tableaux se remplissent avec les mails de fin d\'intervention.'
-      : ongletCtrl === 'annules' ? 'Aucun ticket retiré pour l\'instant.' + (peutAnnuler ? ' Pour en retirer un : sa fiche sur la carte, « Annulé dans Praxedo ? », ou un mail « ANNULÉ » avec son n°.' : '') : 'Rien à signaler.') + '</p>');
+      : ongletCtrl === 'annules' ? 'Aucun ticket retiré pour l\'instant.' + (peutAnnuler ? ' Pour en retirer un : sa fiche sur la carte, « Annulé dans Praxedo ? », ou un mail « ANNULÉ » avec son n°.' : '')
+      : ongletCtrl === 'correles' ? 'Aucun ticket regroupé pour l\'instant.' + (peutAnnuler ? ' Pour en regrouper : la fiche du ticket principal, « Regrouper des tickets sous celui-ci », ou un mail « CORRÉLATION » avec le n° principal puis les autres.' : '')
+      : 'Rien à signaler.') + '</p>');
   var t = document.getElementById('tableau');
   t.innerHTML = h;
   t.querySelectorAll('tr.cliquable').forEach(function (tr) {
@@ -561,7 +610,7 @@ function afficher(d) {
     marqueursBoites[b] = mb;
   });
   res.tickets.forEach(function (t) {
-    if (!t.geo || t.categorie === 'annule') return;
+    if (!t.geo || t.categorie === 'annule' || t.categorie === 'correle') return;   // annulé ou regroupé sous un autre ticket
     var k = t.categorie, relance = k === 'justifie' && t.suivi && t.suivi.due, mien = moi && t.tech === moi;
     var rouge = (k === 'nouveau' && t.prio === 1) || (k === 'planifie' && t.gtrKo);  // contour rouge : GTR KO
     var aSuivre = k === 'termine' && t.suiteMotifs && t.suiteMotifs.length > 0;        // contour orange : le rapport appelle une suite
@@ -604,7 +653,10 @@ function afficher(d) {
       if (hb) html += '<br><small><b>Boîte ' + esc(b) + '</b> : déjà ' + hb.n + ' intervention' + (hb.n > 1 ? 's' : '') + ', la dernière le ' + esc(hb.dernier) +
         (hb.resultat ? ' (' + esc(hb.resultat.replace(/^À suivre : /, '')) + ')' : '') + (hb.tickets[0] && hb.tickets[0].rapport ? ' · <a href="' + esc(hb.tickets[0].rapport) + '" target="_blank" rel="noopener">rapport</a>' : '') + '</small>';
     });
+    if (t.regroupe && t.regroupe.length) html += '<br><b>Regroupe aussi ' + t.regroupe.length + ' ticket' + (t.regroupe.length > 1 ? 's' : '') + '</b> : ' +
+      esc(t.regroupe.map(function (x) { return x.num + (x.ville && x.ville !== t.ville ? ' (' + x.ville + ')' : ''); }).join(', '));
     var gr = ctrl.groupeDe[t.num];
+    candidatsDe[t.num] = gr ? gr.membres.filter(function (x) { return x.num !== t.num; }) : [];
     if (gr && gr.membres.length) {
       liensDe[t.num] = gr.membres.map(function (x) { return x.num; });
       html += '<br><b>Tickets liés</b> (' + esc(gr.raisons) + ') :<ul class="autour">' + gr.membres.slice(0, 8).map(function (x) {

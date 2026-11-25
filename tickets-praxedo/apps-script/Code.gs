@@ -46,6 +46,7 @@ var ONGLET_QUALITE = 'Qualité';
 var ONGLET_CLOTURES = 'Clôtures', ONGLET_STATS_BOITES = 'Stats boîtes', ONGLET_STATS_VILLES = 'Stats villes', ONGLET_STATS_SEMAINES = 'Stats semaines';
 var ONGLET_ACCES = 'Accès';
 var ONGLET_ANNULES = 'Annulés', ENTETES_ANNULES = ['N° ticket', 'Annulé le', 'Pourquoi'];
+var ONGLET_CORRELES = 'Corrélés', ENTETES_CORRELES = ['N° ticket regroupé', 'Sous le ticket', 'Le', 'Par / pourquoi'];
 var ONGLET_NOTES = 'Notes', ENTETES_NOTES = ['N° ticket', 'Note'];
 var COULEURS_GRAVITE = { '1 - Urgent': '#F8CBAD', '2 - Important': '#FFE699', '3 - À vérifier': '#DDEBF7', '4 - Info': '#EDEDED' };
 var ENTETES_CREATIONS = ['Reçu le', 'N° ticket', 'Type', 'Commune (objet)', 'Adresse', 'CP', 'Ville', 'Nom client', 'Description', 'Id du mail'];
@@ -91,6 +92,7 @@ function onOpen() {
     .addItem('Fichiers du jour : carte + Excel (pour Teams)…', 'ouvrirCarteDuJour')
     .addItem('Envoi du matin : envoyer maintenant', 'envoyerMaintenant')
     .addItem('Annuler un ticket…', 'annulerTicket')
+    .addItem('Regrouper des tickets (corrélation)…', 'correlerTickets')
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Rapports par mail')
       .addItem('Rapport du soir (fins d\'intervention) : envoyer maintenant', 'rapportSoirMaintenant')
       .addItem('Bilan de la semaine : envoyer maintenant', 'rapportSemaineMaintenant')
@@ -126,7 +128,7 @@ function installer() {
 function afficherCodes() {
   var a = acces_();
   SpreadsheetApp.getUi().alert("Codes pour ouvrir la carte :\n\nConduite d'activité : " + a.ca + '\nTechniciens : ' + a.tech +
-    '\nAnnulations (la personne qui gère les annulations) : ' + a.annul + (a.mailsAnnul.length ? ' · par mail : ' + a.mailsAnnul.join(', ') : ' · son adresse mail : colonne D de l\'onglet Accès') +
+    '\nAnnulations et corrélations (la personne qui les gère) : ' + a.annul + (a.mailsAnnul.length ? ' · par mail : ' + a.mailsAnnul.join(', ') : ' · son adresse mail : colonne D de l\'onglet Accès') +
     "\n\nPour les changer (et couper l'accès à ceux qui ont l'ancien), modifie-les dans l'onglet « Accès ».");
 }
 
@@ -233,7 +235,7 @@ function excelDuJour_() {
         { titre: 'Les communes où on intervient le plus', sens: 'bar', donnees: 'Données graphiques', cat: 7, series: [8, 9], n: g.nCommunes, ligne: 19, taille: [760, 380] },
         { titre: 'Les boîtes où on intervient le plus', sens: 'bar', donnees: 'Données graphiques', cat: 12, series: [13, 14], n: g.nBoites, ligne: 39, taille: [760, 380] }] },
     { nom: 'À planifier', entetes: l.aPlanifier.entetes, lignes: l.aPlanifier.lignes, fonds: l.aPlanifier.fonds,
-      largeurs: [50, 160, 150, 140, 120, 220, 100, 130, 160, 220, 90, 140, 170, 130, 120, 260, 260, 300, 480] },
+      largeurs: [50, 160, 150, 140, 120, 220, 100, 130, 160, 220, 90, 140, 170, 130, 120, 260, 260, 300, 200, 480] },
     { nom: 'Justifiés', entetes: l.justifies.entetes, lignes: l.justifies.lignes, fonds: l.justifies.fonds,
       largeurs: [90, 300, 120, 120, 200, 160, 100, 60, 120, 80, 300, 160, 220, 140, 420] }
   ].concat(ongletsControle_(c).map(function (o) {
@@ -558,7 +560,7 @@ function lireMails_(delaiMin) {
     var ajout = [];
     messages_(RECHERCHE_GMAIL + fen.q, 100).forEach(function (m) {
       if (vus[m.getId()]) return;
-      if (/annul/i.test(m.getSubject())) return;
+      if (/annul|corr[ée]l/i.test(m.getSubject())) return;
       var l = ligneFin_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
       if (l) { while (l.length < ENTETES_FINS.length) l.push(''); ajout.push(l); vus[m.getId()] = 1; }
     });
@@ -568,6 +570,7 @@ function lireMails_(delaiMin) {
     try { creees = lireCreations_(fen.q); } catch (err) { complet = false; console.warn('Créations : ' + err); }
     try { creees += relireCreations_(); } catch (err) { console.warn('Relecture des créations : ' + err); }
     try { creees += lireAnnulations_(fen.q); } catch (err) { console.warn('Annulations par mail : ' + err); }
+    try { creees += lireCorrelations_(fen.q); } catch (err) { console.warn('Corrélations par mail : ' + err); }
     try { importe = importerDepuisGmail_(fen.q); } catch (err) { complet = false; console.warn('Import par mail : ' + err); }
     // l'import refait déjà les contrôles ; sinon, après un mail de fin ou de création, et au moins une fois par heure
     var faits = props.getProperty('CONTROLES_LE');
@@ -640,6 +643,98 @@ function lireAnnulations_(fenetre) {
   return n;
 }
 
+/**
+ * Corrélations par mail : « CORRÉLATION » (ou « corrélé », « regrouper ») dans l'objet. Le premier n° est le ticket principal,
+ * les suivants sont regroupés dessous : ceux de l'objet, puis ceux écrits dans le mail (pas ceux d'un mail transféré en
+ * dessous). Mêmes adresses autorisées que pour les annulations ; chaque mail est lu une fois.
+ */
+var RECHERCHE_CORRELATIONS = 'subject:(corrélation OR correlation OR corrélé OR correle OR corrélés OR regrouper OR regroupement)';
+function lireCorrelations_(fenetre) {
+  var a = acces_(), permis = a.mailsAnnul.slice(), props = PropertiesService.getScriptProperties(), n = 0;
+  try { permis.push(String(Session.getEffectiveUser().getEmail() || '').toLowerCase()); } catch (err) { /* sans */ }
+  var vus = JSON.parse(props.getProperty('CORREL_MAILS') || '[]'), deja = {};
+  vus.forEach(function (id) { deja[id] = 1; });
+  messages_(RECHERCHE_CORRELATIONS + fenetre, 50).forEach(function (m) {
+    var id = m.getId(), objet = m.getSubject() || '';
+    if (deja[id] || !/corr[ée]l|regroup/i.test(objet)) return;
+    deja[id] = 1; vus.push(id);
+    var de = String((/<([^>]+)>/.exec(m.getFrom()) || [null, m.getFrom()])[1] || '').trim().toLowerCase();
+    if (permis.indexOf(de) < 0) { console.warn('Corrélation par mail ignorée : ' + de + " n'est pas dans l'onglet Accès"); return; }
+    // le texte tapé, sans le mail transféré ou cité en dessous
+    var corps = String(m.getPlainBody() || '').split(/\n\s*(?:De|From|Envoyé|Sent)\s*:|\n-{2,}\s*(?:Message d'origine|Original Message|Forwarded message)|\n_{8,}|\n>/i)[0];
+    var nums = numerosTickets_(objet);
+    numerosTickets_(corps).forEach(function (x) { if (nums.indexOf(x) < 0) nums.push(x); });
+    if (nums.length < 2) { console.warn('Corrélation par mail ignorée : il faut le ticket principal puis au moins un autre n°'); return; }
+    n += ajouterCorrelations_(nums[0], nums.slice(1), 'par mail de ' + de, m.getDate());
+  });
+  props.setProperty('CORREL_MAILS', JSON.stringify(vus.slice(-300)));
+  return n;
+}
+
+/** Ajoute à l'onglet Corrélés « nums regroupés sous principal » (sans doublon). Renvoie le nombre de lignes ajoutées. */
+function ajouterCorrelations_(principal, nums, pourquoi, quand) {
+  var f = ongletCorreles_(), norm = function (x) { return String(x || '').replace(/\s+/g, '').toUpperCase(); }, p = norm(principal), n = 0;
+  var presents = f.getDataRange().getDisplayValues().slice(1).map(function (r) { return norm(r[0]) + '|' + norm(r[1]); });
+  nums.map(norm).forEach(function (num) {
+    if (!/^[A-Z0-9][A-Z0-9#._-]{3,39}$/.test(num) || num === p || num.split('#')[0] === p.split('#')[0] || presents.indexOf(num + '|' + p) >= 0) return;
+    f.appendRow([num, p, Utilities.formatDate(quand || new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm'), pourquoi || ''].map(texte_));
+    presents.push(num + '|' + p); n++;
+  });
+  if (n) PropertiesService.getScriptProperties().deleteProperty('CONTROLES_LE');
+  return n;
+}
+
+/** L'onglet « Corrélés » (créé avec son mode d'emploi s'il n'existe pas). */
+function ongletCorreles_() {
+  var neuf = !SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_CORRELES), f = feuille_(ONGLET_CORRELES, ENTETES_CORRELES);
+  if (neuf) {
+    f.getRange(1, 5).setValue('À savoir').setFontWeight('bold');
+    f.getRange(2, 5).setValue('Un ticket regroupé par ligne : son n° en colonne A, le ticket principal en colonne B. Les tickets regroupés disparaissent de la ' +
+      'carte et des listes ; le principal prend l\'échéance la plus proche du groupe. Pour dégrouper, efface la ligne. La personne qui gère les corrélations ' +
+      'peut aussi le faire par mail (« CORRÉLATION » + le n° principal puis les autres) ou sur la carte avec son code.').setWrap(true);
+    f.setColumnWidth(1, 200); f.setColumnWidth(2, 200); f.setColumnWidth(3, 130); f.setColumnWidth(4, 240); f.setColumnWidth(5, 480);
+  }
+  return f;
+}
+
+/** Depuis la carte, avec le code « Annulations et corrélations » : regroupe des tickets sous un ticket principal. */
+function correlerDepuisCarte(code, principal, nums, raison) {
+  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations et les corrélations.');
+  var liste = (Array.isArray(nums) ? nums : String(nums || '').split(/[\s,;]+/)).filter(function (x) { return x; });
+  if (!liste.length) throw new Error('Coche ou écris au moins un ticket à regrouper.');
+  var r = String(raison || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  return ajouterCorrelations_(principal, liste, (r ? r + ' · ' : '') + 'depuis la carte');
+}
+
+/** Depuis la carte : sort un ticket de son groupe (efface sa ligne de l'onglet Corrélés). */
+function degrouperDepuisCarte(code, num) {
+  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations et les corrélations.');
+  num = String(num || '').replace(/\s+/g, '').toUpperCase();
+  var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_CORRELES), n = 0;
+  if (!f || !num) return 0;
+  var v = f.getDataRange().getDisplayValues();
+  for (var i = v.length - 1; i >= 1; i--) {
+    if (String(v[i][0] || '').replace(/\s+/g, '').toUpperCase() === num) { f.getRange(i + 1, 1, 1, 4).clearContent(); n++; }
+  }
+  if (n) PropertiesService.getScriptProperties().deleteProperty('CONTROLES_LE');
+  return n;
+}
+
+/** Menu « Regrouper des tickets (corrélation)… » : le n° du ticket principal, puis les n° à regrouper dessous. */
+function correlerTickets() {
+  proprietaire_();
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('Regrouper des tickets (corrélation)', 'Le n° du ticket principal, puis les n° des tickets à regrouper dessous, séparés par des espaces.\n' +
+    'Par exemple : BB-20261111T0296#0 BB-20261111T0297#0 BB-20261111T0301#0', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var nums = String(r.getResponseText() || '').toUpperCase().split(/[\s,;]+/).filter(function (x) { return x; });
+  if (nums.length < 2) { ui.alert('Il faut le ticket principal puis au moins un autre n°.'); return; }
+  var n = ajouterCorrelations_(nums[0], nums.slice(1), 'depuis le Sheet');
+  majControles_();
+  ui.alert(n + ' ticket' + (n > 1 ? 's' : '') + ' regroupé' + (n > 1 ? 's' : '') + ' sous ' + nums[0] + '. Ils disparaissent de la carte et des listes.\n\n' +
+    'Pour dégrouper, efface leur ligne dans l\'onglet « ' + ONGLET_CORRELES + ' ».');
+}
+
 /** Les n° de tickets d'un texte : BB-20261111T0296#0, QRB-…, ou « N° 284320 ». */
 function numerosTickets_(t) {
   var out = [], m, re = /\b[A-Z]{2,4}-\d{8}T\d{4}(?:#\d+)?/gi, re2 = /N°\s*(\d{5,})/gi;
@@ -656,7 +751,7 @@ function lireCreations_(fenetre) {
   var ajout = [];
   messages_(RECHERCHE_CREATIONS + fenetre, 100).forEach(function (m) {
     if (vus[m.getId()]) return;
-    if (/annul/i.test(m.getSubject())) return;   // mail de création transféré pour annuler le ticket : lu par lireAnnulations_
+    if (/annul|corr[ée]l/i.test(m.getSubject())) return;   // mail de création transféré pour annuler ou regrouper : lu ailleurs
     var l = ligneCreation_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
     if (l) { ajout.push(l.map(texte_)); vus[m.getId()] = 1; }
   });
@@ -768,7 +863,7 @@ function droits_(code) {
  * l'onglet Annulés, avec la date et « depuis la carte »). Les onglets du Sheet sont refaits au passage suivant (5 min).
  */
 function annulerDepuisCarte(code, num, raison) {
-  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations.');
+  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations et les corrélations.');
   num = String(num || '').replace(/\s+/g, '').toUpperCase();
   if (!/^[A-Z0-9][A-Z0-9#._-]{3,39}$/.test(num)) throw new Error('N° de ticket invalide.');
   var r = String(raison || '').replace(/\s+/g, ' ').trim().slice(0, 200);
@@ -779,7 +874,7 @@ function annulerDepuisCarte(code, num, raison) {
 
 /** Depuis la carte, avec le code « Annulations » : remet un ticket retiré par erreur (efface ses lignes de l'onglet Annulés). */
 function retablirDepuisCarte(code, num) {
-  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations.');
+  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations et les corrélations.');
   num = String(num || '').replace(/\s+/g, '').toUpperCase();
   var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_ANNULES), n = 0;
   if (!f || !num) return 0;
@@ -823,7 +918,11 @@ function lireDonnees_() {
   var fa = ss.getSheetByName(ONGLET_ANNULES);
   var annules = fa ? fa.getDataRange().getDisplayValues().slice(1).map(function (r) { return { num: String(r[0] || '').trim(), le: r[1] || '', pourquoi: r[2] || '' }; })
     .filter(function (a) { return a.num; }) : [];
-  return { entetes: t[0], lignes: t.slice(1), fins: fins, creations: creations, sortis: sortis, notes: notes, adresses: adresses, annules: annules,
+  // tickets regroupés (corrélés) sous un ticket principal
+  var fco = ss.getSheetByName(ONGLET_CORRELES);
+  var correles = fco ? fco.getDataRange().getDisplayValues().slice(1).map(function (r) { return { num: String(r[0] || '').trim(), principal: String(r[1] || '').trim(), le: r[2] || '', pourquoi: r[3] || '' }; })
+    .filter(function (c) { return c.num && c.principal; }) : [];
+  return { entetes: t[0], lignes: t.slice(1), fins: fins, creations: creations, sortis: sortis, notes: notes, adresses: adresses, annules: annules, correles: correles,
            importeLe: props.getProperty('IMPORTE_LE') || '', luLe: props.getProperty('LU_LE') || '' };
 }
 
@@ -843,6 +942,7 @@ function majControles_() {
   try { graphiquesSheet_(a.listesDuJour(res, c, NOW, {}).graphiques); } catch (err) { console.warn('Graphiques : ' + err); }
   try { adressesEnvoi_(); } catch (err) { console.warn('Onglet ' + ONGLET_ENVOI + ' : ' + err); }
   try { ongletAnnules_(); } catch (err) { console.warn('Onglet ' + ONGLET_ANNULES + ' : ' + err); }
+  try { ongletCorreles_(); } catch (err) { console.warn('Onglet ' + ONGLET_CORRELES + ' : ' + err); }
   PropertiesService.getScriptProperties().setProperty('CONTROLES_LE', maintenant_());
   return { incoherences: c.incoherences.length, lies: c.lies.length, pm: c.pm.length, avertissements: res.avertissements };
 }
@@ -1406,9 +1506,10 @@ function acces_() {
   if (f.getLastRow() < 4) {
     var v0 = f.getRange(2, 2, 2, 1).getDisplayValues(), c = code();
     while (c === v0[0][0].trim() || c === v0[1][0].trim()) c = code();
-    f.getRange(4, 1, 1, 3).setNumberFormat('@').setValues([['Annulations', c, 'Comme la conduite d\'activité, et peut retirer de la carte un ticket annulé dans ' +
-      'Praxedo (et le remettre). En colonne D : son adresse mail, pour annuler par mail (« ANNULÉ » dans l\'objet, avec le n° du ticket).']]);
-    f.getRange(1, 4).setValue('Adresse mail (annulations par mail)').setFontWeight('bold');
+    f.getRange(4, 1, 1, 3).setNumberFormat('@').setValues([['Annulations et corrélations', c, 'Comme la conduite d\'activité, et peut retirer de la carte un ticket annulé ' +
+      'dans Praxedo, ou regrouper des tickets sous un ticket principal (corrélation), et les remettre. En colonne D : son adresse mail, pour le faire par mail ' +
+      '(« ANNULÉ » ou « CORRÉLATION » dans l\'objet, avec les n° des tickets).']]);
+    f.getRange(1, 4).setValue('Adresse mail (annulations et corrélations par mail)').setFontWeight('bold');
     f.getRange(4, 4).setNumberFormat('@');
     f.setColumnWidth(4, 280);
   }

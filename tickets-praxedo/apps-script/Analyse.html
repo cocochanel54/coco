@@ -60,6 +60,34 @@ function refsReseau(texte, pm) {
   trouver(t, /\b(?:TN-[A-Z0-9]{3,6}-[A-Z0-9]{3,5}|GE-\d{4}-[A-Z0-9]{4})\b/gi).forEach(function (v) { ajout(out.pto, v.toUpperCase()); });
   return out;
 }
+/**
+ * Tickets regroupés (corrélés) sous un ticket principal, d'après l'onglet « Corrélés » : { n° regroupé → { principal, le, pourquoi } }.
+ * Un n° avec « #0 », « #1 »… vaut pour cette fois-là ; sans « # », pour toutes les fois du ticket.
+ */
+function correlations(donnees) {
+  var out = {};
+  ((donnees && donnees.correles) || []).forEach(function (c) {
+    var k = String(c.num || '').replace(/\s+/g, '').toUpperCase(), p = String(c.principal || '').replace(/\s+/g, '').toUpperCase();
+    if (k && p && k !== p && k.split('#')[0] !== p.split('#')[0]) out[k] = { principal: p, le: c.le || '', pourquoi: c.pourquoi || '' };
+  });
+  return out;
+}
+function correleA(corr, num) { var n = String(num || '').toUpperCase(); return corr[n] || corr[n.split('#')[0]] || null; }
+// les alertes de GTR et de planning d'un ticket (refaites pour un ticket principal quand son groupe change son échéance)
+var RE_ALERTE_GTR = /^(Retard justifié|Justifié \/ en attente|Échéance dépassée|Échéance dans moins de 48 h|Déplanifié|Date planifiée passée|Planifiée après)/;
+function alertesGtr(t, NOW, TODAY) {
+  var e = t.echeance, ouvert = t.ouvert;
+  t.gtrKo = false;
+  if (ouvert && e && e < NOW && t.justif) t.alertes.push('Retard justifié (' + fretard(NOW - e) + ')');
+  else if (ouvert && t.justif) t.alertes.push('Justifié / en attente');
+  else if (ouvert && e && e < NOW) { t.gtrKo = true; t.alertes.push('Échéance dépassée de ' + fretard(NOW - e)); }
+  else if (t.aPlanifier && e && e < plusJours(NOW, 2)) t.alertes.push('Échéance dans moins de 48 h et pas planifié');
+  if (t.deplanifie && !t.termine) t.alertes.push('Déplanifié : revenu en « Qualifiée »');
+  if (ouvert && (t.statut === 'Planifiée' || t.statut === 'Synchronisée') && t.planif) {
+    if (t.planif < TODAY) t.alertes.push('Date planifiée passée, pas de mail de fin');
+    if (e && t.planif > e) t.alertes.push("Planifiée après l'échéance");
+  }
+}
 function jetonTicket(num) { var m = /(\d{8}T\d{4})/.exec(String(num || '').toUpperCase()); return m ? m[1] : ''; }
 // Ce qui, dans un rapport d'intervention lu, appelle une suite
 // Ce qui reste à faire chez l'opérateur (jarretière à brancher, brassage) n'est pas une reprise pour l'équipe :
@@ -235,10 +263,10 @@ function suivi(t, NOW) {
  * Retour : une intervention dans une boîte où une autre intervention a été clôturée moins de 30 jours avant.
  */
 function statistiques(donnees, NOW, techDe) {
-  var TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()), vus = {}, F = [];
+  var TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()), vus = {}, F = [], corr = correlations(donnees);
   (donnees.fins || []).slice().sort(function (a, b) { return dt(b.recu) - dt(a.recu); }).forEach(function (f) {
     var recu = dt(f.recu);
-    if (!f.num || vus[f.num] || !recu) return;
+    if (!f.num || vus[f.num] || !recu || correleA(corr, f.num)) return;   // ticket regroupé : sa fin est celle du principal
     vus[f.num] = 1;
     var cp = (/\b(\d{5})\b/.exec(f.adresse || '') || [])[1] || '', villeAdr = (/\d{5}\s+(.+)$/.exec(f.adresse || '') || [])[1] || '';
     var commune = String(f.commune && !/^NA$/i.test(f.commune.trim()) ? f.commune : villeAdr).trim().toUpperCase() || '(commune inconnue)';
@@ -437,6 +465,7 @@ function analyser(donnees, NOW) {
   }
   // tickets annulés dans Praxedo (pas de mail) et notés à la main dans l'onglet « Annulés » du Sheet :
   // un n° avec « #0 », « #1 »… vaut pour cette fois-là seulement, un n° sans « # » pour toutes les fois du ticket
+  var corr = correlations(donnees);
   var annulesMain = {};
   (donnees.annules || []).forEach(function (a) { var k = String(a.num || '').replace(/\s+/g, '').toUpperCase(); if (k) annulesMain[k] = a; });
   function annuleMain(num) { var n = String(num || '').toUpperCase(); return annulesMain[n] || annulesMain[n.split('#')[0]] || null; }
@@ -467,7 +496,8 @@ function analyser(donnees, NOW) {
       if (mn) { creee = new Date(+mn[1], mn[2] - 1, +mn[3], 8, 0); creeeSource = 'numero'; }
     }
     var t = {
-      num: num, base: num.split('#')[0], statut: annuleMain(num) ? 'Annulée (onglet Annulés)' : g('Statut'), annuleMain: annuleMain(num), planif: dt(g('Planifiée')),
+      num: num, base: num.split('#')[0], statut: annuleMain(num) ? 'Annulée (onglet Annulés)' : correleA(corr, num) ? 'Regroupé sous ' + correleA(corr, num).principal : g('Statut'),
+      annuleMain: annuleMain(num), correle: annuleMain(num) ? null : correleA(corr, num), planif: dt(g('Planifiée')),
       tech: [g('Nom technicien'), g('Prénom technicien')].filter(function (x) { return x; }).join(' '),
       site: site, equip: g('Equipement'), creee: creee, creeeSource: creeeSource, avant: dt(g('À faire avant')),
       adresse: g('Adresse'), cp: cp, ville: g('Ville site'), desc: desc, tags: tags, niveau: niv ? +niv[1] : null,
@@ -500,20 +530,32 @@ function analyser(donnees, NOW) {
     t.ouvert = ouvert;
     t.aPlanifier = !t.termine && (t.statut === 'Qualifiée' || t.statut === 'Pré-planifiée');
     t.deplanifie = t.statut === 'Qualifiée' && !!t.planif;
-    if (parMail[num] && !t.annule) { t.parMail = true; t.statut = "Reçu par mail de création (pas encore dans l'export)"; }
+    if (parMail[num] && !t.annule && !t.correle) { t.parMail = true; t.statut = "Reçu par mail de création (pas encore dans l'export)"; }
     var rg = regleGtr(t); t.regle = rg[0]; t.echeance = rg[1] || null;
-    var e = t.echeance;
-    if (ouvert && e && e < NOW && t.justif) t.alertes.push('Retard justifié (' + fretard(NOW - e) + ')');
-    else if (ouvert && t.justif) t.alertes.push('Justifié / en attente');
-    else if (ouvert && e && e < NOW) { t.gtrKo = true; t.alertes.push('Échéance dépassée de ' + fretard(NOW - e)); }
-    else if (t.aPlanifier && e && e < plusJours(NOW, 2)) t.alertes.push('Échéance dans moins de 48 h et pas planifié');
-    if (t.deplanifie && !t.termine) t.alertes.push('Déplanifié : revenu en « Qualifiée »');
-    if (ouvert && (t.statut === 'Planifiée' || t.statut === 'Synchronisée') && t.planif) {
-      if (t.planif < TODAY) t.alertes.push('Date planifiée passée, pas de mail de fin');
-      if (e && t.planif > e) t.alertes.push("Planifiée après l'échéance");
-    }
+    alertesGtr(t, NOW, TODAY);
     return t;
   }).filter(function (t) { return t; });
+
+  // tickets regroupés sous un ticket principal (onglet Corrélés) : ils disparaissent, et l'échéance la plus proche du groupe
+  // vaut pour le principal (un seul déplacement pour tous)
+  var parNumT = {};
+  T.forEach(function (t) { parNumT[t.num] = t; if (!parNumT[t.base]) parNumT[t.base] = t; });
+  T.forEach(function (t) {
+    if (!t.correle) return;
+    var m = parNumT[t.correle.principal] || parNumT[t.correle.principal.split('#')[0]];
+    if (m && m !== t && !m.correle) (m.regroupe = m.regroupe || []).push(t);
+  });
+  T.forEach(function (m) {
+    if (!m.regroupe) return;
+    var plusProche = null;
+    m.regroupe.forEach(function (t) { if (t.echeance && (!plusProche || t.echeance < plusProche.echeance)) plusProche = t; });
+    if (plusProche && m.ouvert && (!m.echeance || plusProche.echeance < m.echeance)) {
+      m.echeance = plusProche.echeance;
+      m.regle += ' · échéance du groupe : celle de ' + plusProche.num + ' (' + plusProche.regle + ')';
+      m.alertes = m.alertes.filter(function (a) { return !RE_ALERTE_GTR.test(a); });
+      alertesGtr(m, NOW, TODAY);
+    }
+  });
 
   var planifies = T.filter(function (t) { return !t.termine && (t.statut === 'Planifiée' || t.statut === 'Synchronisée') && t.planif && t.planif >= TODAY && t.geo; });
   T.forEach(function (t) {
@@ -533,7 +575,7 @@ function analyser(donnees, NOW) {
     t.prio = t.justif ? 4 : (t.gtrKo || bientot) ? 1
            : (t.niveau === 2 || t.niveau === 3) && (t.equip === 'Service Interrompu' || t.equip === 'Service Dégradé') || t.deplanifie || t.niveau === 3 ? 2 : 3;
     // retard = GTR KO (échéance dépassée) · bientot = échéance dans moins de 48 h
-    t.categorie = t.annule ? 'annule' : t.termine ? 'termine' : !t.aPlanifier ? 'planifie'
+    t.categorie = t.annule ? 'annule' : t.correle ? 'correle' : t.termine ? 'termine' : !t.aPlanifier ? 'planifie'
                 : t.justif ? 'justifie' : t.nouveau ? 'nouveau' : t.gtrKo ? 'retard' : bientot ? 'bientot' : 'aplanifier';
   });
 
@@ -734,7 +776,32 @@ function qualite(res, NOW) {
     constat('redondance', xs.length >= 5 ? 'fort' : 'moyen', der.finLe, der.recu, der.f.num, der, parNum[der.f.num], xs.length + ' interventions sur ' + r.lib + ' en 90 jours : ' +
       xs.slice(-6).map(function (x) { return fd(x.finLe, false).slice(0, 5) + ' ' + (x.tech || '?'); }).join(', '), null, 'Chercher une cause commune (câble abîmé, boîte mal fermée, rongeurs…)');
   });
-  //  e. déplacement peut-être inutile
+  //  e. à regrouper ? tickets ouverts sur la même boîte, le même câble ou la même ligne du PM, créés à moins de 3 jours d'écart
+  var ouverts = res.tous.filter(function (t) { return t.ouvert && !t.termine && !t.annule && !t.correle && t.creee; }), paquets = {};
+  ouverts.forEach(function (t) {
+    var rr = refsReseau(t.desc, t.site), cles = [];
+    (t.boites || []).forEach(function (b) { cles.push(['b' + b, 'la boîte ' + b]); });
+    rr.cables.forEach(function (c) { cles.push(['c' + c, 'le câble ' + c]); });
+    rr.positions.forEach(function (q) { if (q.pm) cles.push(['p' + q.pm + 'T' + q.t + 'L' + q.l, 'le PM ' + q.pm + ', tiroir ' + q.t + ' ligne ' + q.l]); });
+    cles.forEach(function (k) { (paquets[k[0]] = paquets[k[0]] || { lib: k[1], ts: [] }).ts.push(t); });
+  });
+  var proposes = {};
+  Object.keys(paquets).forEach(function (k) {
+    var ts = paquets[k].ts.slice().sort(function (a, b) { return a.creee - b.creee; });
+    for (var i = 0; i < ts.length; i++) {
+      var g = ts.filter(function (t) { return t.creee >= ts[i].creee && t.creee - ts[i].creee <= 3 * J; });
+      if (g.length < 2) continue;
+      var cle = g.map(function (t) { return t.num; }).join('|');
+      if (proposes[cle]) break;
+      proposes[cle] = 1;
+      var principal = g.filter(function (t) { return t.regroupe; })[0] || g[0], der = g[g.length - 1];
+      constat('redondance', 'moyen', der.creee, der.creee, principal.num, null, principal, g.length + ' tickets ouverts sur ' + paquets[k].lib + ' en ' +
+        Math.max(1, Math.round((der.creee - g[0].creee) / J)) + ' j : ' + g.map(function (t) { return t.num; }).join(', '), null,
+        'À regrouper sous un seul ticket (corrélation) si c\'est le même défaut : un seul déplacement');
+      break;
+    }
+  });
+  //  f. déplacement peut-être inutile
   F.forEach(function (x) {
     if (x.aVerifier) constat('redondance', 'moyen', x.finLe, x.recu, x.f.num, x, parNum[x.f.num], "fin d'impact client le " + fd(x.finImpact) + ', avant l\'arrivée du technicien (' + x.f.debut + ')',
       null, 'Vérifier si le client était déjà rétabli : déplacement peut-être inutile');
@@ -770,7 +837,7 @@ function qualite(res, NOW) {
  */
 function controles(res, NOW) {
   var TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
-  var T = res.tous.filter(function (t) { return !t.termine && !t.annule && !t.sorti; });
+  var T = res.tous.filter(function (t) { return !t.termine && !t.annule && !t.sorti && !t.correle; });
   var INC = [];
   function inc(g, t, probleme, detail) { INC.push([g, t, probleme, detail || '']); }
   T.forEach(function (t) {
@@ -969,6 +1036,8 @@ function listesDuJour(res, ctrl, NOW, infos) {
   ligne('PM chargés', ctrl.pm.length);
   var nbAnnules = res.tous.filter(function (t) { return t.annuleMain; }).length;
   if (nbAnnules) ligne('Tickets annulés à la main (onglet Annulés)', nbAnnules);
+  var nbCorreles = res.tous.filter(function (t) { return t.correle; }).length;
+  if (nbCorreles) ligne('Tickets regroupés sous un autre ticket (onglet Corrélés)', nbCorreles);
   if (res.avertissements.length) { titre('À SAVOIR'); res.avertissements.forEach(function (a) { ligne(a, ''); }); }
 
   // à planifier : par priorité, puis échéance GTR
@@ -993,13 +1062,14 @@ function listesDuJour(res, ctrl, NOW, infos) {
     resume: { entetes: ['Indicateur', 'Valeur'], lignes: R, fonds: RF },
     aPlanifier: {
       entetes: ['Prio', 'N°', 'Catégorie', 'GTR', 'Échéance GTR', 'Règle GTR', 'Statut', 'Créé le', 'Ville', 'Adresse', 'Google Maps', 'PM (Site)', 'Boîte(s)',
-                'Équipement', 'Déjà planifié le', 'Justification / note', 'Alertes', 'À caser avec (intervention déjà planifiée)', 'Description'],
+                'Équipement', 'Déjà planifié le', 'Justification / note', 'Alertes', 'À caser avec (intervention déjà planifiée)', 'Regroupe aussi', 'Description'],
       lignes: AP.map(function (t) {
         return [t.prio, t.num, CAT[t.categorie] || t.categorie, t.gtrTexte || '', fd(t.echeance), t.regle, t.statut,
                 fd(t.creee) + (t.creeeSource === 'numero' ? ' (estimée)' : ''), t.ville, t.adresse,
                 t.geo ? 'https://www.google.com/maps/search/?api=1&query=' + t.geo.lat + ',' + t.geo.lon : '', t.site, t.boites.join(', '), t.equip,
                 t.deplanifie ? fd(t.planif) : '', t.justif || t.noteTapee || '', uniques(t.alertes || []).join(' · '),
-                t.caser ? t.caser.n + ' · ' + t.caser.p + ' · ' + t.caser.tech + ' · à ' + t.caser.d : '', court(t.desc, 400)];
+                t.caser ? t.caser.n + ' · ' + t.caser.p + ' · ' + t.caser.tech + ' · à ' + t.caser.d : '',
+                (t.regroupe || []).map(function (x) { return x.num; }).join(', '), court(t.desc, 400)];
       }),
       fonds: AP.map(function (t) { return FOND[t.categorie] || null; })
     },

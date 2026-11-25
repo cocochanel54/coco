@@ -64,7 +64,7 @@ La carte demande un **code** à la première ouverture (gardé ensuite sur le t�
 - **Conduite d'activité** : la carte, et le bouton **Listes de contrôle** (Incohérences, Tickets liés, PM chargés, filtrables par gravité ; un clic sur une ligne montre le ticket sur la carte).
 - **Techniciens** : la carte (tickets, priorités, nouveaux, terminés). Chacun choisit son nom dans **Mes interventions** : ses interventions ont un contour noir, et la liste montre aussi les tickets à côté des siennes.
 
-Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte, sauf la personne qui a le code **Annulations** (troisième ligne de l'onglet Accès) : elle peut retirer un ticket annulé dans Praxedo, et le remettre. L'import et les mises à jour ne marchent que pour toi, depuis le Sheet. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
+Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte, sauf la personne qui a le code **Annulations et corrélations** (troisième ligne de l'onglet Accès) : elle peut retirer un ticket annulé dans Praxedo ou regrouper des tickets sous un ticket principal, et les remettre. L'import et les mises à jour ne marchent que pour toi, depuis le Sheet. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
 
 ## Là où Google est bloqué : la carte et l'Excel du jour
 
@@ -85,13 +85,26 @@ Pas de lien Google ni de code, mais ce sont des **photos** : les données sont c
 
 Quand un ticket est annulé dans Praxedo, aucun mail n'arrive : la carte ne le sait qu'au prochain export. Pour le retirer tout de suite, c'est **la personne qui gère les annulations** qui s'en occupe :
 
-1. **Une fois** : dans l'onglet **Accès**, écris son adresse mail en **colonne D** de la ligne **Annulations**, et donne-lui le code de cette ligne.
+1. **Une fois** : dans l'onglet **Accès**, écris son adresse mail en **colonne D** de la ligne **Annulations et corrélations**, et donne-lui le code de cette ligne.
 2. **Par mail, depuis Outlook** (même quand Google est bloqué) : elle transfère à ton Gmail le mail de création du ticket en ajoutant **ANNULÉ** au début de l'objet. Elle peut aussi écrire un mail avec **ANNULÉ** dans l'objet et le n° du ticket (`BB-20261111T0296#0`) dans l'objet ou le texte. Dans les 5 minutes, le ticket est retiré. Les mails des autres adresses sont ignorés.
 3. **Sur la carte, avec son code** : dans la fiche du ticket, **« Annulé dans Praxedo ? Retirer ce ticket »**. En cas d'erreur : **Listes de contrôle → Annulés → Remettre**.
 
 Toi, tu peux aussi le faire depuis le Sheet : **Carte tickets → Annuler un ticket…**, ou écrire le n° en colonne A de l'onglet **Annulés** (pour le rétablir : efface sa ligne).
 
 Le ticket disparaît de la carte, des listes, de l'Excel et des mails du matin, et il ne passe pas en vert « terminé » quand il sort de l'export. Avec `#0`, `#1`… seule cette fois-là est annulée (un ticket rouvert reste) ; sans `#`, toutes les fois du ticket. L'onglet **Annulés** garde qui l'a fait et quand.
+
+## Regrouper des tickets (corrélation)
+
+Quand plusieurs tickets ont la même cause (un câble coupé pour plusieurs clients…), on les regroupe sous un **ticket principal**. Les autres **disparaissent** de la carte, des listes, de l'Excel et des mails ; la fiche du principal les liste (« Regroupe aussi … ») et il prend l'**échéance GTR la plus proche** du groupe. Leurs fins d'intervention ne comptent pas comme des interventions de plus.
+
+C'est la même personne que pour les annulations, avec le même code et la même adresse :
+
+- **Par mail, depuis Outlook** : un mail avec **CORRÉLATION** dans l'objet, le **n° du ticket principal en premier**, puis les autres (dans l'objet ou dans le texte). Par exemple, objet : `CORRÉLATION BB-20261111T0296#0 BB-20261111T0297#0 BB-20261111T0301#0`. Les n° d'un mail transféré ou cité en dessous ne sont pas pris.
+- **Sur la carte, avec son code** : dans la fiche du ticket principal, **« Regrouper des tickets sous celui-ci »**. Les tickets liés (même adresse, même boîte, même PTO…) sont proposés à cocher, et on peut écrire d'autres n°. En cas d'erreur : **Listes de contrôle → Corrélés → Dégrouper**.
+
+Toi, tu peux aussi le faire depuis le Sheet : **Carte tickets → Regrouper des tickets (corrélation)…**, ou écrire dans l'onglet **Corrélés** (n° regroupé en colonne A, ticket principal en colonne B ; pour dégrouper, efface la ligne).
+
+L'analyse qualité **propose** aussi des regroupements : des tickets ouverts sur la même boîte, le même câble ou la même ligne du PM, créés à moins de 3 jours d'écart (« À regrouper sous un seul ticket ? »), dans l'onglet Qualité et le rapport du soir.
 
 ## Envoi automatique chaque matin
 
