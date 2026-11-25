@@ -103,18 +103,24 @@ Pour que l'équipe reçoive l'Excel et la carte du jour sans que tu aies à les 
 
 Rien ne part tant que la colonne A est vide ; pour arrêter, vide-la. Gmail limite les envois à environ 100 destinataires par jour : jusqu'à 40 adresses, c'est large. Ces fichiers contiennent les adresses des tickets : n'y mets que l'équipe.
 
-## Rapports par mail : chaque soir et chaque dimanche
+## Rapports par mail : chaque soir, chaque dimanche, chaque 1er du mois
 
 Sans rien régler, tu reçois sur ton Gmail :
 
 - **Chaque soir vers 17 h**, les fins d'intervention reçues depuis le rapport de la veille :
-  - **À traiter** : GTR non respectée (avec le retard), à reprendre sans ticket de suite, fin d'impact avant l'arrivée du technicien, rapport illisible, clôture d'un ticket inconnu ou retiré comme annulé, mise à jour NETGEO nécessaire ;
-  - **À surveiller** : retour dans une boîte déjà visitée il y a moins de 30 jours, reste côté opérateur (jarretière, brassage), durée sur place inhabituelle (moins de 15 min ou plus de 6 h), Cerfa ou plainte, fini un autre jour que prévu, pas de boîte dans le rapport, rapport pas encore lu ;
-  - les interventions **prévues aujourd'hui sans fin d'intervention** ;
-  - puis le **détail de chaque clôture** (horaires, GTR, résultat, boîte, cause, compte-rendu). Chaque n° de ticket ouvre le rapport Praxedo.
-- **Le dimanche vers 17 h**, en plus, le **bilan de la semaine** : les chiffres comparés à la semaine d'avant, le détail par jour et par technicien, les communes et les boîtes, les reprises toujours sans ticket de suite et tout ce qui était à traiter.
+  - **Peut-être causé par nos interventions** : un nouveau défaut apparu dans les 15 jours après le passage d'un de nos techniciens au même endroit (position voisine au même PM, même câble, même boîte), plus probable si la cause notée est un brassage, une malfaçon ou une mauvaise manipulation. C'est à vérifier avec les deux rapports, pas une certitude ;
+  - **Redondances** : même client (PTO ou référence client) dépanné deux fois en 30 jours, ticket rouvert après notre clôture, plusieurs interventions le même jour dans la même boîte, câble / boîte / ligne du PM touchés 3 fois ou plus en 90 jours, déplacement peut-être inutile (fin d'impact avant l'arrivée du technicien) ;
+  - **Corrections à faire** : créer le ticket de suite, mettre à jour NETGEO, signaler à l'opérateur (jarretière, brassage), faire compléter un rapport (boîte, cause, position au PM ou réponse « défaut corrigé » manquante) ;
+  - les autres points : GTR non respectée, rapport illisible, clôture d'un ticket inconnu, durée sur place inhabituelle, Cerfa ou plainte, fini un autre jour que prévu ;
+  - les interventions **prévues aujourd'hui sans fin d'intervention**, puis le **détail de chaque clôture** (horaires, GTR, résultat, boîte, câble, position au PM, cause, compte-rendu). Chaque n° de ticket ouvre le rapport Praxedo.
+- **Le dimanche**, en plus, le **bilan de la semaine** : les chiffres comparés à la semaine d'avant, par jour, par technicien (avec les défauts peut-être liés à ses passages), les communes et les boîtes, les reprises toujours sans ticket de suite, et tous les constats de la semaine.
+- **Le 1er du mois**, le **bilan du mois d'avant**, de la même façon, par semaine.
 
-Un soir sans aucune clôture ni intervention prévue, rien n'est envoyé. Pour voir un rapport tout de suite : **Carte tickets → Rapports par mail**.
+Un soir sans rien, aucun mail. Pour voir un rapport tout de suite : **Carte tickets → Rapports par mail**.
+
+Pour repérer les câbles et les positions au PM, le script lit dans le rapport du technicien le n° du câble (par exemple `GNY-CA-0002728`), la **Position PM** (`T1L6C3` : tiroir 1, ligne 6, connecteur 3), la référence client et la PTO. Plus les techniciens les écrivent, plus la détection est complète. Après la mise à jour, les rapports des 30 derniers jours sont relus une fois (en quelques heures), pour y trouver ces informations.
+
+Tous les constats des 90 derniers jours sont aussi dans l'onglet **Qualité** du Sheet et de l'Excel du jour (rouge : fort, jaune : moyen), et dans **Listes de contrôle → Qualité** sur la carte.
 
 ## Les rapports d'intervention, le bilan et les graphiques
 

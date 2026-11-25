@@ -42,6 +42,7 @@ var ONGLET_ADRESSES = 'Adresses';
 var ONGLET_SORTIS = "Sortis de l'export";
 var ONGLET_CREATIONS = 'Créations';
 var ONGLET_INCOHERENCES = 'Incohérences', ONGLET_LIES = 'Tickets liés', ONGLET_PM = 'PM chargés', ONGLET_SUITES = 'Suites à prévoir';
+var ONGLET_QUALITE = 'Qualité';
 var ONGLET_CLOTURES = 'Clôtures', ONGLET_STATS_BOITES = 'Stats boîtes', ONGLET_STATS_VILLES = 'Stats villes', ONGLET_STATS_SEMAINES = 'Stats semaines';
 var ONGLET_ACCES = 'Accès';
 var ONGLET_ANNULES = 'Annulés', ENTETES_ANNULES = ['N° ticket', 'Annulé le', 'Pourquoi'];
@@ -55,7 +56,8 @@ var ENTETES_FINS = ['Reçu le', 'N° ticket', 'Commune', 'Intervention du', 'Rap
   'Boîte(s)', 'PM (site)', 'Nature du défaut', 'Cause du défaut', 'Adresse', 'Demande le', 'Étiquettes GTR', 'Autres éléments du rapport', 'Technicien',
   "Fin d'impact"];
 var JOURS_HISTORIQUE = 90;     // la carte et les statistiques portent sur les clôtures des 90 derniers jours
-var RAPPORTS_PAR_PASSAGE = 4;  // rapports PDF lus à chaque passage (les plus récents d'abord), pour garder des passages courts
+var RAPPORTS_PAR_PASSAGE = 4;
+var LECTURE_RAPPORTS = '2';    // à changer quand la lecture des rapports s'enrichit : ceux des 30 derniers jours sont relus une fois  // rapports PDF lus à chaque passage (les plus récents d'abord), pour garder des passages courts
 var ENTETES_ADRESSES = ['Adresse cherchée', 'Latitude', 'Longitude', 'Adresse trouvée', 'Score', 'Type', 'Commune', 'CP'];
 // Mails de fin d'intervention : l'objet contient « [FIN INTERVENTION] … N°BB-20261102T0761#0 - COMMUNE »
 var RECHERCHE_GMAIL = 'subject:"FIN INTERVENTION"';
@@ -91,7 +93,8 @@ function onOpen() {
     .addItem('Annuler un ticket…', 'annulerTicket')
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Rapports par mail')
       .addItem('Rapport du soir (fins d\'intervention) : envoyer maintenant', 'rapportSoirMaintenant')
-      .addItem('Bilan de la semaine : envoyer maintenant', 'rapportSemaineMaintenant'))
+      .addItem('Bilan de la semaine : envoyer maintenant', 'rapportSemaineMaintenant')
+      .addItem('Bilan du mois dernier : envoyer maintenant', 'rapportMoisMaintenant'))
     .addItem("Codes d'accès à la carte", 'afficherCodes')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
     .addToUi();
@@ -981,7 +984,8 @@ function annulerTicket() {
 
 /**
  * Rapport du soir : chaque jour vers 17 h, à ton adresse, les fins d'intervention reçues depuis le rapport d'avant, avec ce
- * qui demande de l'attention puis le détail. Le dimanche, en plus, le bilan de la semaine. Pas de mail un jour sans rien.
+ * qui demande de l'attention puis le détail. Le dimanche, en plus, le bilan de la semaine ; le 1er, celui du mois d'avant.
+ * Pas de mail un soir sans rien.
  */
 var HEURE_RAPPORT = 17;
 function rapportDuSoir_() {
@@ -993,24 +997,28 @@ function rapportDuSoir_() {
   try {
     if (props.getProperty('RAPPORT_SOIR_LE') === jour) return 0;
     props.setProperty('RAPPORT_SOIR_LE', jour);   // une fois par jour, même si l'envoi échoue
-    var n = envoyerRapport_(false, false);
-    var p = jour.split('-');
-    if (new Date(+p[0], p[1] - 1, +p[2], 12).getDay() === 0) n += envoyerRapport_(true, false);   // dimanche : la semaine
+    var n = envoyerRapport_('soir', false), p = jour.split('-');
+    if (new Date(+p[0], p[1] - 1, +p[2], 12).getDay() === 0) n += envoyerRapport_('semaine', false);   // dimanche : la semaine
+    if (+p[2] === 1) n += envoyerRapport_('mois', false);   // le 1er : le mois d'avant
     return n;
   } finally { verrou.releaseLock(); }
 }
 
-/** hebdo : bilan depuis lundi ; sinon depuis le rapport d'avant (24 h au plus la première fois, 4 jours au plus). force : envoyer même vide, sans déplacer le repère. */
-function envoyerRapport_(hebdo, force) {
+/**
+ * mode 'soir' : depuis le rapport d'avant (24 h la première fois, 4 jours au plus) ; 'semaine' : depuis lundi ; 'mois' : le mois
+ * d'avant, du 1er au dernier jour. force : envoyer même vide, sans déplacer le repère du soir.
+ */
+function envoyerRapport_(mode, force) {
   var props = PropertiesService.getScriptProperties(), a = analyse_(), d = lireDonnees_(), NOW = new Date();
-  var res = a.analyser(d, NOW), c = a.controles(res, NOW), depuis;
-  if (hebdo) { depuis = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()); depuis.setDate(depuis.getDate() - ((depuis.getDay() + 6) % 7)); }
+  var res = a.analyser(d, NOW), c = a.controles(res, NOW), depuis, jusqua = null, hebdo = mode !== 'soir';
+  if (mode === 'semaine') { depuis = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()); depuis.setDate(depuis.getDate() - ((depuis.getDay() + 6) % 7)); }
+  else if (mode === 'mois') { depuis = new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1); jusqua = new Date(NOW.getFullYear(), NOW.getMonth(), 1); }
   else {
     var p = props.getProperty('RAPPORT_SOIR_DEPUIS');
     depuis = p ? new Date(p) : new Date(NOW.getTime() - 86400000);
     if (isNaN(depuis) || NOW - depuis > 4 * 86400000) depuis = new Date(NOW.getTime() - 4 * 86400000);
   }
-  var r = a.rapportFins(res, c, NOW, depuis, hebdo, d, { lienCarte: props.getProperty('LIEN_CARTE') || '' });
+  var r = a.rapportFins(res, c, NOW, depuis, mode, d, { lienCarte: props.getProperty('LIEN_CARTE') || '' }, jusqua);
   if (!hebdo && !force) props.setProperty('RAPPORT_SOIR_DEPUIS', NOW.toISOString());
   if (!r.aEnvoyer && !force) return 0;
   GmailApp.sendEmail(Session.getEffectiveUser().getEmail(), r.sujet, r.texte, { htmlBody: r.html, name: 'Carte des tickets' });
@@ -1020,13 +1028,18 @@ function envoyerRapport_(hebdo, force) {
 /** Menus « Rapports par mail » : le rapport du soir ou le bilan de la semaine, tout de suite (pour voir). Réservés au propriétaire. */
 function rapportSoirMaintenant() {
   proprietaire_();
-  envoyerRapport_(false, true);
+  envoyerRapport_('soir', true);
   SpreadsheetApp.getUi().alert('Rapport des fins d\'intervention envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul chaque soir vers 17 h.');
 }
 function rapportSemaineMaintenant() {
   proprietaire_();
-  envoyerRapport_(true, true);
+  envoyerRapport_('semaine', true);
   SpreadsheetApp.getUi().alert('Bilan de la semaine envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul le dimanche vers 17 h.');
+}
+function rapportMoisMaintenant() {
+  proprietaire_();
+  envoyerRapport_('mois', true);
+  SpreadsheetApp.getUi().alert('Bilan du mois dernier envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul le 1er de chaque mois vers 17 h.');
 }
 
 /** Les fonctions du fichier Analyse (les mêmes que la carte), pour s'en servir côté serveur. */
@@ -1061,7 +1074,11 @@ function ongletsControle_(c) {
     { nom: ONGLET_STATS_VILLES, entetes: c.statsVilles.entetes, lignes: c.statsVilles.lignes,
       couleur: function (l, i) { return i === 0 ? '#DDEBF7' : null; }, largeurs: [220, 90, 90, 100, 100, 90, 90, 90, 90, 90, 320, 280] },
     { nom: ONGLET_STATS_SEMAINES, entetes: c.statsSemaines.entetes, lignes: c.statsSemaines.lignes, couleur: null,
-      largeurs: [130, 100, 100, 90, 110, 100, 110, 110, 150, 150] }
+      largeurs: [130, 100, 100, 90, 110, 100, 110, 110, 150, 150] },
+    // peut-être causé par nos interventions, redondances, corrections à faire (voir qualite dans Analyse)
+    { nom: ONGLET_QUALITE, entetes: c.qualite.entetes, lignes: c.qualite.lignes,
+      couleur: function (l) { return l[1] === 'fort' ? '#F8CBAD' : l[1] === 'moyen' ? '#FFE699' : null; },
+      largeurs: [170, 70, 120, 160, 160, 150, 520, 260, 300, 260] }
   ];
 }
 
@@ -1092,6 +1109,18 @@ function lireRapports_(max) {
   if (f.getRange(1, 1, 1, nc).getDisplayValues()[0].join('|') !== ENTETES_FINS.join('|')) f.getRange(1, 1, 1, nc).setValues([ENTETES_FINS]).setFontWeight('bold');
   var n = f.getLastRow() - 1, essais = 0, lus = 0, aPlacer = [], techs = null;
   if (n < 1) return 0;
+  // une fois après une mise à jour de la lecture : les rapports des 30 derniers jours sont relus, les plus récents d'abord
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('LECTURE_RAPPORTS') !== LECTURE_RAPPORTS) {
+    var etats = f.getRange(2, 1, n, 8).getDisplayValues(), limite = Date.now() - 30 * 86400000, change = false;
+    var col = etats.map(function (r) {
+      var m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(r[0]);
+      if (r[7] === 'oui' && m && new Date(+m[3], m[2] - 1, +m[1]).getTime() >= limite) { change = true; return ['à relire']; }
+      return [r[7]];
+    });
+    if (change) f.getRange(2, 8, n, 1).setNumberFormat('@').setValues(col);
+    props.setProperty('LECTURE_RAPPORTS', LECTURE_RAPPORTS);
+  }
   // le technicien d'un ticket, tant qu'il est encore dans l'export (ou vient d'en sortir) : le rapport ne le donne pas
   function technicien(num) {
     if (!techs) {
@@ -1106,7 +1135,7 @@ function lireRapports_(max) {
   var v = f.getRange(2, 1, n, nc).getDisplayValues();
   for (var i = n - 1; i >= 0 && essais < max; i--) {
     var url = v[i][4], etat = v[i][7], champs;
-    if (!url || (etat && !/^erreur [12]$/.test(etat))) continue;
+    if (!url || (etat && !/^(erreur [12]|à relire)$/.test(etat))) continue;
     if (!/^https:\/\/([a-z0-9-]+\.)*praxedo\.com\//i.test(url)) champs = { 'Rapport lu': 'lien refusé' };   // on n'ouvre que les liens de Praxedo
     else {
       essais++;
@@ -1319,6 +1348,10 @@ function champsRapport_(t) {
   // les autres réponses du rapport, gardées telles quelles dans une colonne (pas encore exploitées par la carte)
   var autres = [];
   [['localisation du défaut', /Localisation du défaut[^\n]*\n([^\n]+)/i],
+   ['description du défaut', /Description complémentaire du défaut[^\n]*\n([^\n]+)/i],
+   ['position PM', /Position\s*(?:au\s*)?PM\s*:?\s*([^\n]{3,30})/i],
+   ['référence client', /Référence du client\s*:\s*([A-Z]{2}\d{3}-[A-Z]{5}-\d{3})/i],
+   ['PTO', /\bPTO\s*:\s*((?:TN|GE)-[A-Z0-9]{3,6}-[A-Z0-9]{3,5})/i],
    ['plusieurs intervenants', /Plusieurs intervenants[\s\S]{0,60}?\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
    ['accès à une PTO', /accès à au moins\s+une PTO\s*\?\s*(Oui|Non)(?![a-zà-ÿ])/i],
    ['jarretière présente à l\'arrivée', /jarretière au\s+PM était-elle présente\s*\?\s*(Oui|Non)(?![a-zà-ÿ])/i],

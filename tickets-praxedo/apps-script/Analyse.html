@@ -39,6 +39,27 @@ var RE_IMMEUBLE = /^(?:GNY-SITE-|IMB-|TN-BAT-)/i;
 var RE_INFO_SITE = /Information du client\s*:\s*([A-Z0-9-]+)\s*\/\s*([^\n]*)/i;
 // Le « jeton » d'un n° de ticket : sa date et son numéro (BB-20261023T0113#0 → 20261023T0113). C'est lui qu'on retrouve
 // dans les tickets de suite : « Suite à l'intervention BB-20261023T0113… »
+// câbles (GNY-CA-0002728, ou le n° qui suit le mot « câble »), positions au PM (T1L6C3 : tiroir, ligne, connecteur)
+var RE_CABLE = /\b[A-Z]{2,5}-CA-\d{3,}\b/gi, RE_CABLE_MOT = /c[âa]ble\s+(?:n°\s*)?([A-Z0-9][A-Z0-9_-]{5,})/gi;
+var RE_POS_PM = /\bT\s*0*(\d{1,2})\s*[-\/. ]?\s*L\s*0*(\d{1,2})\s*[-\/. ]?\s*C\s*0*(\d{1,3})\b/gi;
+// une cause qui peut venir d'une intervention (la nôtre ou une autre) : brassage, malfaçon, mauvaise manipulation…
+var RE_CAUSE_TECH = /brassage|malfa[cç]on|manipulation|erreur d.intervention|mauvais(?:e)?\s+(?:soudure|raccordement|brassage|manip)|jarreti[eè]re (?:d[ée]plac|invers|[ée]chang)/i;
+/** Les câbles, positions au PM (sur le PM « pm ») et références client (CLS, PTO) cités dans un texte. */
+function refsReseau(texte, pm) {
+  var t = String(texte || ''), out = { cables: [], positions: [], cls: [], pto: [] }, m;
+  function ajout(l, v) { if (v && l.indexOf(v) < 0) l.push(v); }
+  RE_CABLE.lastIndex = 0; while ((m = RE_CABLE.exec(t))) ajout(out.cables, m[0].toUpperCase());
+  RE_CABLE_MOT.lastIndex = 0; while ((m = RE_CABLE_MOT.exec(t))) { var c = m[1].toUpperCase(); if (/\d/.test(c)) ajout(out.cables, c); }
+  RE_POS_PM.lastIndex = 0;
+  while ((m = RE_POS_PM.exec(t))) {
+    var q = { pm: String(pm || '').toUpperCase(), t: +m[1], l: +m[2], c: +m[3] }; q.txt = 'T' + q.t + 'L' + q.l + 'C' + q.c;
+    if (!out.positions.some(function (r) { return r.txt === q.txt; })) out.positions.push(q);
+  }
+  trouver(t, RE_CLS).forEach(function (v) { ajout(out.cls, v.toUpperCase()); });
+  // PTO : le format de l'export (TN-TOM0-3AMU) et celui des rapports (TN-1147C-001)
+  trouver(t, /\b(?:TN-[A-Z0-9]{3,6}-[A-Z0-9]{3,5}|GE-\d{4}-[A-Z0-9]{4})\b/gi).forEach(function (v) { ajout(out.pto, v.toUpperCase()); });
+  return out;
+}
 function jetonTicket(num) { var m = /(\d{8}T\d{4})/.exec(String(num || '').toUpperCase()); return m ? m[1] : ''; }
 // Ce qui, dans un rapport d'intervention lu, appelle une suite
 // Ce qui reste à faire chez l'opérateur (jarretière à brancher, brassage) n'est pas une reprise pour l'équipe :
@@ -221,7 +242,7 @@ function statistiques(donnees, NOW, techDe) {
     vus[f.num] = 1;
     var cp = (/\b(\d{5})\b/.exec(f.adresse || '') || [])[1] || '', villeAdr = (/\d{5}\s+(.+)$/.exec(f.adresse || '') || [])[1] || '';
     var commune = String(f.commune && !/^NA$/i.test(f.commune.trim()) ? f.commune : villeAdr).trim().toUpperCase() || '(commune inconnue)';
-    var x = { f: f, recu: recu, finLe: dt(f.fin) || recu, finImpact: dt(f.finImpact), lu: f.lu === 'oui', min: minutesDe(f.duree), motifs: motifsSuite(f), tech: f.tech || (techDe || {})[f.num] || '',
+    var x = { f: f, recu: recu, finLe: dt(f.fin) || recu, finImpact: dt(f.finImpact), lu: /^(oui|à relire)$/.test(f.lu || ''), min: minutesDe(f.duree), motifs: motifsSuite(f), tech: f.tech || (techDe || {})[f.num] || '',
               boites: String(f.boites || '').split(/\s*,\s*/).filter(function (b) { return b; }), commune: commune,
               geo: donnees.adresses && f.adresse ? donnees.adresses[f.adresse] || null : null, regle: '', echeance: null, dansGtr: null };
     // non corrigé mais le reste est chez l'opérateur (jarretière, brassage) : pas une reprise, on l'écrit quand même
@@ -242,6 +263,11 @@ function statistiques(donnees, NOW, techDe) {
     var debut = dt(f.debut), aVerifier = [];
     if (x.finImpact && debut && x.finImpact < debut) aVerifier.push("fin d'impact avant l'arrivée du technicien");
     x.aVerifier = aVerifier.join(' · ');
+    var rr = refsReseau([f.resume, f.autres].join('\n'), f.pm);
+    x.cables = rr.cables; x.positions = rr.positions; x.cls = rr.cls; x.pto = rr.pto;
+    x.causeTech = RE_CAUSE_TECH.test([f.cause, f.nature].join(' ')) ? (f.cause || f.nature) : '';
+    x.debutLe = debut; x.demandeLe = dt(f.demande);
+    x.localisation = (/localisation du défaut : ([^·]+)/i.exec(f.autres || '') || [])[1] || '';
     F.push(x);
   });
   // retours : une intervention dans une boîte où une autre a été clôturée moins de 30 jours avant
@@ -598,6 +624,147 @@ function analyser(donnees, NOW) {
 }
 
 /**
+ * Analyse qualité, sur les clôtures des 90 derniers jours et les tickets ouverts :
+ * - cause : un nouveau défaut apparu dans les 15 jours après le passage d'un de nos techniciens au même endroit
+ *   (même position ou position voisine au PM, même câble, même boîte), plus probable si la cause notée est un brassage,
+ *   une malfaçon ou une mauvaise manipulation ; c'est à vérifier, pas une certitude ;
+ * - redondance : même client dépanné deux fois en 30 jours, ticket rouvert après notre clôture, deux interventions le même
+ *   jour dans la même boîte, câble / boîte / ligne du PM touchés 3 fois ou plus, déplacement peut-être inutile ;
+ * - correction : ce qu'il reste à faire (ticket de suite, NETGEO, opérateur, rapport incomplet).
+ * Une ligne par constat : { type, niveau (fort, moyen, info), quand, le (date pour les rapports), num, commune, tech,
+ * detail, lie, techLie, action, rapport }.
+ */
+function qualite(res, NOW) {
+  var F = (res.stats.fins || []).slice().sort(function (a, b) { return a.finLe - b.finLe; }), J = 86400e3;
+  var parNum = {}, C = [];
+  res.tous.forEach(function (t) { parNum[t.num] = t; });
+  F.forEach(function (x) {   // références client : celles du rapport, et celles du ticket s'il est dans l'export
+    var t = parNum[x.f.num];
+    if (t) { (t.cls || []).forEach(function (v) { if (x.cls.indexOf(v) < 0) x.cls.push(v); }); (t.pto || []).forEach(function (v) { if (x.pto.indexOf(v) < 0) x.pto.push(v); }); }
+  });
+  function constat(type, niveau, quand, le, num, x, t, detail, p, action) {
+    C.push({ type: type, niveau: niveau, quand: quand, le: le, num: num, commune: x ? x.commune : t ? t.ville : '', tech: x ? x.tech : t ? t.tech : '',
+             detail: detail, lie: p ? p.f.num + ' (' + (p.tech || 'technicien inconnu') + ', ' + fd(p.finLe, false) + ')' : '', techLie: p ? p.tech || '' : '',
+             action: action || '', rapport: x ? x.f.rapport || '' : '' });
+  }
+  // « 3 j après le passage de DUPONT Paul », « le jour même du passage d'un technicien »
+  function apres(ms, p) {
+    var n = Math.round(ms / J), qui = p.tech ? p.tech : null;
+    return (n <= 0 ? 'le jour même du passage ' : n + ' j après le passage ') + (qui ? 'de ' + qui : 'd\'un technicien');
+  }
+  function voisines(a, b) { return a.pm && a.pm === b.pm && a.t === b.t && a.l === b.l && Math.abs(a.c - b.c) <= 2; }
+  // 1. peut-être causé par une intervention précédente
+  var nouveaux = F.map(function (x) {
+    var t = parNum[x.f.num];
+    return { quand: x.demandeLe || (t && t.creee) || x.recu, le: x.recu, num: x.f.num, base: x.f.num.split('#')[0], x: x, t: t,
+             boites: x.boites, cables: x.cables, positions: x.positions, cause: x.causeTech, refs: t ? t.refs || [] : [] };
+  }).concat(res.tous.filter(function (t) { return t.ouvert && !t.termine && !t.annule && t.creee; }).map(function (t) {
+    var rr = refsReseau(t.desc, t.site);
+    return { quand: t.creee, le: t.creee, num: t.num, base: t.base, x: null, t: t, boites: t.boites || [], cables: rr.cables, positions: rr.positions, cause: '', refs: t.refs || [] };
+  }));
+  nouveaux.forEach(function (e) {
+    var best = null;
+    F.forEach(function (p) {
+      var pb = p.f.num.split('#')[0];
+      if (pb === e.base || !(p.finLe < e.quand) || e.quand - p.finLe > 15 * J) return;
+      if (e.refs.some(function (r) { return jetonTicket(r) === jetonTicket(pb); })) return;   // « suite de » : une reprise prévue
+      var raisons = [], niveau = -1, d = (e.quand - p.finLe) / J, pos = [];
+      e.positions.forEach(function (a) { p.positions.forEach(function (b) { if (voisines(a, b)) pos.push(a.txt === b.txt ? a.txt + ' (même position)' : a.txt + ' (voisine de ' + b.txt + ')'); }); });
+      if (pos.length) { raisons.push('PM ' + p.f.pm + ' : ' + pos.join(', ')); niveau = 2; }
+      var cab = e.cables.filter(function (c) { return p.cables.indexOf(c) >= 0; });
+      if (cab.length) { raisons.push('même câble ' + cab.join(', ')); niveau = Math.max(niveau, d <= 7 ? 2 : 1); }
+      var bo = e.boites.filter(function (b) { return p.boites.indexOf(b) >= 0; });
+      if (bo.length) { raisons.push('même boîte ' + bo.join(', ')); niveau = Math.max(niveau, d <= 7 ? 1 : 0); }
+      if (niveau < 0) return;
+      if (e.cause) niveau = 2;
+      if (!best || niveau > best.niveau || (niveau === best.niveau && p.finLe > best.p.finLe)) best = { p: p, niveau: niveau, raisons: raisons };
+    });
+    if (!best) return;
+    var p = best.p;
+    constat('cause', ['info', 'moyen', 'fort'][best.niveau], e.quand, e.le, e.num, e.x, e.t,
+      (e.x ? 'défaut signalé le ' + fd(e.quand, false) : 'ticket ouvert le ' + fd(e.quand, false)) + ', ' + apres(e.quand - p.finLe, p) +
+      ' · ' + best.raisons.join(' · ') + (e.cause ? ' · cause notée : ' + e.cause : ''), p, 'Vérifier avec les deux rapports si le défaut vient de cette intervention');
+  });
+  // 2. redondances
+  //  a. même client (référence client ou PTO) dépanné deux fois en 30 jours
+  var parClient = {};
+  F.forEach(function (x) { x.cls.concat(x.pto).forEach(function (k) { (parClient[k] = parClient[k] || []).push(x); }); });
+  var dejaPaire = {};
+  Object.keys(parClient).forEach(function (k) {
+    var L = parClient[k];
+    for (var i = 1; i < L.length; i++) {
+      var a = L[i - 1], b = L[i], cle = a.f.num + '|' + b.f.num;
+      if (dejaPaire[cle] || a.f.num === b.f.num || b.finLe - a.finLe > 30 * J) continue;
+      dejaPaire[cle] = 1;
+      var prevu = a.motifs.length > 0 || a.f.num.split('#')[0] === b.f.num.split('#')[0];
+      constat('redondance', prevu ? 'info' : 'fort', b.finLe, b.recu, b.f.num, b, parNum[b.f.num],
+        'même client (' + k + ') : ' + (prevu ? 'reprise de l\'intervention du ' : 'déjà dépanné le ') + fd(a.finLe, false) + ' par ' + (a.tech || 'un technicien') + (a.resultat ? ' (' + a.resultat + ')' : ''),
+        a, prevu ? '' : 'Comprendre pourquoi la réparation n\'a pas tenu');
+    }
+  });
+  //  b. ticket rouvert après notre clôture
+  res.tous.forEach(function (t) {
+    if (!t.iteration || t.termine || t.annule) return;
+    var avant = F.filter(function (x) { return x.f.num === t.base + '#' + (t.iteration - 1); })[0];
+    if (avant) constat('redondance', 'fort', t.creee || avant.finLe, t.creee || NOW, t.num, null, t, 'rouvert après notre clôture du ' + fd(avant.finLe, false) +
+      (avant.resultat ? ' (' + avant.resultat + ')' : ''), avant, 'Voir pourquoi le défaut est revenu');
+  });
+  //  c. plusieurs interventions le même jour dans la même boîte
+  var jourBoite = {};
+  F.forEach(function (x) { x.boites.forEach(function (b) { var k = b + '|' + fd(x.finLe, false); (jourBoite[k] = jourBoite[k] || []).push(x); }); });
+  Object.keys(jourBoite).forEach(function (k) {
+    var L = jourBoite[k];
+    if (L.length < 2) return;
+    var b = L[L.length - 1];
+    constat('redondance', 'moyen', b.finLe, b.recu, b.f.num, b, parNum[b.f.num], L.length + ' interventions le même jour dans la boîte ' + k.split('|')[0] + ' : ' +
+      L.map(function (x) { return x.f.num + ' (' + (x.tech || '?') + ')'; }).join(', '), null, 'Regrouper ces tickets la prochaine fois (une seule équipe)');
+  });
+  //  d. câble, boîte, ligne du PM touchés 3 fois ou plus
+  var rep = {};
+  function compter(cle, lib, x) { (rep[cle] = rep[cle] || { lib: lib, xs: [] }).xs.push(x); }
+  F.forEach(function (x) {
+    x.cables.forEach(function (c) { compter('c' + c, 'le câble ' + c, x); });
+    x.boites.forEach(function (b) { compter('b' + b, 'la boîte ' + b, x); });
+    x.positions.forEach(function (q) { if (q.pm) compter('p' + q.pm + 'T' + q.t + 'L' + q.l, 'le PM ' + q.pm + ', tiroir ' + q.t + ' ligne ' + q.l, x); });
+  });
+  Object.keys(rep).forEach(function (k) {
+    var r = rep[k], xs = r.xs.filter(function (x, i) { return r.xs.indexOf(x) === i; });
+    if (xs.length < 3) return;
+    var der = xs[xs.length - 1];
+    constat('redondance', xs.length >= 5 ? 'fort' : 'moyen', der.finLe, der.recu, der.f.num, der, parNum[der.f.num], xs.length + ' interventions sur ' + r.lib + ' en 90 jours : ' +
+      xs.slice(-6).map(function (x) { return fd(x.finLe, false).slice(0, 5) + ' ' + (x.tech || '?'); }).join(', '), null, 'Chercher une cause commune (câble abîmé, boîte mal fermée, rongeurs…)');
+  });
+  //  e. déplacement peut-être inutile
+  F.forEach(function (x) {
+    if (x.aVerifier) constat('redondance', 'moyen', x.finLe, x.recu, x.f.num, x, parNum[x.f.num], "fin d'impact client le " + fd(x.finImpact) + ', avant l\'arrivée du technicien (' + x.f.debut + ')',
+      null, 'Vérifier si le client était déjà rétabli : déplacement peut-être inutile');
+  });
+  // 3. corrections à faire (clôtures des 30 derniers jours)
+  var parFin = {};
+  F.forEach(function (x) { parFin[x.f.num] = x; });
+  (res.suites || []).forEach(function (sx) {
+    if (sx.tickets.length) return;
+    var x = parFin[sx.fin.num];
+    constat('correction', 'fort', x ? x.finLe : sx.recu, sx.recu, sx.fin.num, x, parNum[sx.fin.num], sx.motifs.join(', ') + ' : pas encore de ticket de suite', null, 'Créer le ticket de suite');
+  });
+  F.filter(function (x) { return NOW - x.recu <= 30 * J; }).forEach(function (x) {
+    var f = x.f, t = parNum[f.num];
+    if (/NETGEO nécessaire : Oui/i.test(f.autres || '')) constat('correction', 'moyen', x.finLe, x.recu, f.num, x, t, 'le technicien a demandé une mise à jour NETGEO', null, 'Mettre à jour NETGEO');
+    if (x.operateur) constat('correction', 'info', x.finLe, x.recu, f.num, x, t, 'défaut non corrigé : le reste est côté opérateur (jarretière, brassage)', null, 'Signaler à l\'opérateur');
+    if (x.lu) {
+      var manque = [];
+      if (!x.boites.length) manque.push('boîte');
+      if (!f.cause) manque.push('cause du défaut');
+      if (!/^(oui|non)$/i.test(f.corrige || '')) manque.push('réponse « défaut corrigé »');
+      if (/\bPM\b/.test(x.localisation) && !x.positions.length) manque.push('position au PM');
+      if (manque.length) constat('correction', 'info', x.finLe, x.recu, f.num, x, t, 'rapport incomplet : ' + manque.join(', '), null, 'Demander au technicien de compléter le rapport');
+    }
+  });
+  var ORDRE = { fort: 0, moyen: 1, info: 2 };
+  return C.sort(function (a, b) { return (ORDRE[a.niveau] - ORDRE[b.niveau]) || (b.le - a.le); });
+}
+
+/**
  * Les trois listes de contrôle de l'Excel (onglets du Google Sheet) : incohérences, tickets liés, PM chargés.
  * res = analyser(donnees, NOW). Les tickets terminés ou annulés sont laissés de côté.
  */
@@ -739,6 +906,11 @@ function controles(res, NOW) {
   return {
     incoherences: INC.map(function (i) { return [i[0], i[1].num, i[1].statutExport, i[2], i[3], i[1].tech, i[1].ville, i[1].adresse]; }),
     lies: lies, pm: pm, groupeDe: groupeDe,
+    qualite: (function () {
+      var Q = qualite(res, NOW), LIB = { cause: 'Peut-être causé par nous', redondance: 'Redondance', correction: 'Correction à faire' };
+      return { constats: Q, entetes: ['Type', 'Niveau', 'Date', 'N°', 'Commune', 'Technicien', 'Constat', 'Lié à', 'À faire', 'Rapport'],
+               lignes: Q.map(function (q) { return [LIB[q.type], q.niveau, fd(q.le), q.num, q.commune, q.tech, q.detail, q.lie, q.action, q.rapport]; }) };
+    })(),
     clotures: res.stats.clotures, statsBoites: res.stats.boites, statsVilles: res.stats.villes,
     statsSemaines: { entetes: ['Semaine', 'Du', 'Au', 'Clôtures', 'dont à reprendre', 'Retours sous 30 j', 'Rapports non lus', 'GTR respectée', 'Temps moyen sur place', 'Temps total sur place'],
       lignes: bilan(res.stats.liste, 'tout', NOW).semaines.map(function (s) { return [s.label + (s.enCours ? ' (en cours)' : ''), fd(s.debut, false), fd(s.fin, false), s.n, s.suite, s.retours, s.nonLus, s.gtr, s.temps, s.tempsTotal]; }) },
@@ -844,59 +1016,51 @@ function listesDuJour(res, ctrl, NOW, infos) {
 }
 
 /**
- * Rapport des fins d'intervention envoyé par mail : le soir, celles reçues depuis le rapport d'avant ; le dimanche, celles de
- * la semaine (depuis lundi), avec le détail par jour et par technicien. D'abord ce qui demande de l'attention, puis le détail.
- * Renvoie { sujet, texte, html, aEnvoyer } (aEnvoyer : faux si rien du tout à dire).
+ * Rapport des fins d'intervention envoyé par mail. mode : 'soir' (celles reçues depuis le rapport d'avant, avec le détail de
+ * chaque clôture), 'semaine' (depuis lundi, par jour et par technicien) ou 'mois' (le mois d'avant, par semaine et par
+ * technicien ; jusqua = le 1er du mois). Dans l'ordre : chiffres, peut-être causé par nos interventions, redondances,
+ * corrections à faire, autres points (GTR, rapports…), interventions prévues sans fin (soir), détail (soir).
+ * Renvoie { sujet, texte, html, aEnvoyer, aTraiter }.
  */
-function rapportFins(res, ctrl, NOW, depuis, hebdo, donnees, infos) {
+function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
   infos = infos || {};
-  var R = REGLAGES, TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
+  var M = mode === true ? 'semaine' : !mode ? 'soir' : mode, soir = M === 'soir', FIN = jusqua || new Date(NOW.getTime() + 1);
+  var R = REGLAGES, J = 86400e3, TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
   var h = function (v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   var JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  var MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
   var parNum = {}, sortis = {}, suiteDe = {};
   res.tous.forEach(function (t) { parNum[t.num] = t; if (!parNum[t.base]) parNum[t.base] = t; });
   ((donnees && donnees.sortis) || []).forEach(function (x) { if (x.num) { sortis[x.num] = 1; sortis[x.num.split('#')[0]] = 1; } });
   (res.suites || []).forEach(function (x) { suiteDe[x.fin.num] = x; });
   var toutes = res.stats.fins || [];
-  var X = toutes.filter(function (x) { return x.recu >= depuis && x.recu <= NOW; }).sort(function (a, b) { return a.recu - b.recu; });
-  // ce qui demande de l'attention : clé, titre, à traiter (sinon à surveiller)
-  var TYPES = [['gtr', 'GTR non respectée', 1], ['reprendre', 'À reprendre, sans ticket de suite', 1],
-    ['impact', "Fin d'impact avant l'arrivée du technicien (à vérifier)", 1], ['rapport', "Rapport d'intervention illisible ou en erreur", 1],
-    ['export', 'Clôture inattendue (ticket inconnu ou retiré comme annulé)', 1], ['netgeo', 'Mise à jour NETGEO nécessaire', 1],
-    ['retour', 'Retour dans une boîte déjà visitée il y a moins de 30 jours', 0], ['suite', 'À reprendre, ticket de suite déjà créé', 0],
-    ['operateur', "Reste côté opérateur (jarretière, brassage) : à signaler à l'opérateur", 0], ['duree', 'Durée sur place inhabituelle', 0],
-    ['plainte', 'Cerfa, plainte ou constat', 0], ['planning', 'Fini un autre jour que prévu', 0], ['boite', 'Pas de boîte dans le rapport', 0],
-    ['nonlu', "Rapport pas encore lu (il le sera dans l'heure)", 0]];
+  var dans = function (d) { return d >= depuis && d < FIN; };
+  var X = toutes.filter(function (x) { return dans(x.recu); }).sort(function (a, b) { return a.recu - b.recu; });
+  // constats qualité de la période (voir qualite)
+  var Q = ((ctrl && ctrl.qualite && ctrl.qualite.constats) || []).filter(function (q) { return q.le && dans(q.le); });
+  var QC = Q.filter(function (q) { return q.type === 'cause'; }), QR = Q.filter(function (q) { return q.type === 'redondance'; });
+  var QK = Q.filter(function (q) { return q.type === 'correction' && (soir || q.action !== 'Créer le ticket de suite'); });
+  // autres points sur les clôtures : clé, titre, à traiter (sinon à surveiller)
+  var TYPES = [['gtr', 'GTR non respectée', 1], ['rapport', "Rapport d'intervention illisible ou en erreur", 1],
+    ['export', 'Clôture inattendue (ticket inconnu ou retiré comme annulé)', 1], ['duree', 'Durée sur place inhabituelle', 0],
+    ['plainte', 'Cerfa, plainte ou constat', 0], ['planning', 'Fini un autre jour que prévu', 0], ['nonlu', "Rapport pas encore lu (il le sera dans l'heure)", 0]];
   var A = {};
   function noter(cle, x, texte) { (A[cle] = A[cle] || []).push({ x: x, texte: texte }); }
   X.forEach(function (x) {
-    var f = x.f, t = parNum[f.num] || (f.num.indexOf('#') < 0 ? parNum[f.num] : null), s = suiteDe[f.num];
+    var f = x.f, t = parNum[f.num];
     if (x.dansGtr === false) noter('gtr', x, 'fini le ' + fd(x.finLe) + ', échéance le ' + fd(x.echeance) + ' (' + fretard(x.finLe - x.echeance) + ' de retard) · ' + x.regle);
-    if (x.motifs.length) {
-      if (s && s.tickets.length) noter('suite', x, x.motifs.join(', ') + ' · suite : ' + s.tickets.map(function (k) { return k.num + ' (' + k.statut + ')'; }).join(', '));
-      else noter('reprendre', x, x.motifs.join(', '));
-    }
-    if (x.operateur) noter('operateur', x, f.resume ? court(f.resume, 160) : 'défaut non corrigé');
-    if (x.retour) noter('retour', x, x.retourDans.map(function (b) {
-      var hb = res.stats.histoBoite[b]; return b + (hb ? ' : ' + hb.n + ' interventions depuis le ' + hb.premier : '');
-    }).join(' · '));
-    if (x.aVerifier) noter('impact', x, "fin d'impact le " + fd(x.finImpact) + ', arrivée du technicien le ' + f.debut);
     if (!x.lu && (f.lu || !f.rapport)) noter('rapport', x, f.lu ? 'rapport : ' + f.lu : 'pas de lien vers le rapport dans le mail');
     else if (!x.lu) noter('nonlu', x, 'les horaires, la GTR et le résultat manquent tant qu\'il n\'est pas lu');
     if (x.min && x.min < R.DUREE_COURTE_MIN) noter('duree', x, 'seulement ' + f.duree + ' sur place');
     else if (x.min > R.DUREE_LONGUE_MIN) noter('duree', x, f.duree + ' sur place');
-    if (/NETGEO nécessaire : Oui/i.test(f.autres || '')) noter('netgeo', x, 'le technicien a répondu « Oui » à la mise à jour NETGEO');
     if (/Cerfa, plainte ou constat : Oui/i.test(f.autres || '')) noter('plainte', x, f.cause ? 'cause : ' + f.cause : 'Cerfa, plainte ou constat signalé');
-    if (!t && !sortis[f.num] && !(f.num.indexOf('#') < 0 && sortis[f.num])) noter('export', x, "ticket jamais vu dans les exports ni dans les mails de création");
+    if (!t && !sortis[f.num]) noter('export', x, 'ticket jamais vu dans les exports ni dans les mails de création');
     else if (t && t.annuleMain) noter('export', x, 'ticket retiré comme annulé (onglet Annulés), pourtant clôturé');
     else if (t && t.planif && fd(t.planif, false) !== fd(x.finLe, false)) noter('planning', x, 'planifié le ' + fd(t.planif) + ', fini le ' + fd(x.finLe));
-    if (x.lu && !x.boites.length) noter('boite', x, 'les retours dans la boîte ne peuvent pas être suivis');
   });
-  // le soir : interventions prévues aujourd'hui sans mail de fin
-  var attendus = hebdo ? [] : res.tous.filter(function (t) {
+  var attendus = !soir ? [] : res.tous.filter(function (t) {
     return !t.termine && !t.annule && (t.statut === 'Planifiée' || t.statut === 'Synchronisée') && t.planif && t.planif >= TODAY && t.planif < plusJours(TODAY, 1);
   }).sort(function (a, b) { return a.planif - b.planif; });
-  // chiffres
   function chiffres(L) {
     var gN = L.filter(function (x) { return x.dansGtr !== null; }).length, gOk = L.filter(function (x) { return x.dansGtr === true; }).length;
     var nMin = L.filter(function (x) { return x.min; }).length, min = L.reduce(function (a, x) { return a + (x.min || 0); }, 0);
@@ -906,51 +1070,69 @@ function rapportFins(res, ctrl, NOW, depuis, hebdo, donnees, infos) {
       moyen: fduree(nMin ? min / nMin : 0) || '—', total: fduree(min) || '—' };
   }
   var K = chiffres(X), aTraiter = 0, aSurveiller = 0;
-  if (hebdo) { delete A.reprendre; delete A.suite; }   // la semaine : liste « Toujours sans ticket de suite », plus à jour
   TYPES.forEach(function (ty) { if (A[ty[0]]) { if (ty[2]) aTraiter += A[ty[0]].length; else aSurveiller += A[ty[0]].length; } });
+  var points = aTraiter + QC.length + QR.filter(function (q) { return q.niveau === 'fort'; }).length + QK.length;
   // présentation
-  var BLEU = '#1F4E78', titre = hebdo ? 'Semaine du ' + fd(depuis, false) + ' au ' + fd(NOW, false) : "Fins d'intervention du " + JOURS[NOW.getDay()] + ' ' + fd(NOW, false);
-  var sujet = (hebdo ? 'Bilan de la semaine du ' + fd(depuis, false).slice(0, 5) + ' au ' + fd(NOW, false).slice(0, 5) : "Fins d'intervention du " + fd(NOW, false).slice(0, 5)) +
-    ' : ' + K.n + ' clôture' + (K.n > 1 ? 's' : '') + (aTraiter ? ', ' + aTraiter + ' à traiter' : '') + (hebdo && K.gN ? ', GTR respectée ' + K.gtr : '');
-  function lienNum(x) { var f = x.f; return f.rapport ? '<a href="' + h(f.rapport) + '" style="color:' + BLEU + ';font-weight:bold">' + h(f.num) + '</a>' : '<b>' + h(f.num) + '</b>'; }
-  function qui(x) { return [x.commune, x.tech].filter(function (v) { return v; }).map(h).join(' · '); }
+  var BLEU = '#1F4E78', fin1 = new Date(FIN.getTime() - 1);
+  var deMois = function (d) { var m = MOIS[d.getMonth()]; return (/^[aeiouy]/.test(m) ? 'd\'' : 'de ') + m + ' ' + d.getFullYear(); };   // « d'octobre », « de novembre »
+  var titre = soir ? "Fins d'intervention du " + JOURS[NOW.getDay()] + ' ' + fd(NOW, false)
+    : M === 'mois' ? 'Bilan du mois ' + deMois(depuis) : 'Semaine du ' + fd(depuis, false) + ' au ' + fd(NOW, false);
+  var sujet = (soir ? "Fins d'intervention du " + fd(NOW, false).slice(0, 5) : M === 'mois' ? 'Bilan ' + deMois(depuis)
+    : 'Bilan de la semaine du ' + fd(depuis, false).slice(0, 5) + ' au ' + fd(NOW, false).slice(0, 5)) +
+    ' : ' + K.n + ' clôture' + (K.n > 1 ? 's' : '') + (points ? ', ' + points + ' point' + (points > 1 ? 's' : '') + ' à voir' : '') + (!soir && K.gN ? ', GTR respectée ' + K.gtr : '');
+  function lienNum(num, rapport) { return rapport ? '<a href="' + h(rapport) + '" style="color:' + BLEU + ';font-weight:bold">' + h(num) + '</a>' : '<b>' + h(num) + '</b>'; }
+  function qui(commune, tech) { return [commune, tech].filter(function (v) { return v; }).map(h).join(' · '); }
   function carte(v, l) { return '<td style="padding:8px 12px;border:1px solid #e3e3e3;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:bold">' + h(v) + '</div><div style="font-size:12px;color:#555">' + h(l) + '</div></td>'; }
+  var tab = function (entetes, lignes) {
+    return '<table style="border-collapse:collapse;font-size:13px;margin:4px 0 14px"><tr>' + entetes.map(function (e) { return '<th style="background:' + BLEU + ';color:#fff;padding:4px 8px;text-align:left">' + h(e) + '</th>'; }).join('') +
+      '</tr>' + lignes.map(function (l) { return '<tr>' + l.map(function (v) { return '<td style="border-bottom:1px solid #e3e3e3;padding:4px 8px">' + h(v) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+  };
   var html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;max-width:780px">' +
     '<h2 style="font-size:19px;color:' + BLEU + ';margin:0 0 4px">' + h(titre) + '</h2>' +
-    '<p style="margin:0 0 12px;color:#555">' + (hebdo ? 'Clôtures reçues du lundi au dimanche ' + fd(NOW).slice(11) : 'Clôtures reçues depuis le ' + fd(depuis) + ' jusqu\'à ' + fd(NOW).slice(11)) + '</p>' +
+    '<p style="margin:0 0 12px;color:#555">' + (soir ? 'Clôtures reçues depuis le ' + fd(depuis) + ' jusqu\'à ' + fd(NOW).slice(11)
+      : 'Clôtures reçues du ' + fd(depuis, false) + ' au ' + fd(M === 'mois' ? fin1 : NOW, false)) + '</p>' +
     '<table style="border-collapse:separate;border-spacing:6px;margin:0 -6px 10px"><tr>' + carte(K.n, 'clôtures') + carte(K.gtr, 'GTR respectée' + (K.gN ? ' (' + K.gOk + '/' + K.gN + ')' : '')) +
-    carte(K.reprendre, 'à reprendre') + carte(K.retours, 'retours < 30 j') + carte(K.moyen, 'en moyenne sur place') + '</tr></table>';
-  var texte = titre + '\n' + K.n + ' clôtures · GTR respectée ' + K.gtr + ' · à reprendre ' + K.reprendre + ' · retours ' + K.retours + ' · ' + K.moyen + ' en moyenne\n';
-  if (hebdo) {
-    var avant = chiffres(toutes.filter(function (x) { return x.recu >= plusJours(depuis, -7) && x.recu < depuis; }));
-    var ecart = function (a, b, s) { var d = a - b; return d ? ' (' + (d > 0 ? '+' : '') + d + s + ' par rapport à la semaine d\'avant)' : ' (comme la semaine d\'avant)'; };
+    carte(K.reprendre, 'à reprendre') + carte(QC.length, 'peut-être causés par nous') + carte(K.moyen, 'en moyenne sur place') + '</tr></table>';
+  var texte = titre + '\n' + K.n + ' clôtures · GTR respectée ' + K.gtr + ' · à reprendre ' + K.reprendre + ' · peut-être causés par nous ' + QC.length + ' · ' + K.moyen + ' en moyenne\n';
+  if (!soir) {
+    var avantDebut = M === 'mois' ? new Date(depuis.getFullYear(), depuis.getMonth() - 1, 1) : plusJours(depuis, -7);
+    var avant = chiffres(toutes.filter(function (x) { return x.recu >= avantDebut && x.recu < depuis; })), periode = M === 'mois' ? 'le mois d\'avant' : 'la semaine d\'avant';
+    var ecart = function (a, b) { var d = a - b; return d ? ' (' + (d > 0 ? '+' : '') + d + ' par rapport à ' + periode + ')' : ' (comme ' + periode + ')'; };
     var pl = function (n, mot) { return n + ' ' + mot.replace(/(\S+)/g, function (w) { return n > 1 ? w + 's' : w; }); };
-    html += '<p style="margin:0 0 10px">' + h(pl(K.n, 'clôture') + ecart(K.n, avant.n, '') + ' · ' + K.total + ' sur place au total · ' + pl(K.definitives, 'réparée') + ' en définitif · ' +
-      pl(K.operateur, 'restée') + ' côté opérateur · ' + pl(K.nonLus, 'rapport') + ' non lu' + (K.nonLus > 1 ? 's' : '')) + '</p>';
-    if (avant.gN && K.gN) html += '<p style="margin:0 0 10px">' + h('GTR respectée : ' + K.gtr + ' cette semaine, ' + avant.gtr + ' la semaine d\'avant') + '</p>';
-    // par jour, par technicien
-    var tab = function (entetes, lignes) {
-      return '<table style="border-collapse:collapse;font-size:13px;margin:4px 0 14px"><tr>' + entetes.map(function (e) { return '<th style="background:' + BLEU + ';color:#fff;padding:4px 8px;text-align:left">' + h(e) + '</th>'; }).join('') +
-        '</tr>' + lignes.map(function (l) { return '<tr>' + l.map(function (v) { return '<td style="border-bottom:1px solid #e3e3e3;padding:4px 8px">' + h(v) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
-    };
-    var jours = [];
-    for (var j = new Date(depuis.getTime()); j <= NOW; j = plusJours(j, 1)) {
-      var J = X.filter(function (x) { return fd(x.recu, false) === fd(j, false); }), kj = chiffres(J);
-      jours.push([JOURS[j.getDay()] + ' ' + fd(j, false).slice(0, 5), kj.n, kj.reprendre, kj.gN ? kj.gtr : '—', kj.moyen]);
+    html += '<p style="margin:0 0 10px">' + h(pl(K.n, 'clôture') + ecart(K.n, avant.n) + ' · ' + K.total + ' sur place au total · ' + pl(K.definitives, 'réparée') + ' en définitif · ' +
+      pl(K.operateur, 'restée') + ' côté opérateur · ' + pl(K.retours, 'retour') + ' dans une boîte sous 30 j · ' + pl(K.nonLus, 'rapport') + ' non lu' + (K.nonLus > 1 ? 's' : '')) + '</p>';
+    if (avant.gN && K.gN) html += '<p style="margin:0 0 10px">' + h('GTR respectée : ' + K.gtr + ' sur la période, ' + avant.gtr + ' ' + periode) + '</p>';
+    // par jour (semaine) ou par semaine (mois)
+    var lignesP = [];
+    if (M === 'mois') {
+      for (var w = new Date(depuis.getTime()); w < FIN; w = plusJours(w, 7 - ((w.getDay() + 6) % 7))) {
+        var wf = plusJours(w, 7 - ((w.getDay() + 6) % 7)), W = X.filter(function (x) { return x.recu >= w && x.recu < wf; }), kw = chiffres(W);
+        lignesP.push(['du ' + fd(w, false).slice(0, 5) + ' au ' + fd(new Date(Math.min(wf, FIN) - 1), false).slice(0, 5), kw.n, kw.reprendre, kw.gN ? kw.gtr : '—', kw.moyen]);
+      }
+      html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:14px 0 2px">Par semaine</h3>' + tab(['Semaine', 'Clôtures', 'À reprendre', 'GTR respectée', 'Temps moyen'], lignesP);
+    } else {
+      for (var j = new Date(depuis.getTime()); j <= NOW; j = plusJours(j, 1)) {
+        var JX = X.filter(function (x) { return fd(x.recu, false) === fd(j, false); }), kj = chiffres(JX);
+        lignesP.push([JOURS[j.getDay()] + ' ' + fd(j, false).slice(0, 5), kj.n, kj.reprendre, kj.gN ? kj.gtr : '—', kj.moyen]);
+      }
+      html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:14px 0 2px">Par jour</h3>' + tab(['Jour', 'Clôtures', 'À reprendre', 'GTR respectée', 'Temps moyen'], lignesP);
     }
-    html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:14px 0 2px">Par jour</h3>' + tab(['Jour', 'Clôtures', 'À reprendre', 'GTR respectée', 'Temps moyen'], jours);
     var T = {};
     X.forEach(function (x) { var k = x.tech || '(technicien inconnu)'; (T[k] = T[k] || []).push(x); });
+    var causesDe = {};
+    QC.forEach(function (q) { if (q.techLie) causesDe[q.techLie] = (causesDe[q.techLie] || 0) + 1; });
     var techs = Object.keys(T).sort(function (a, b) { return T[b].length - T[a].length || (a < b ? -1 : 1); }).map(function (k) {
-      var kt = chiffres(T[k]); return [k, kt.n, kt.moyen, kt.gN ? kt.gtr + ' (' + kt.gOk + '/' + kt.gN + ')' : '—', kt.reprendre, kt.retours];
+      var kt = chiffres(T[k]); return [k, kt.n, kt.moyen, kt.gN ? kt.gtr + ' (' + kt.gOk + '/' + kt.gN + ')' : '—', kt.reprendre, kt.retours, causesDe[k] || 0];
     });
-    if (techs.length) html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:14px 0 2px">Par technicien</h3>' + tab(['Technicien', 'Clôtures', 'Temps moyen', 'GTR respectée', 'À reprendre', 'Retours < 30 j'], techs);
+    if (techs.length) html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:14px 0 2px">Par technicien</h3>' +
+      tab(['Technicien', 'Clôtures', 'Temps moyen', 'GTR respectée', 'À reprendre', 'Retours < 30 j', 'Défauts peut-être liés'], techs) +
+      '<p style="margin:-8px 0 12px;color:#777;font-size:12px">« Défauts peut-être liés » : nouveaux défauts apparus après un passage de ce technicien au même endroit. À vérifier, pas une certitude.</p>';
     var C = {}, B = {};
     X.forEach(function (x) { C[x.commune] = (C[x.commune] || 0) + 1; x.boites.forEach(function (b) { B[b] = (B[b] || 0) + 1; }); });
-    var topC = Object.keys(C).sort(function (a, b) { return C[b] - C[a] || (a < b ? -1 : 1); }).slice(0, 5).map(function (k) { return k + ' (' + C[k] + ')'; });
+    var topC = Object.keys(C).sort(function (a, b) { return C[b] - C[a] || (a < b ? -1 : 1); }).slice(0, M === 'mois' ? 10 : 5).map(function (k) { return k + ' (' + C[k] + ')'; });
     var multi = Object.keys(B).filter(function (b) { return B[b] > 1; }).sort(function (a, b) { return B[b] - B[a]; }).map(function (b) { return b + ' (' + B[b] + ' fois)'; });
     if (topC.length) html += '<p style="margin:0 0 6px"><b>Communes où on est le plus intervenu :</b> ' + h(topC.join(', ')) + '</p>';
-    if (multi.length) html += '<p style="margin:0 0 10px"><b>Boîtes visitées plusieurs fois cette semaine :</b> ' + h(multi.join(', ')) + '</p>';
+    if (multi.length) html += '<p style="margin:0 0 10px"><b>Boîtes visitées plusieurs fois :</b> ' + h(multi.slice(0, 15).join(', ')) + '</p>';
     var sansSuite = (res.suites || []).filter(function (x) { return !x.tickets.length; });
     if (sansSuite.length) {
       html += '<h3 style="font-size:16px;color:#b00;margin:14px 0 2px">Toujours sans ticket de suite (30 derniers jours) : ' + sansSuite.length + '</h3><ul style="margin:4px 0 12px;padding-left:20px">' +
@@ -958,39 +1140,53 @@ function rapportFins(res, ctrl, NOW, depuis, hebdo, donnees, infos) {
       texte += 'Toujours sans ticket de suite : ' + sansSuite.length + '\n';
     }
   }
-  // à traiter, à surveiller
-  [[1, 'À traiter', '#b00', aTraiter], [0, 'À surveiller', '#a35208', aSurveiller]].forEach(function (g) {
+  // constats qualité : peut-être causé par nous, redondances, corrections
+  var MAX = soir ? 30 : 40, COUL = { fort: '#b00', moyen: '#a35208', info: '#555' };
+  [[QC, 'Peut-être causé par nos interventions', '#b00', 'Un nouveau défaut est apparu peu après le passage d\'un de nos techniciens au même endroit. C\'est à vérifier avec les deux rapports, pas une certitude.'],
+   [QR, 'Redondances', '#a35208', ''], [QK, 'Corrections à faire', BLEU, '']].forEach(function (g) {
+    if (!g[0].length) return;
+    html += '<h3 style="font-size:16px;color:' + g[2] + ';margin:16px 0 4px">' + g[1] + ' (' + g[0].length + ')</h3>' + (g[3] ? '<p style="margin:0 0 4px;color:#777;font-size:12px">' + h(g[3]) + '</p>' : '') +
+      '<ul style="margin:0 0 6px;padding-left:20px">' + g[0].slice(0, MAX).map(function (q) {
+        return '<li style="margin:4px 0">' + lienNum(q.num, q.rapport) + ' · ' + qui(q.commune, q.tech) + ' <span style="color:' + COUL[q.niveau] + ';font-size:12px">(' + h(q.niveau) + ')</span><br>' +
+          '<span style="color:#444">' + h(q.detail) + '</span>' + (q.lie ? '<br><span style="color:#777;font-size:12.5px">Lié à : ' + h(q.lie) + '</span>' : '') +
+          (q.action ? '<br><span style="color:' + BLEU + ';font-size:12.5px">→ ' + h(q.action) + '</span>' : '') + '</li>';
+      }).join('') + '</ul>' + (g[0].length > MAX ? '<p style="margin:0 0 6px;color:#555">… et ' + (g[0].length - MAX) + ' autres : voir l\'onglet Qualité du Sheet ou de l\'Excel.</p>' : '');
+    texte += '\n' + g[1].toUpperCase() + ' (' + g[0].length + ')\n' + g[0].slice(0, MAX).map(function (q) { return '- ' + q.num + ' : ' + q.detail + (q.action ? ' → ' + q.action : ''); }).join('\n') + '\n';
+  });
+  // autres points
+  [[1, 'À traiter aussi', '#b00', aTraiter], [0, 'À surveiller', '#a35208', aSurveiller]].forEach(function (g) {
     if (!g[3]) return;
     html += '<h3 style="font-size:16px;color:' + g[2] + ';margin:16px 0 4px">' + g[1] + ' (' + g[3] + ')</h3>';
     texte += '\n' + g[1].toUpperCase() + ' (' + g[3] + ')\n';
     TYPES.forEach(function (ty) {
-      if (ty[2] !== g[0] || !A[ty[0]] || (hebdo && (ty[0] === 'reprendre' || ty[0] === 'suite'))) return;
+      if (ty[2] !== g[0] || !A[ty[0]]) return;
       html += '<p style="margin:8px 0 2px;font-weight:bold">' + h(ty[1]) + ' (' + A[ty[0]].length + ')</p><ul style="margin:0 0 6px;padding-left:20px">' +
-        A[ty[0]].map(function (a) { return '<li style="margin:2px 0">' + lienNum(a.x) + ' · ' + qui(a.x) + '<br><span style="color:#444">' + h(a.texte) + '</span></li>'; }).join('') + '</ul>';
+        A[ty[0]].slice(0, MAX).map(function (a) { return '<li style="margin:2px 0">' + lienNum(a.x.f.num, a.x.f.rapport) + ' · ' + qui(a.x.commune, a.x.tech) + '<br><span style="color:#444">' + h(a.texte) + '</span></li>'; }).join('') + '</ul>';
       texte += '- ' + ty[1] + ' : ' + A[ty[0]].map(function (a) { return a.x.f.num + ' (' + a.texte + ')'; }).join(' ; ') + '\n';
       if (ty[0] === 'export' && A.export.length >= 3) html += '<p style="margin:0 0 6px;color:#555">Beaucoup de tickets inconnus : le dernier export Praxedo date peut-être' +
         (donnees && donnees.importeLe ? ' (importé le ' + h(fd(new Date(donnees.importeLe))) + ')' : '') + '. Importe un export récent.</p>';
     });
   });
-  if (!aTraiter && K.n) html += '<p style="margin:14px 0;color:#1d7444;font-weight:bold">Rien à signaler sur ces clôtures.</p>';
+  if (!points && !aSurveiller && K.n) html += '<p style="margin:14px 0;color:#1d7444;font-weight:bold">Rien à signaler sur ces clôtures.</p>';
   if (attendus.length) {
     html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:16px 0 4px">Prévues aujourd\'hui, pas encore de fin d\'intervention (' + attendus.length + ')</h3><ul style="margin:0 0 6px;padding-left:20px">' +
       attendus.map(function (t) { return '<li>' + h(t.num) + ' · ' + h(t.ville) + ' · ' + h(t.tech || 'sans technicien') + ' · prévue à ' + h(fd(t.planif).slice(11)) + (t.gtrKo ? ' · <b style="color:#b00">GTR KO</b>' : '') + '</li>'; }).join('') + '</ul>';
     texte += '\nPrévues aujourd\'hui sans fin : ' + attendus.map(function (t) { return t.num; }).join(', ') + '\n';
   }
-  // le détail de chaque clôture (le soir)
-  if (!hebdo && X.length) {
+  if (soir && X.length) {
     html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:18px 0 4px">Détail des ' + X.length + ' clôture' + (X.length > 1 ? 's' : '') + '</h3><ul style="margin:0;padding-left:20px">' +
       X.map(function (x) {
         var f = x.f, bits = [f.debut && f.fin ? 'sur place ' + String(f.debut).slice(11) + ' → ' + String(f.fin).slice(11) + (f.duree ? ' (' + f.duree + ')' : '') : '',
-          x.dansGtr === null ? (x.regle || 'GTR inconnue') : x.dansGtr ? 'GTR respectée' : 'GTR non respectée', x.resultat, x.boites.join(', '), f.cause ? 'cause : ' + f.cause : ''];
-        return '<li style="margin:6px 0">' + lienNum(x) + ' · ' + qui(x) + ' · reçue à ' + h(fd(x.recu).slice(11)) + '<br><span style="color:#444">' + h(bits.filter(function (b) { return b; }).join(' · ')) + '</span>' +
+          x.dansGtr === null ? (x.regle || 'GTR inconnue') : x.dansGtr ? 'GTR respectée' : 'GTR non respectée', x.resultat, x.boites.join(', '),
+          x.cables.length ? 'câble ' + x.cables.join(', ') : '', x.positions.length ? 'PM ' + (f.pm || '') + ' ' + x.positions.map(function (q) { return q.txt; }).join(', ') : '',
+          f.cause ? 'cause : ' + f.cause : ''];
+        return '<li style="margin:6px 0">' + lienNum(f.num, f.rapport) + ' · ' + qui(x.commune, x.tech) + ' · reçue à ' + h(fd(x.recu).slice(11)) + '<br><span style="color:#444">' + h(bits.filter(function (b) { return b; }).join(' · ')) + '</span>' +
           (f.resume ? '<br><span style="color:#777;font-size:12.5px">' + h(court(f.resume, 220)) + '</span>' : '') + '</li>';
       }).join('') + '</ul>';
   }
   if (!K.n) html += '<p style="margin:14px 0">Aucune fin d\'intervention reçue sur cette période.</p>';
   html += '<p style="margin:20px 0 0;color:#777;font-size:12px">' + (infos.lienCarte ? '<a href="' + h(infos.lienCarte) + '">Carte en direct</a> · ' : '') +
-    'Rapport envoyé tout seul chaque soir vers 17 h ; le bilan de la semaine part le dimanche. Les n° de ticket ouvrent le rapport Praxedo.</p></div>';
-  return { sujet: sujet, texte: texte, html: html, aEnvoyer: hebdo || K.n > 0 || attendus.length > 0, aTraiter: aTraiter };
+    'Rapport envoyé tout seul chaque soir vers 17 h ; le bilan de la semaine part le dimanche, celui du mois le 1er. Les n° de ticket ouvrent le rapport Praxedo. Toute la liste : onglet Qualité du Sheet ou de l\'Excel.</p></div>';
+  return { sujet: sujet, texte: texte, html: html, aEnvoyer: !soir || K.n > 0 || attendus.length > 0 || Q.length > 0, aTraiter: points };
 }
 </script>
