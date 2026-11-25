@@ -89,6 +89,9 @@ function onOpen() {
     .addItem('Fichiers du jour : carte + Excel (pour Teams)…', 'ouvrirCarteDuJour')
     .addItem('Envoi du matin : envoyer maintenant', 'envoyerMaintenant')
     .addItem('Annuler un ticket…', 'annulerTicket')
+    .addSubMenu(SpreadsheetApp.getUi().createMenu('Rapports par mail')
+      .addItem('Rapport du soir (fins d\'intervention) : envoyer maintenant', 'rapportSoirMaintenant')
+      .addItem('Bilan de la semaine : envoyer maintenant', 'rapportSemaineMaintenant'))
     .addItem("Codes d'accès à la carte", 'afficherCodes')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
     .addToUi();
@@ -528,6 +531,7 @@ function noterSortis_(ss, anciens, nouveaux) {
 function lireMails() {
   var n = lireMails_(60);
   try { envoiDuMatin_(); } catch (err) { console.warn('Envoi du matin : ' + err); }
+  try { rapportDuSoir_(); } catch (err) { console.warn('Rapport du soir : ' + err); }
   return n;
 }
 
@@ -975,10 +979,60 @@ function annulerTicket() {
     '\n\nPour le rétablir, efface sa ligne dans l\'onglet « ' + ONGLET_ANNULES + ' ».');
 }
 
+/**
+ * Rapport du soir : chaque jour vers 17 h, à ton adresse, les fins d'intervention reçues depuis le rapport d'avant, avec ce
+ * qui demande de l'attention puis le détail. Le dimanche, en plus, le bilan de la semaine. Pas de mail un jour sans rien.
+ */
+var HEURE_RAPPORT = 17;
+function rapportDuSoir_() {
+  var props = PropertiesService.getScriptProperties(), d = new Date();
+  var jour = Utilities.formatDate(d, 'Europe/Paris', 'yyyy-MM-dd'), heure = +Utilities.formatDate(d, 'Europe/Paris', 'H');
+  if (props.getProperty('RAPPORT_SOIR_LE') === jour || heure < HEURE_RAPPORT || heure >= 23) return 0;
+  var verrou = LockService.getScriptLock();
+  if (!verrou.tryLock(5000)) return 0;
+  try {
+    if (props.getProperty('RAPPORT_SOIR_LE') === jour) return 0;
+    props.setProperty('RAPPORT_SOIR_LE', jour);   // une fois par jour, même si l'envoi échoue
+    var n = envoyerRapport_(false, false);
+    var p = jour.split('-');
+    if (new Date(+p[0], p[1] - 1, +p[2], 12).getDay() === 0) n += envoyerRapport_(true, false);   // dimanche : la semaine
+    return n;
+  } finally { verrou.releaseLock(); }
+}
+
+/** hebdo : bilan depuis lundi ; sinon depuis le rapport d'avant (24 h au plus la première fois, 4 jours au plus). force : envoyer même vide, sans déplacer le repère. */
+function envoyerRapport_(hebdo, force) {
+  var props = PropertiesService.getScriptProperties(), a = analyse_(), d = lireDonnees_(), NOW = new Date();
+  var res = a.analyser(d, NOW), c = a.controles(res, NOW), depuis;
+  if (hebdo) { depuis = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()); depuis.setDate(depuis.getDate() - ((depuis.getDay() + 6) % 7)); }
+  else {
+    var p = props.getProperty('RAPPORT_SOIR_DEPUIS');
+    depuis = p ? new Date(p) : new Date(NOW.getTime() - 86400000);
+    if (isNaN(depuis) || NOW - depuis > 4 * 86400000) depuis = new Date(NOW.getTime() - 4 * 86400000);
+  }
+  var r = a.rapportFins(res, c, NOW, depuis, hebdo, d, { lienCarte: props.getProperty('LIEN_CARTE') || '' });
+  if (!hebdo && !force) props.setProperty('RAPPORT_SOIR_DEPUIS', NOW.toISOString());
+  if (!r.aEnvoyer && !force) return 0;
+  GmailApp.sendEmail(Session.getEffectiveUser().getEmail(), r.sujet, r.texte, { htmlBody: r.html, name: 'Carte des tickets' });
+  return 1;
+}
+
+/** Menus « Rapports par mail » : le rapport du soir ou le bilan de la semaine, tout de suite (pour voir). Réservés au propriétaire. */
+function rapportSoirMaintenant() {
+  proprietaire_();
+  envoyerRapport_(false, true);
+  SpreadsheetApp.getUi().alert('Rapport des fins d\'intervention envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul chaque soir vers 17 h.');
+}
+function rapportSemaineMaintenant() {
+  proprietaire_();
+  envoyerRapport_(true, true);
+  SpreadsheetApp.getUi().alert('Bilan de la semaine envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul le dimanche vers 17 h.');
+}
+
 /** Les fonctions du fichier Analyse (les mêmes que la carte), pour s'en servir côté serveur. */
 function analyse_() {
   var src = HtmlService.createHtmlOutputFromFile('Analyse').getContent().replace(/^\s*<script>/, '').replace(/<\/script>\s*$/, '');
-  return new Function(src + '\nreturn { analyser: analyser, controles: controles, listesDuJour: listesDuJour, ouvre: ouvre };')();
+  return new Function(src + '\nreturn { analyser: analyser, controles: controles, listesDuJour: listesDuJour, ouvre: ouvre, rapportFins: rapportFins };')();
 }
 
 /**

@@ -103,6 +103,19 @@ Pour que l'équipe reçoive l'Excel et la carte du jour sans que tu aies à les 
 
 Rien ne part tant que la colonne A est vide ; pour arrêter, vide-la. Gmail limite les envois à environ 100 destinataires par jour : jusqu'à 40 adresses, c'est large. Ces fichiers contiennent les adresses des tickets : n'y mets que l'équipe.
 
+## Rapports par mail : chaque soir et chaque dimanche
+
+Sans rien régler, tu reçois sur ton Gmail :
+
+- **Chaque soir vers 17 h**, les fins d'intervention reçues depuis le rapport de la veille :
+  - **À traiter** : GTR non respectée (avec le retard), à reprendre sans ticket de suite, fin d'impact avant l'arrivée du technicien, rapport illisible, clôture d'un ticket inconnu ou retiré comme annulé, mise à jour NETGEO nécessaire ;
+  - **À surveiller** : retour dans une boîte déjà visitée il y a moins de 30 jours, reste côté opérateur (jarretière, brassage), durée sur place inhabituelle (moins de 15 min ou plus de 6 h), Cerfa ou plainte, fini un autre jour que prévu, pas de boîte dans le rapport, rapport pas encore lu ;
+  - les interventions **prévues aujourd'hui sans fin d'intervention** ;
+  - puis le **détail de chaque clôture** (horaires, GTR, résultat, boîte, cause, compte-rendu). Chaque n° de ticket ouvre le rapport Praxedo.
+- **Le dimanche vers 17 h**, en plus, le **bilan de la semaine** : les chiffres comparés à la semaine d'avant, le détail par jour et par technicien, les communes et les boîtes, les reprises toujours sans ticket de suite et tout ce qui était à traiter.
+
+Un soir sans aucune clôture ni intervention prévue, rien n'est envoyé. Pour voir un rapport tout de suite : **Carte tickets → Rapports par mail**.
+
 ## Les rapports d'intervention, le bilan et les graphiques
 
 Chaque mail « [FIN INTERVENTION] » contient un lien vers le rapport Praxedo (un PDF). Le script le lit tout seul, 4 rapports au plus toutes les 5 minutes, et remplit les colonnes de l'onglet **Fins d'intervention** : heure de début et de fin, durée sur place, défaut corrigé ou non, réparation définitive ou non, dommage réseau signalé, compte-rendu du technicien, boîte où il est intervenu, PM, nature et cause du défaut, technicien, et les autres réponses du rapport dans une colonne à part. Il n'ouvre que les liens de Praxedo. « Rapport lu » vaut **oui**, **illisible**, **autre ticket**, **lien refusé** ou **erreur 1 à 3** (3 essais).
