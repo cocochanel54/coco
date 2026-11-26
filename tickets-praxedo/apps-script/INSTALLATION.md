@@ -8,7 +8,7 @@ La carte se met à jour à chaque export Praxedo que tu importes et à chaque ma
 2. Clique **Code.gs**, **Ctrl+A**, colle le nouveau **Code**. Pareil pour **Analyse** et **Carte**. **Import** ne change pas.
 3. **Ctrl+S**. Les envois automatiques (rapports, mails du matin) prennent le nouveau code dès cet enregistrement.
 4. **Déployer → Gérer les déploiements** → crayon → **Version : Nouvelle version** → **Déployer**. Le lien de la carte ne change pas. (Pas « Nouveau déploiement » : ça créerait un autre lien.)
-5. Dans le Sheet, **F5**, puis **Carte tickets → Mettre à jour les onglets de contrôle**. De nouveaux onglets apparaissent : **Qualité**, **Graphiques**, **Envoi du matin**, **Annulés**, **Corrélés**.
+5. Dans le Sheet, **F5**, puis **Carte tickets → Mettre à jour les onglets de contrôle**. De nouveaux onglets apparaissent : **Qualité**, **Graphiques**, **Envoi du matin**, **Annulés**, **Corrélés** (et **Backlog** après le premier rapport du soir).
 6. **Onglet Accès**, ligne **Annulations et corrélations** : écris en **colonne D** l'adresse mail de la personne qui gère les annulations et les corrélations (et la tienne si tu veux le faire depuis Outlook, séparée par une virgule). Donne-lui le code de cette ligne.
 7. **Onglet Envoi du matin** : les adresses qui recevront l'Excel et la carte chaque jour ouvré vers 7 h (une par ligne, en colonne A).
 8. Pour voir les mails tout de suite : **Carte tickets → Rapports par mail** et **Carte tickets → Envoi du matin : envoyer maintenant**. Ensuite tout part seul : rapport chaque soir vers 17 h, bilan de la semaine le dimanche, bilan du mois le 1er.
@@ -135,13 +135,16 @@ Rien ne part tant que la colonne A est vide ; pour arrêter, vide-la. Gmail limi
 Sans rien régler, tu reçois sur ton Gmail :
 
 - **Chaque soir vers 17 h**, les fins d'intervention reçues depuis le rapport de la veille :
+  - **Backlog** : les tickets créés (par niveau), clôturés, sortis de l'export, annulés et regroupés depuis la veille, et les tickets ouverts maintenant (à planifier dont GTR KO et à moins de 48 h, planifiés dont GTR KO, justifiés, ouverts depuis plus de 30 jours, le plus ancien), avec l'évolution depuis la veille ;
   - **Peut-être causé par nos interventions** : un nouveau défaut apparu dans les 15 jours après le passage d'un de nos techniciens au même endroit (position voisine au même PM, même câble, même boîte), plus probable si la cause notée est un brassage, une malfaçon ou une mauvaise manipulation. C'est à vérifier avec les deux rapports, pas une certitude ;
   - **Redondances** : même client (PTO ou référence client) dépanné deux fois en 30 jours, ticket rouvert après notre clôture, plusieurs interventions le même jour dans la même boîte, câble / boîte / ligne du PM touchés 3 fois ou plus en 90 jours, déplacement peut-être inutile (fin d'impact avant l'arrivée du technicien) ;
   - **Corrections à faire** : créer le ticket de suite, mettre à jour NETGEO, signaler à l'opérateur (jarretière, brassage), faire compléter un rapport (boîte, cause, position au PM ou réponse « défaut corrigé » manquante) ;
   - les autres points : GTR non respectée, rapport illisible, clôture d'un ticket inconnu, durée sur place inhabituelle, Cerfa ou plainte, fini un autre jour que prévu ;
   - les interventions **prévues aujourd'hui sans fin d'intervention**, puis le **détail de chaque clôture** (horaires, GTR, résultat, boîte, câble, position au PM, cause, compte-rendu). Chaque n° de ticket ouvre le rapport Praxedo.
-- **Le dimanche**, en plus, le **bilan de la semaine** : les chiffres comparés à la semaine d'avant, par jour, par technicien (avec les défauts peut-être liés à ses passages), les communes et les boîtes, les reprises toujours sans ticket de suite, et tous les constats de la semaine.
-- **Le 1er du mois**, le **bilan du mois d'avant**, de la même façon, par semaine.
+- **Le dimanche**, en plus, le **bilan de la semaine** : le backlog jour par jour (créés, clôturés, ouverts le soir) avec le stock du début et de la fin de semaine, les chiffres comparés à la semaine d'avant, par jour, par technicien (avec les défauts peut-être liés à ses passages), les communes et les boîtes, les reprises toujours sans ticket de suite, et tous les constats de la semaine.
+- **Le 1er du mois**, le **bilan du mois d'avant**, de la même façon, par semaine (backlog compris).
+
+Chaque soir, une ligne s'ajoute à l'onglet **Backlog** du Sheet (créés, clôturés, tickets ouverts…), même s'il n'y a pas de mail : c'est l'historique qui sert aux bilans de la semaine et du mois. Il est aussi dans l'Excel du jour.
 
 Un soir sans rien, aucun mail. Pour voir un rapport tout de suite : **Carte tickets → Rapports par mail**.
 

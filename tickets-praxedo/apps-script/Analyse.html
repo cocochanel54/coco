@@ -1010,6 +1010,7 @@ function listesDuJour(res, ctrl, NOW, infos) {
   ligne('Mails lus le', iso(infos.luLe));
   if (infos.lienCarte) ligne("Carte en direct (avec ton code d'accès)", infos.lienCarte);
   titre('TICKETS À PLANIFIER');
+  ligne('Tickets ouverts (backlog)', nb(function (t) { return t.ouvert && !t.termine && !t.annule && !t.correle; }));
   ligne('À planifier', nb(function (t) { return t.aPlanifier; }));
   ligne('dont GTR KO', nb(function (t) { return t.urgent && t.rang === 0; }));
   ligne('dont GTR dans moins de 48 h', nb(function (t) { return t.urgent && t.rang !== 0; }));
@@ -1082,6 +1083,48 @@ function listesDuJour(res, ctrl, NOW, infos) {
       }),
       fonds: J.map(function (t) { return t.suivi.due ? '#FCE4D6' : '#EDEDED'; })
     }
+  };
+}
+
+/**
+ * Backlog : les entrées et les sorties de tickets entre « depuis » et « fin » (créés, clôturés, sortis de l'export, annulés à
+ * la main, regroupés), et le stock de tickets ouverts maintenant (à planifier, GTR KO, planifiés, justifiés, anciens).
+ */
+function backlog(res, donnees, depuis, fin, NOW) {
+  donnees = donnees || {};
+  var J = 86400e3, corr = correlations(donnees), dans = function (d) { return !!d && d >= depuis && d < fin; };
+  var parNum = {};
+  res.tous.forEach(function (t) { parNum[t.num] = t; if (!parNum[t.base]) parNum[t.base] = t; });
+  function niveauDe(t, desc) {
+    var tags = t ? t.tags || [] : [], ho = tags.filter(function (x) { return /^\d+\s*H\s*HO$/.test(x); })[0];
+    if (ho) return ho.replace(/^0+/, '').replace(/\s+/g, ' ');
+    if (t && t.niveau) return 'niveau ' + t.niveau;
+    var m = /\[\s*(\d+)\s*h\s*ho\s*\]/i.exec(desc || ''), n = /niveau\s*(\d)/i.exec(desc || '');
+    return m ? (+m[1]) + 'H HO' : n ? 'niveau ' + n[1] : 'sans niveau';
+  }
+  var crees = {}, niveaux = {}, clos = {}, sortis = {}, annules = {}, regroupes = {};
+  function cree(num, niv) { var b = String(num).toUpperCase().split('#')[0]; if (!crees[b]) { crees[b] = 1; niveaux[niv] = (niveaux[niv] || 0) + 1; } }
+  res.tous.forEach(function (t) { if (dans(t.creee)) cree(t.num, niveauDe(t)); });
+  (donnees.creations || []).forEach(function (c) { if (c.num && dans(dt(c.recu))) cree(c.num, niveauDe(parNum[c.num] || parNum[String(c.num).split('#')[0]], c.desc)); });
+  (donnees.fins || []).forEach(function (f) { if (f.num && dans(dt(f.recu)) && !correleA(corr, f.num)) clos[f.num] = 1; });
+  res.tous.forEach(function (t) { if (t.finStatut && !t.fin && dans(t.finLe)) clos[t.num] = 1; });
+  (donnees.annules || []).forEach(function (a) { if (a.num && dans(dt(a.le))) annules[String(a.num).toUpperCase()] = 1; });
+  (donnees.correles || []).forEach(function (c) { if (c.num && dans(dt(c.le))) regroupes[String(c.num).toUpperCase()] = 1; });
+  (donnees.sortis || []).forEach(function (x) {
+    var k = String(x.num || '').toUpperCase();
+    if (k && dans(dt(x.le)) && !clos[x.num] && !annules[k] && !annules[k.split('#')[0]]) sortis[x.num] = 1;
+  });
+  var ouverts = res.tous.filter(function (t) { return t.ouvert && !t.termine && !t.annule && !t.correle; });
+  var vieux = ouverts.filter(function (t) { return t.creee; }).sort(function (a, b) { return a.creee - b.creee; })[0];
+  var nb = function (o) { return Object.keys(o).length; };
+  return {
+    crees: nb(crees), niveaux: niveaux, clotures: nb(clos), sortis: nb(sortis), annules: nb(annules), regroupes: nb(regroupes),
+    stock: { ouverts: ouverts.length, aPlanifier: ouverts.filter(function (t) { return t.aPlanifier; }).length,
+      ko: ouverts.filter(function (t) { return t.urgent && t.rang === 0; }).length, bientot: ouverts.filter(function (t) { return t.urgent && t.rang === 1; }).length,
+      planifies: ouverts.filter(function (t) { return !t.aPlanifier; }).length, planifiesKo: ouverts.filter(function (t) { return !t.aPlanifier && t.gtrKo; }).length,
+      justifies: ouverts.filter(function (t) { return t.categorie === 'justifie'; }).length,
+      vieux30: ouverts.filter(function (t) { return t.creee && NOW - t.creee > 30 * J; }).length,
+      plusVieux: vieux ? { num: vieux.num, jours: Math.floor((NOW - vieux.creee) / J) } : null }
   };
 }
 
@@ -1163,6 +1206,34 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
       : 'Clôtures reçues du ' + fd(depuis, false) + ' au ' + fd(M === 'mois' ? fin1 : NOW, false)) + '</p>' +
     '<table style="border-collapse:separate;border-spacing:6px;margin:0 -6px 10px"><tr>' + carte(K.n, 'clôtures') + carte(K.gtr, 'GTR respectée' + (K.gN ? ' (' + K.gOk + '/' + K.gN + ')' : '')) +
     carte(K.reprendre, 'à reprendre') + carte(QC.length, 'peut-être causés par nous') + carte(K.moyen, 'en moyenne sur place') + '</tr></table>';
+  // backlog : entrées, sorties et stock (le soir depuis le rapport d'avant ; la semaine par jour ; le mois par semaine)
+  var BK = backlog(res, donnees, depuis, FIN, NOW), st = BK.stock, hist = (infos.historique || []).filter(function (x) { return x.le; });
+  var stockAvant = soir ? infos.backlogAvant : (function () { var a = hist.filter(function (x) { return x.le < depuis; }); return a.length ? a[a.length - 1].ouverts : null; })();
+  var estime = false;
+  if (stockAvant == null && !soir) { stockAvant = st.ouverts - BK.crees + BK.clotures + BK.sortis + BK.annules + BK.regroupes; estime = true; }
+  var ev = stockAvant == null ? '' : (st.ouverts - stockAvant > 0 ? '+' : '') + (st.ouverts - stockAvant);
+  var niv = Object.keys(BK.niveaux).sort().map(function (k) { return k + ' : ' + BK.niveaux[k]; }).join(', ');
+  html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:14px 0 2px">Backlog</h3>' +
+    tab(['Créés', 'Clôturés', 'Sortis de l\'export', 'Annulés', 'Regroupés', 'Tickets ouverts'],
+      [[BK.crees, BK.clotures, BK.sortis, BK.annules, BK.regroupes, st.ouverts + (ev !== '' ? ' (' + (ev === '0' ? 'stable' : ev) + (soir ? ' depuis le rapport d\'avant' : estime ? ', estimé' : '') + ')' : '')]]) +
+    '<p style="margin:-6px 0 6px">' + h(st.ouverts + ' tickets ouverts : ' + st.aPlanifier + ' à planifier (dont ' + st.ko + ' en GTR KO, ' + st.bientot + ' à moins de 48 h, ' + st.justifies +
+      ' justifiés), ' + st.planifies + ' planifiés (dont ' + st.planifiesKo + ' en GTR KO) ; ' + st.vieux30 + ' ouverts depuis plus de 30 jours' +
+      (st.plusVieux ? ' (le plus ancien : ' + st.plusVieux.num + ', ' + st.plusVieux.jours + ' j)' : '') + '.') + '</p>' +
+    (niv ? '<p style="margin:0 0 10px;color:#555">' + h('Créés : ' + niv + '.') + '</p>' : '');
+  if (!soir) {
+    var lignesB = [], pas = M === 'mois' ? function (d) { return plusJours(d, 7 - ((d.getDay() + 6) % 7)); } : function (d) { return plusJours(d, 1); };
+    for (var b0 = new Date(depuis.getTime()); b0 < FIN && b0 <= NOW; b0 = pas(b0)) {
+      var b1 = new Date(Math.min(pas(b0), FIN)), kb = backlog(res, donnees, b0, b1, NOW);
+      var h1 = hist.filter(function (x) { return x.le >= b0 && x.le < b1; });
+      lignesB.push([M === 'mois' ? 'du ' + fd(b0, false).slice(0, 5) + ' au ' + fd(new Date(b1 - 1), false).slice(0, 5) : JOURS[b0.getDay()] + ' ' + fd(b0, false).slice(0, 5),
+        kb.crees, kb.clotures, kb.sortis, kb.annules + kb.regroupes, h1.length ? h1[h1.length - 1].ouverts : '—']);
+    }
+    html += tab([M === 'mois' ? 'Semaine' : 'Jour', 'Créés', 'Clôturés', 'Sortis de l\'export', 'Annulés ou regroupés', 'Ouverts le soir'], lignesB) +
+      '<p style="margin:-6px 0 10px;color:#555">' + h('Sur la période : ' + BK.crees + ' créés, ' + BK.clotures + ' clôturés' +
+        (stockAvant != null ? ' ; backlog ' + stockAvant + ' → ' + st.ouverts + ' (' + (ev === '0' ? 'stable' : ev) + (estime ? ', début estimé' : '') + ')' : '') + '.') + '</p>';
+  }
+  texte += 'Backlog : ' + BK.crees + ' créés, ' + BK.clotures + ' clôturés, ' + BK.sortis + ' sortis de l\'export, ' + BK.annules + ' annulés, ' + BK.regroupes + ' regroupés · ' +
+    st.ouverts + ' ouverts' + (ev !== '' ? ' (' + ev + ')' : '') + ' dont ' + st.aPlanifier + ' à planifier (' + st.ko + ' GTR KO) et ' + st.planifies + ' planifiés\n';
   var texte = titre + '\n' + K.n + ' clôtures · GTR respectée ' + K.gtr + ' · à reprendre ' + K.reprendre + ' · peut-être causés par nous ' + QC.length + ' · ' + K.moyen + ' en moyenne\n';
   if (!soir) {
     var avantDebut = M === 'mois' ? new Date(depuis.getFullYear(), depuis.getMonth() - 1, 1) : plusJours(depuis, -7);
@@ -1257,6 +1328,7 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
   if (!K.n) html += '<p style="margin:14px 0">Aucune fin d\'intervention reçue sur cette période.</p>';
   html += '<p style="margin:20px 0 0;color:#777;font-size:12px">' + (infos.lienCarte ? '<a href="' + h(infos.lienCarte) + '">Carte en direct</a> · ' : '') +
     'Rapport envoyé tout seul chaque soir vers 17 h ; le bilan de la semaine part le dimanche, celui du mois le 1er. Les n° de ticket ouvrent le rapport Praxedo. Toute la liste : onglet Qualité du Sheet ou de l\'Excel.</p></div>';
-  return { sujet: sujet, texte: texte, html: html, aEnvoyer: !soir || K.n > 0 || attendus.length > 0 || Q.length > 0, aTraiter: points };
+  return { sujet: sujet, texte: texte, html: html, aTraiter: points, backlog: BK,
+           aEnvoyer: !soir || K.n > 0 || attendus.length > 0 || Q.length > 0 || BK.crees > 0 || BK.annules > 0 || BK.regroupes > 0 };
 }
 </script>

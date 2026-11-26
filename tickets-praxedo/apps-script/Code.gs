@@ -43,6 +43,8 @@ var ONGLET_SORTIS = "Sortis de l'export";
 var ONGLET_CREATIONS = 'Créations';
 var ONGLET_INCOHERENCES = 'Incohérences', ONGLET_LIES = 'Tickets liés', ONGLET_PM = 'PM chargés', ONGLET_SUITES = 'Suites à prévoir';
 var ONGLET_QUALITE = 'Qualité';
+var ONGLET_BACKLOG = 'Backlog', ENTETES_BACKLOG = ['Le', 'Créés', 'Clôturés', 'Sortis de l\'export', 'Annulés', 'Regroupés', 'Tickets ouverts', 'dont à planifier',
+  'dont GTR KO', 'dont GTR < 48 h', 'dont planifiés', 'dont planifiés GTR KO', 'dont justifiés', 'Ouverts depuis plus de 30 j'];
 var ONGLET_CLOTURES = 'Clôtures', ONGLET_STATS_BOITES = 'Stats boîtes', ONGLET_STATS_VILLES = 'Stats villes', ONGLET_STATS_SEMAINES = 'Stats semaines';
 var ONGLET_ACCES = 'Accès';
 var ONGLET_ANNULES = 'Annulés', ENTETES_ANNULES = ['N° ticket', 'Annulé le', 'Pourquoi'];
@@ -240,7 +242,13 @@ function excelDuJour_() {
       largeurs: [90, 300, 120, 120, 200, 160, 100, 60, 120, 80, 300, 160, 220, 140, 420] }
   ].concat(ongletsControle_(c).map(function (o) {
     return { nom: o.nom, entetes: o.entetes, lignes: o.lignes, largeurs: o.largeurs, fonds: o.lignes.map(function (x, i) { return o.couleur ? o.couleur(x, i) || null : null; }) };
-  })).concat([{ nom: 'Données graphiques', entetes: g.entetes, lignes: g.lignes, filtre: false,
+  })).concat((function () {
+    var fb = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_BACKLOG);
+    if (!fb || fb.getLastRow() < 2) return [];
+    var v = fb.getRange(2, 1, fb.getLastRow() - 1, ENTETES_BACKLOG.length).getDisplayValues().slice(-90).reverse();
+    return [{ nom: ONGLET_BACKLOG, entetes: ENTETES_BACKLOG, lignes: v.map(function (r) { return r.map(function (x, i) { return i && x !== '' && !isNaN(+x) ? +x : x; }); }),
+      largeurs: [130, 70, 80, 110, 80, 90, 110, 110, 100, 110, 100, 140, 100, 160] }];
+  })()).concat([{ nom: 'Données graphiques', entetes: g.entetes, lignes: g.lignes, filtre: false,
     largeurs: [120, 70, 70, 120, 90, 70, 20, 200, 120, 90, 70, 20, 190, 120, 90, 70] }]);
   var tel = /(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g;
   feuilles.forEach(function (f) { f.lignes = f.lignes.map(function (r) { return r.map(function (v) { return typeof v === 'string' ? v.replace(tel, '[tél.]') : v; }); }); });
@@ -1118,11 +1126,31 @@ function envoyerRapport_(mode, force) {
     depuis = p ? new Date(p) : new Date(NOW.getTime() - 86400000);
     if (isNaN(depuis) || NOW - depuis > 4 * 86400000) depuis = new Date(NOW.getTime() - 4 * 86400000);
   }
-  var r = a.rapportFins(res, c, NOW, depuis, mode, d, { lienCarte: props.getProperty('LIEN_CARTE') || '' }, jusqua);
-  if (!hebdo && !force) props.setProperty('RAPPORT_SOIR_DEPUIS', NOW.toISOString());
+  // l'historique du backlog (une ligne par rapport du soir) : le stock d'avant, et la courbe de la semaine ou du mois
+  var historique = historiqueBacklog_();
+  var r = a.rapportFins(res, c, NOW, depuis, mode, d, { lienCarte: props.getProperty('LIEN_CARTE') || '', historique: historique,
+    backlogAvant: historique.length ? historique[historique.length - 1].ouverts : null }, jusqua);
+  if (!hebdo && !force) {
+    props.setProperty('RAPPORT_SOIR_DEPUIS', NOW.toISOString());
+    try {   // même un soir sans mail : la ligne du jour garde la courbe complète
+      var b = r.backlog, st = b.stock;
+      feuille_(ONGLET_BACKLOG, ENTETES_BACKLOG).appendRow([Utilities.formatDate(NOW, 'Europe/Paris', 'dd/MM/yyyy HH:mm'), b.crees, b.clotures, b.sortis, b.annules, b.regroupes,
+        st.ouverts, st.aPlanifier, st.ko, st.bientot, st.planifies, st.planifiesKo, st.justifies, st.vieux30]);
+    } catch (err) { console.warn('Backlog : ' + err); }
+  }
   if (!r.aEnvoyer && !force) return 0;
   GmailApp.sendEmail(Session.getEffectiveUser().getEmail(), r.sujet, r.texte, { htmlBody: r.html, name: 'Carte des tickets' });
   return 1;
+}
+
+/** L'onglet Backlog : [{ le (Date), ouverts }], du plus ancien au plus récent. */
+function historiqueBacklog_() {
+  var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_BACKLOG);
+  if (!f || f.getLastRow() < 2) return [];
+  return f.getRange(2, 1, f.getLastRow() - 1, 7).getDisplayValues().map(function (r) {
+    var m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{1,2}):(\d{2})/.exec(r[0]);
+    return { le: m ? new Date(+m[3], m[2] - 1, +m[1], +m[4], +m[5]) : null, ouverts: +r[6] || 0 };
+  }).filter(function (x) { return x.le; });
 }
 
 /** Menus « Rapports par mail » : le rapport du soir ou le bilan de la semaine, tout de suite (pour voir). Réservés au propriétaire. */
