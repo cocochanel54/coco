@@ -105,6 +105,18 @@ function motifsSuite(f) {
   if (/^oui$/i.test(f.dommage || '')) m.push('dommage réseau signalé');
   return m;
 }
+/**
+ * Le verdict des photos d'une fin d'intervention (colonne « Photos (IA) ») et l'avis noté à la main (« Photos : mon avis »).
+ * etat : ok, nok (NO OK — à vérifier), sans (pas de photo), main (à regarder à la main), encours, erreur, ou '' ;
+ * moi : '' (pas encore vu), ok (vérifié, c'est bon) ou nok (vérifié, c'est confirmé) ; detail : le verdict sans « NO OK — à vérifier ».
+ */
+function etatPhotos(f) {
+  var t = String((f && f.photos) || '').trim(), a = String((f && f.photosAvis) || '').trim();
+  var etat = /^NO\s*OK/i.test(t) ? 'nok' : /^OK\b/i.test(t) ? 'ok' : /^Sans photo/i.test(t) ? 'sans' : /^À vérifier à la main/i.test(t) ? 'main'
+    : /^en cours/i.test(t) ? 'encours' : /^erreur/i.test(t) ? 'erreur' : '';
+  var moi = !a ? '' : /^(no\s*ok|nok|ko|non|pas\s+(ok|bon))(?![a-zà-ÿ])/i.test(a) ? 'nok' : 'ok';
+  return { etat: etat, texte: t, detail: t.replace(/^(NO\s*OK|OK)\s*(—\s*à vérifier)?\s*(\([^)]*\))?\s*[—:]\s*/i, ''), le: dt(f && f.photosLe), avis: a, moi: moi };
+}
 var STATUTS_OUVERTS = ['Qualifiée', 'Pré-planifiée', 'Planifiée', 'Synchronisée'];
 // Coordonnées GPS écrites par Praxedo dans la colonne « Desc. site » : « Lat/Long: 48.67439/6.22068 »
 var RE_GPS = /Lat\/Long\s*:\s*(-?\d+(?:[.,]\d+)?)\s*\/\s*(-?\d+(?:[.,]\d+)?)/i;
@@ -296,6 +308,7 @@ function statistiques(donnees, NOW, techDe) {
     x.causeTech = RE_CAUSE_TECH.test([f.cause, f.nature].join(' ')) ? (f.cause || f.nature) : '';
     x.debutLe = debut; x.demandeLe = dt(f.demande);
     x.localisation = (/localisation du défaut : ([^·]+)/i.exec(f.autres || '') || [])[1] || '';
+    x.photos = etatPhotos(f);
     F.push(x);
   });
   // retours : une intervention dans une boîte où une autre a été clôturée moins de 30 jours avant
@@ -355,10 +368,11 @@ function statistiques(donnees, NOW, techDe) {
     fins: F,   // les clôtures détaillées (pour le rapport du soir ; pas envoyées à la carte)
     // une ligne légère par clôture, pour les graphiques (bilan) : date, commune, boîtes, à reprendre ou non, GTR, minutes
     liste: F.map(function (x) { return { t: +x.recu, commune: x.commune, boites: x.boites, retourDans: x.retourDans, suite: x.motifs.length > 0, lu: x.lu, dansGtr: x.dansGtr, min: x.min }; }),
-    clotures: { entetes: ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Début', 'Fin', 'Durée', "Fin d'impact client", 'Demande le', 'GTR', 'Échéance GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'Nature du défaut', 'Cause du défaut', 'Compte-rendu du technicien', 'Rapport', 'Autres éléments du rapport', 'À vérifier'],
+    clotures: { entetes: ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Début', 'Fin', 'Durée', "Fin d'impact client", 'Demande le', 'GTR', 'Échéance GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'Nature du défaut', 'Cause du défaut', 'Compte-rendu du technicien', 'Rapport', 'Autres éléments du rapport', 'À vérifier', 'Photos (IA)', 'Photos : mon avis'],
       lignes: F.map(function (x) { var f = x.f;
         return [f.recu, f.num, x.commune, x.tech, f.debut, f.fin, f.duree, f.finImpact || '', f.demande, x.regle, fd(x.echeance), x.dansGtr === null ? '' : x.dansGtr ? 'oui' : 'non', x.resultat,
-                x.boites.join(', '), f.nature, f.cause, court(f.resume, 400), f.rapport || '', f.autres || '', (x.retour ? 'retour sous 30 j dans ' + x.retourDans.join(', ') + (x.aVerifier ? ' · ' : '') : '') + x.aVerifier]; }) },
+                x.boites.join(', '), f.nature, f.cause, court(f.resume, 400), f.rapport || '', f.autres || '', (x.retour ? 'retour sous 30 j dans ' + x.retourDans.join(', ') + (x.aVerifier ? ' · ' : '') : '') + x.aVerifier,
+                x.photos.texte, x.photos.avis]; }) },
     boites: { entetes: ['Boîte', 'PM', 'Commune', 'Interventions', 'Retours sous 30 j', 'dont provisoires', 'dont non corrigées', 'Temps total', 'Temps moyen', 'Première', 'Dernière', 'Dernier résultat', 'Causes', 'Tickets'],
       lignes: boites.map(function (s) {
         return [s.cle, premier(s.pms), premier(s.communes), s.n, s.retours, s.prov, s.nonCorr, fduree(s.min), fduree(s.nMin ? s.min / s.nMin : 0), fd(s.premier, false), fd(s.dernier, false), s.dernierX.resultat, top(s.causes, 2),
@@ -827,6 +841,16 @@ function qualite(res, NOW) {
       if (manque.length) constat('correction', 'info', x.finLe, x.recu, f.num, x, t, 'rapport incomplet : ' + manque.join(', '), null, 'Demander au technicien de compléter le rapport');
     }
   });
+  // 4. photos du rapport regardées par l'IA : NO OK pas encore vérifié, ou confirmé à la main ; rapport sans photo
+  F.filter(function (x) { return NOW - x.recu <= 30 * J; }).forEach(function (x) {
+    var p = x.photos, t = parNum[x.f.num], le = p.le || x.recu;
+    if (p.moi === 'ok') return;   // vérifié : c'est bon
+    if (p.etat === 'nok') constat('photos', p.moi === 'nok' || /\(important\)/.test(p.texte) ? 'fort' : 'moyen', x.finLe, le, x.f.num, x, t,
+      (p.moi === 'nok' ? 'photos NO OK, confirmé à la vérification : ' : 'photos à vérifier : ') + p.detail, null,
+      p.moi === 'nok' ? 'Faire reprendre le travail ou en parler au technicien' : 'Regarder les photos du rapport, puis noter OK ou NO OK dans la colonne « Photos : mon avis » (onglet Fins d\'intervention)');
+    else if (p.etat === 'main') constat('photos', 'info', x.finLe, le, x.f.num, x, t, p.texte, null, 'Regarder les photos du rapport');
+    else if (p.etat === 'sans' && /^oui$/i.test(x.f.corrige || '')) constat('photos', 'info', x.finLe, le, x.f.num, x, t, 'défaut corrigé, mais aucune photo dans le rapport', null, 'Demander les photos au technicien');
+  });
   var ORDRE = { fort: 0, moyen: 1, info: 2 };
   return C.sort(function (a, b) { return (ORDRE[a.niveau] - ORDRE[b.niveau]) || (b.le - a.le); });
 }
@@ -974,7 +998,7 @@ function controles(res, NOW) {
     incoherences: INC.map(function (i) { return [i[0], i[1].num, i[1].statutExport, i[2], i[3], i[1].tech, i[1].ville, i[1].adresse]; }),
     lies: lies, pm: pm, groupeDe: groupeDe,
     qualite: (function () {
-      var Q = qualite(res, NOW), LIB = { cause: 'Peut-être causé par nous', redondance: 'Redondance', correction: 'Correction à faire' };
+      var Q = qualite(res, NOW), LIB = { cause: 'Peut-être causé par nous', redondance: 'Redondance', correction: 'Correction à faire', photos: 'Photos (IA)' };
       return { constats: Q, entetes: ['Type', 'Niveau', 'Date', 'N°', 'Commune', 'Technicien', 'Constat', 'Lié à', 'À faire', 'Rapport'],
                lignes: Q.map(function (q) { return [LIB[q.type], q.niveau, fd(q.le), q.num, q.commune, q.tech, q.detail, q.lie, q.action, q.rapport]; }) };
     })(),
@@ -1037,6 +1061,12 @@ function listesDuJour(res, ctrl, NOW, infos, donnees) {
   ligne('Réparées en définitif', k.avecReponse ? k.pctDefinitif + ' (' + k.definitives + ' sur ' + k.avecReponse + ')' : '');
   ligne('Retours dans une boîte sous 30 j', k.avecBoite ? k.pctRetours + ' (' + k.retours + ' sur ' + k.avecBoite + ')' : '');
   ligne('Suites à prévoir (30 derniers jours)', ctrl.suites.length);
+  var FP = (res.stats.fins || []).filter(function (x) { return NOW - x.recu <= 30 * 86400e3 && x.photos.etat; });
+  if (FP.length) {
+    ligne('Photos regardées par l\'IA (30 derniers jours) : OK', FP.filter(function (x) { return x.photos.etat === 'ok' || x.photos.moi === 'ok'; }).length);
+    ligne('  NO OK, à vérifier (onglet Qualité)', FP.filter(function (x) { return x.photos.etat === 'nok' && !x.photos.moi; }).length);
+    ligne('  NO OK confirmés après vérification', FP.filter(function (x) { return x.photos.moi === 'nok'; }).length);
+  }
   titre('CONTRÔLES');
   ligne('Incohérences', ctrl.incoherences.length);
   uniques(ctrl.incoherences.map(function (l) { return l[0]; })).forEach(function (g) {
@@ -1179,6 +1209,7 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
   var Q = ((ctrl && ctrl.qualite && ctrl.qualite.constats) || []).filter(function (q) { return q.le && dans(q.le); });
   var QC = Q.filter(function (q) { return q.type === 'cause'; }), QR = Q.filter(function (q) { return q.type === 'redondance'; });
   var QK = Q.filter(function (q) { return q.type === 'correction' && (soir || q.action !== 'Créer le ticket de suite'); });
+  var QP = Q.filter(function (q) { return q.type === 'photos'; });   // verdicts des photos arrivés pendant la période
   // autres points sur les clôtures : clé, titre, à traiter (sinon à surveiller)
   var TYPES = [['gtr', 'GTR non respectée', 1], ['rapport', "Rapport d'intervention illisible ou en erreur", 1],
     ['export', 'Clôture inattendue (ticket inconnu ou retiré comme annulé)', 1], ['duree', 'Durée sur place inhabituelle', 0],
@@ -1206,11 +1237,15 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
     return { n: L.length, gN: gN, gOk: gOk, gtr: gN ? Math.round(100 * gOk / gN) + ' %' : '—', reprendre: L.filter(function (x) { return x.motifs.length; }).length,
       operateur: L.filter(function (x) { return x.operateur; }).length, retours: L.filter(function (x) { return x.retour; }).length,
       definitives: L.filter(function (x) { return /^oui$/i.test(x.f.definitive); }).length, nonLus: L.filter(function (x) { return !x.lu; }).length,
+      photosOk: L.filter(function (x) { return x.photos.etat === 'ok' || (x.photos.etat === 'nok' && x.photos.moi === 'ok'); }).length,
+      photosNok: L.filter(function (x) { return x.photos.etat === 'nok' && x.photos.moi !== 'ok'; }).length,
+      photosAttente: L.filter(function (x) { return x.photos.etat === 'encours'; }).length,
       moyen: fduree(nMin ? min / nMin : 0) || '—', total: fduree(min) || '—' };
   }
   var K = chiffres(X), aTraiter = 0, aSurveiller = 0;
   TYPES.forEach(function (ty) { if (A[ty[0]]) { if (ty[2]) aTraiter += A[ty[0]].length; else aSurveiller += A[ty[0]].length; } });
-  var points = aTraiter + QC.length + QR.filter(function (q) { return q.niveau === 'fort'; }).length + QK.length;
+  var points = aTraiter + QC.length + QR.filter(function (q) { return q.niveau === 'fort'; }).length + QK.length + QP.filter(function (q) { return q.niveau !== 'info'; }).length;
+  var photosVues = K.photosOk + K.photosNok + K.photosAttente > 0;
   // présentation
   var BLEU = '#1F4E78', fin1 = new Date(FIN.getTime() - 1);
   var deMois = function (d) { var m = MOIS[d.getMonth()]; return (/^[aeiouy]/.test(m) ? 'd\'' : 'de ') + m + ' ' + d.getFullYear(); };   // « d'octobre », « de novembre »
@@ -1231,7 +1266,9 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
     '<p style="margin:0 0 12px;color:#555">' + (soir ? 'Clôtures reçues depuis le ' + fd(depuis) + ' jusqu\'à ' + fd(NOW).slice(11)
       : 'Clôtures reçues du ' + fd(depuis, false) + ' au ' + fd(M === 'mois' ? fin1 : NOW, false)) + '</p>' +
     '<table style="border-collapse:separate;border-spacing:6px;margin:0 -6px 10px"><tr>' + carte(K.n, 'clôtures') + carte(K.gtr, 'GTR respectée' + (K.gN ? ' (' + K.gOk + '/' + K.gN + ')' : '')) +
-    carte(K.reprendre, 'à reprendre') + carte(QC.length, 'peut-être causés par nous') + carte(K.moyen, 'en moyenne sur place') + '</tr></table>';
+    carte(K.reprendre, 'à reprendre') + carte(QC.length, 'peut-être causés par nous') + carte(K.moyen, 'en moyenne sur place') + '</tr></table>' +
+    (photosVues ? '<p style="margin:0 0 10px">' + h('Photos des rapports regardées par l\'IA : ' + K.photosOk + ' OK, ' + K.photosNok + ' NO OK à vérifier' +
+      (K.photosAttente ? ', ' + K.photosAttente + ' en cours d\'analyse' : '')) + '</p>' : '');
   // backlog : entrées, sorties et stock (le soir depuis le rapport d'avant ; la semaine par jour ; le mois par semaine)
   var BK = backlog(res, donnees, depuis, FIN, NOW), st = BK.stock, hist = (infos.historique || []).filter(function (x) { return x.le; });
   var stockAvant = soir ? infos.backlogAvant : (function () { var a = hist.filter(function (x) { return x.le < depuis; }); return a.length ? a[a.length - 1].ouverts : null; })();
@@ -1270,17 +1307,19 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
       RB.map(function (x) { return '<p style="margin:0 0 10px;color:#555">' + h(x.lib + ' : ' + x.crees + ' ouverts (créés), ' + x.clotures + ' clôturés ; backlog ' + x.debut +
         (x.estime ? ' (estimé)' : '') + ' → ' + x.fin + ' (' + signe(x.ecart) + ').') + '</p>'; }).join('');
   }
+  var texte = titre + '\n' + K.n + ' clôtures · GTR respectée ' + K.gtr + ' · à reprendre ' + K.reprendre + ' · peut-être causés par nous ' + QC.length + ' · ' + K.moyen + ' en moyenne\n' +
+    (photosVues ? 'Photos (IA) : ' + K.photosOk + ' OK, ' + K.photosNok + ' NO OK à vérifier' + (K.photosAttente ? ', ' + K.photosAttente + ' en cours' : '') + '\n' : '');
   RB.forEach(function (x) { texte += x.lib + ' : ' + x.crees + ' ouverts, ' + x.clotures + ' clôturés, backlog ' + x.debut + ' → ' + x.fin + ' (' + signe(x.ecart) + ')\n'; });
   texte += 'Backlog : ' + BK.crees + ' créés, ' + BK.clotures + ' clôturés, ' + BK.sortis + ' sortis de l\'export, ' + BK.annules + ' annulés, ' + BK.regroupes + ' regroupés · ' +
     st.ouverts + ' ouverts' + (ev !== '' ? ' (' + ev + ')' : '') + ' dont ' + st.aPlanifier + ' à planifier (' + st.ko + ' GTR KO) et ' + st.planifies + ' planifiés\n';
-  var texte = titre + '\n' + K.n + ' clôtures · GTR respectée ' + K.gtr + ' · à reprendre ' + K.reprendre + ' · peut-être causés par nous ' + QC.length + ' · ' + K.moyen + ' en moyenne\n';
   if (!soir) {
     var avantDebut = M === 'mois' ? new Date(depuis.getFullYear(), depuis.getMonth() - 1, 1) : plusJours(depuis, -7);
     var avant = chiffres(toutes.filter(function (x) { return x.recu >= avantDebut && x.recu < depuis; })), periode = M === 'mois' ? 'le mois d\'avant' : 'la semaine d\'avant';
     var ecart = function (a, b) { var d = a - b; return d ? ' (' + (d > 0 ? '+' : '') + d + ' par rapport à ' + periode + ')' : ' (comme ' + periode + ')'; };
     var pl = function (n, mot) { return n + ' ' + mot.replace(/(\S+)/g, function (w) { return n > 1 ? w + 's' : w; }); };
     html += '<p style="margin:0 0 10px">' + h(pl(K.n, 'clôture') + ecart(K.n, avant.n) + ' · ' + K.total + ' sur place au total · ' + pl(K.definitives, 'réparée') + ' en définitif · ' +
-      pl(K.operateur, 'restée') + ' côté opérateur · ' + pl(K.retours, 'retour') + ' dans une boîte sous 30 j · ' + pl(K.nonLus, 'rapport') + ' non lu' + (K.nonLus > 1 ? 's' : '')) + '</p>';
+      pl(K.operateur, 'restée') + ' côté opérateur · ' + pl(K.retours, 'retour') + ' dans une boîte sous 30 j · ' + pl(K.nonLus, 'rapport') + ' non lu' + (K.nonLus > 1 ? 's' : '') +
+      (photosVues ? ' · photos regardées par l\'IA : ' + K.photosOk + ' OK, ' + K.photosNok + ' NO OK' : '')) + '</p>';
     if (avant.gN && K.gN) html += '<p style="margin:0 0 10px">' + h('GTR respectée : ' + K.gtr + ' sur la période, ' + avant.gtr + ' ' + periode) + '</p>';
     // par jour (semaine) ou par semaine (mois)
     var lignesP = [];
@@ -1302,11 +1341,13 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
     var causesDe = {};
     QC.forEach(function (q) { if (q.techLie) causesDe[q.techLie] = (causesDe[q.techLie] || 0) + 1; });
     var techs = Object.keys(T).sort(function (a, b) { return T[b].length - T[a].length || (a < b ? -1 : 1); }).map(function (k) {
-      var kt = chiffres(T[k]); return [k, kt.n, kt.moyen, kt.gN ? kt.gtr + ' (' + kt.gOk + '/' + kt.gN + ')' : '—', kt.reprendre, kt.retours, causesDe[k] || 0];
+      var kt = chiffres(T[k]); return [k, kt.n, kt.moyen, kt.gN ? kt.gtr + ' (' + kt.gOk + '/' + kt.gN + ')' : '—', kt.reprendre, kt.retours, causesDe[k] || 0]
+        .concat(photosVues ? [kt.photosOk + kt.photosNok ? kt.photosNok + ' sur ' + (kt.photosOk + kt.photosNok) : '—'] : []);
     });
     if (techs.length) html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:14px 0 2px">Par technicien</h3>' +
-      tab(['Technicien', 'Clôtures', 'Temps moyen', 'GTR respectée', 'À reprendre', 'Retours < 30 j', 'Défauts peut-être liés'], techs) +
-      '<p style="margin:-8px 0 12px;color:#777;font-size:12px">« Défauts peut-être liés » : nouveaux défauts apparus après un passage de ce technicien au même endroit. À vérifier, pas une certitude.</p>';
+      tab(['Technicien', 'Clôtures', 'Temps moyen', 'GTR respectée', 'À reprendre', 'Retours < 30 j', 'Défauts peut-être liés'].concat(photosVues ? ['Photos NO OK'] : []), techs) +
+      '<p style="margin:-8px 0 12px;color:#777;font-size:12px">« Défauts peut-être liés » : nouveaux défauts apparus après un passage de ce technicien au même endroit. À vérifier, pas une certitude.' +
+      (photosVues ? ' « Photos NO OK » : rapports dont l\'IA a jugé les photos à vérifier, sur ceux qu\'elle a regardés (sans ceux que vous avez notés OK).' : '') + '</p>';
     var C = {}, B = {};
     X.forEach(function (x) { C[x.commune] = (C[x.commune] || 0) + 1; x.boites.forEach(function (b) { B[b] = (B[b] || 0) + 1; }); });
     var topC = Object.keys(C).sort(function (a, b) { return C[b] - C[a] || (a < b ? -1 : 1); }).slice(0, M === 'mois' ? 10 : 5).map(function (k) { return k + ' (' + C[k] + ')'; });
@@ -1323,6 +1364,7 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
   // constats qualité : peut-être causé par nous, redondances, corrections
   var MAX = soir ? 30 : 40, COUL = { fort: '#b00', moyen: '#a35208', info: '#555' };
   [[QC, 'Peut-être causé par nos interventions', '#b00', 'Un nouveau défaut est apparu peu après le passage d\'un de nos techniciens au même endroit. C\'est à vérifier avec les deux rapports, pas une certitude.'],
+   [QP, 'Photos à vérifier (analyse IA)', '#b00', 'L\'IA a regardé les photos des rapports : c\'est un avis, pas une certitude. Regardez les photos (n° de ticket), puis notez OK ou NO OK dans la colonne « Photos : mon avis » de l\'onglet Fins d\'intervention.'],
    [QR, 'Redondances', '#a35208', ''], [QK, 'Corrections à faire', BLEU, '']].forEach(function (g) {
     if (!g[0].length) return;
     html += '<h3 style="font-size:16px;color:' + g[2] + ';margin:16px 0 4px">' + g[1] + ' (' + g[0].length + ')</h3>' + (g[3] ? '<p style="margin:0 0 4px;color:#777;font-size:12px">' + h(g[3]) + '</p>' : '') +
@@ -1359,12 +1401,15 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
         var f = x.f, bits = [f.debut && f.fin ? 'sur place ' + String(f.debut).slice(11) + ' → ' + String(f.fin).slice(11) + (f.duree ? ' (' + f.duree + ')' : '') : '',
           x.dansGtr === null ? (x.regle || 'GTR inconnue') : x.dansGtr ? 'GTR respectée' : 'GTR non respectée', x.resultat, x.boites.join(', '),
           x.cables.length ? 'câble ' + x.cables.join(', ') : '', x.positions.length ? 'PM ' + (f.pm || '') + ' ' + x.positions.map(function (q) { return q.txt; }).join(', ') : '',
-          f.cause ? 'cause : ' + f.cause : ''];
+          f.cause ? 'cause : ' + f.cause : '',
+          { ok: 'photos OK (IA)', nok: x.photos.moi === 'ok' ? 'photos vérifiées OK' : 'photos NO OK (IA)', encours: 'photos en cours d\'analyse', sans: 'sans photo', main: 'photos à regarder à la main' }[x.photos.etat] || ''];
         return '<li style="margin:6px 0">' + lienNum(f.num, f.rapport) + ' · ' + qui(x.commune, x.tech) + ' · reçue à ' + h(fd(x.recu).slice(11)) + '<br><span style="color:#444">' + h(bits.filter(function (b) { return b; }).join(' · ')) + '</span>' +
           (f.resume ? '<br><span style="color:#777;font-size:12.5px">' + h(court(f.resume, 220)) + '</span>' : '') + '</li>';
       }).join('') + '</ul>';
   }
   if (!K.n) html += '<p style="margin:14px 0">Aucune fin d\'intervention reçue sur cette période.</p>';
+  if (infos.photosIA && infos.photosIA.erreur) html += '<p style="margin:16px 0 0;color:#b00">' + h('Analyse des photos par l\'IA en panne — ' + infos.photosIA.erreur +
+    '. Menu Carte tickets → Analyse des photos (IA) → Activer, voir le coût…') + '</p>';
   html += '<p style="margin:20px 0 0;color:#777;font-size:12px">' + (infos.lienCarte ? '<a href="' + h(infos.lienCarte) + '">Carte en direct</a> · ' : '') +
     'Rapport envoyé tout seul chaque soir vers 17 h ; le bilan de la semaine part le dimanche, celui du mois le 1er. Les n° de ticket ouvrent le rapport Praxedo. Toute la liste : onglet Qualité du Sheet ou de l\'Excel.</p></div>';
   return { sujet: sujet, texte: texte, html: html, aTraiter: points, backlog: BK,

@@ -242,6 +242,13 @@ function texteRapport(f, avecResume) {
   if (op) h += '<br><small>Reste côté opérateur (jarretière, brassage) : pas une reprise pour nous</small>';
   else if (!m.length && (f.corrige || f.definitive)) h += '<br><small>' + esc([f.corrige ? 'Défaut corrigé : ' + f.corrige.toLowerCase() : '', f.definitive ? 'réparation définitive : ' + f.definitive.toLowerCase() : ''].filter(function (x) { return x; }).join(' · ')) + '</small>';
   if (avecResume && f.resume) h += '<br><small><b>Compte-rendu :</b> ' + esc(court(f.resume, 320)) + '</small>';
+  // les photos du rapport regardées par l'IA (conduite d'activité seulement)
+  var ph = role === 'ca' ? etatPhotos(f) : { etat: '' };
+  if (ph.etat === 'nok' && ph.moi !== 'ok') h += '<br><b style="color:#b00">Photos NO OK' + (ph.moi === 'nok' ? ' (confirmé)' : ' — à vérifier') + '</b><br><small>' + esc(court(ph.detail, 260)) + '</small>';
+  else if (ph.etat === 'ok' || ph.moi === 'ok') h += '<br><small style="color:#1d7444">Photos OK' + (ph.etat === 'nok' ? ' (vérifiées à la main)' : ' (vues par l\'IA)') + '</small>';
+  else if (ph.etat === 'encours') h += '<br><small>Photos en cours d\'analyse par l\'IA</small>';
+  else if (ph.etat === 'sans') h += '<br><small>Rapport sans photo</small>';
+  else if (ph.etat === 'main') h += '<br><small>' + esc(court(ph.texte, 200)) + '</small>';
   return h;
 }
 // à l'ouverture d'une fiche : un trait vers chaque ticket lié, et un anneau autour d'eux

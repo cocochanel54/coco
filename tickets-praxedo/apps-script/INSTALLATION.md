@@ -12,6 +12,7 @@ La carte se met à jour à chaque export Praxedo que tu importes et à chaque ma
 6. **Onglet Accès**, ligne **Annulations et corrélations** : écris en **colonne D** l'adresse mail de la personne qui gère les annulations et les corrélations (et la tienne si tu veux le faire depuis Outlook, séparée par une virgule). Donne-lui le code de cette ligne.
 7. **Onglet Envoi du matin** : les adresses qui recevront l'Excel et la carte chaque jour ouvré vers 7 h (une par ligne, en colonne A).
 8. Pour voir les mails tout de suite : **Carte tickets → Rapports par mail** et **Carte tickets → Envoi du matin : envoyer maintenant**. Ensuite tout part seul : rapport chaque soir vers 17 h, bilan de la semaine le dimanche, bilan du mois le 1er.
+9. Facultatif : **l'analyse des photos des rapports par l'IA** (OK ou NO OK — à vérifier). Elle demande une clé payante : voir « Analyse des photos par l'IA » plus bas. Sans clé, rien ne change.
 
 Les rapports des 30 derniers jours sont relus une fois dans les heures qui suivent (câbles, positions au PM, références client), pour l'analyse qualité.
 
@@ -140,6 +141,7 @@ Sans rien régler, tu reçois sur ton Gmail :
   - **Redondances** : même client (PTO ou référence client) dépanné deux fois en 30 jours, ticket rouvert après notre clôture, plusieurs interventions le même jour dans la même boîte, câble / boîte / ligne du PM touchés 3 fois ou plus en 90 jours, déplacement peut-être inutile (fin d'impact avant l'arrivée du technicien) ;
   - **Corrections à faire** : créer le ticket de suite, mettre à jour NETGEO, signaler à l'opérateur (jarretière, brassage), faire compléter un rapport (boîte, cause, position au PM ou réponse « défaut corrigé » manquante) ;
   - les autres points : GTR non respectée, rapport illisible, clôture d'un ticket inconnu, durée sur place inhabituelle, Cerfa ou plainte, fini un autre jour que prévu ;
+  - **Photos à vérifier (analyse IA)**, si tu l'as activée (voir plus bas) : les rapports dont l'IA juge les photos NO OK ;
   - les interventions **prévues aujourd'hui sans fin d'intervention**, puis le **détail de chaque clôture** (horaires, GTR, résultat, boîte, câble, position au PM, cause, compte-rendu). Chaque n° de ticket ouvre le rapport Praxedo.
 - **Le dimanche**, en plus, le **bilan de la semaine** : le backlog jour par jour (créés, clôturés, ouverts le soir) avec le stock du début et de la fin de semaine, les chiffres comparés à la semaine d'avant, par jour, par technicien (avec les défauts peut-être liés à ses passages), les communes et les boîtes, les reprises toujours sans ticket de suite, et tous les constats de la semaine.
 - **Le 1er du mois**, le **bilan du mois d'avant**, de la même façon, par semaine (backlog compris).
@@ -151,6 +153,34 @@ Un soir sans rien, aucun mail. Pour voir un rapport tout de suite : **Carte tick
 Pour repérer les câbles et les positions au PM, le script lit dans le rapport du technicien le n° du câble (par exemple `GNY-CA-0002728`), la **Position PM** (`T1L6C3` : tiroir 1, ligne 6, connecteur 3), la référence client et la PTO. Plus les techniciens les écrivent, plus la détection est complète. Après la mise à jour, les rapports des 30 derniers jours sont relus une fois (en quelques heures), pour y trouver ces informations.
 
 Tous les constats des 90 derniers jours sont aussi dans l'onglet **Qualité** du Sheet et de l'Excel du jour (rouge : fort, jaune : moyen), et dans **Listes de contrôle → Qualité** sur la carte.
+
+## Analyse des photos par l'IA (facultatif)
+
+L'IA (Claude, d'Anthropic) regarde les photos de chaque rapport d'intervention lu et donne son avis : **OK**, l'intervention est validée, ou **NO OK — à vérifier**, avec ce qui ne va pas : fibre ou surlongueur qui traîne hors de la cassette, lovage en vrac, fibre pincée, boîtier ou cassette mal refermés, jarretières en vrac ou qui pendent au PM, étiquette absente, dommage visible, photo qui ne correspond pas à sa rubrique… Elle sait sous quelle rubrique chaque photo est rangée (« Photo de la réparation mise en place », « Photo de l'étiquette »…) et lit le compte-rendu du technicien. Le script contrôle aussi la date et le lieu imprimés sur les photos : des photos datées d'un autre jour que l'intervention, ou prises à plus de 5 km de l'adresse, passent en NO OK.
+
+C'est un avis, pas une certitude : c'est toi qui tranches.
+
+**L'activer (5 minutes, une seule fois) :**
+
+1. Crée un compte sur la console d'Anthropic : <https://platform.claude.com>. Dans **Billing**, ajoute du crédit (carte bancaire, 10 € suffisent pour commencer). Dans **API keys**, **Create key**, puis copie la clé (elle commence par `sk-ant-`).
+2. Dans le Sheet : **Carte tickets → Analyse des photos (IA) → Activer, voir le coût, changer la clé ou arrêter…**, colle la clé, **OK**. Le script fait un essai de quelques secondes et dit si la clé marche.
+
+Ensuite tout est automatique : les photos de chaque nouveau rapport lu partent à l'analyse (et, au début, celles des rapports des 3 derniers jours). Les verdicts arrivent en général en moins d'une heure. La clé est gardée dans ton compte Google, à part : les personnes qui ont accès au Sheet ne la voient pas.
+
+**Où voir les verdicts :**
+
+- onglet **Fins d'intervention**, colonnes **Photos (IA)** et **Photos analysées le** ;
+- onglet **Qualité** (Sheet et Excel du jour) : les NO OK, en rouge (important) ou en jaune ;
+- **rapport du soir** : la partie **Photos à vérifier (analyse IA)**, et « photos OK (IA) » ou « photos NO OK (IA) » dans le détail de chaque clôture ; dans les bilans de la semaine et du mois, une colonne **Photos NO OK** par technicien ;
+- sur la carte, avec le code de la conduite d'activité seulement : dans la fiche du ticket terminé.
+
+**Après avoir regardé les photos** (le n° de ticket ouvre le rapport Praxedo) : écris **OK** ou **NO OK** dans la colonne **Photos : mon avis** de l'onglet Fins d'intervention. OK : l'alerte disparaît. NO OK : le problème est confirmé, il reste dans l'onglet Qualité (« faire reprendre le travail ou en parler au technicien ») et compte dans les bilans.
+
+**Ce que ça coûte** : l'analyse utilise Claude Opus 5.5, un des modèles les plus capables d'Anthropic, et passe par lots, à moitié prix. Compte **environ 2 à 5 centimes par rapport** (une dizaine de photos), soit **environ 10 à 25 € par mois** (facturés en dollars) pour 25 rapports par jour ouvré. Le menu **Activer, voir le coût…** affiche le coût estimé du mois ; le montant exact est dans la console Anthropic (**Usage**). Garde-fou : 80 rapports par jour au plus. Pour arrêter : même menu, tape **STOP**.
+
+**Ce qui part chez Anthropic** : les photos du rapport (avec l'adresse et les coordonnées GPS imprimées dessus), les horaires, la commune, la boîte et le PM, les réponses du rapport et le compte-rendu du technicien, **sans n° de téléphone, sans adresse mail, sans référence client ni PTO**. Ces données quittent ton compte Google : vérifie avec ton responsable que c'est accepté chez Circet et Altitude avant d'activer.
+
+Si l'analyse tombe en panne (clé refusée, plus de crédit), le rapport du soir le dit en rouge, et l'analyse reprend toute seule une fois le problème réglé. La colonne **Photos (IA)** peut aussi valoir **Sans photo** (rapport sans photo), **À vérifier à la main** (l'IA n'a pas pu les analyser) ou **erreur 1 à 3** (nouvel essai au passage suivant).
 
 ## Les rapports d'intervention, le bilan et les graphiques
 

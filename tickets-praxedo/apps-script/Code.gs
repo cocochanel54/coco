@@ -57,7 +57,9 @@ var ENTETES_SORTIS = ['Sorti le', 'N°', 'Statut avant', 'Planifiée', 'Technici
 var ENTETES_FINS = ['Reçu le', 'N° ticket', 'Commune', 'Intervention du', 'Rapport', 'Objet du mail', 'Id du mail',
   'Rapport lu', 'Début', 'Fin', 'Durée', 'Défaut corrigé', 'Réparation définitive', 'Dommage réseau', 'Compte-rendu du technicien',
   'Boîte(s)', 'PM (site)', 'Nature du défaut', 'Cause du défaut', 'Adresse', 'Demande le', 'Étiquettes GTR', 'Autres éléments du rapport', 'Technicien',
-  "Fin d'impact"];
+  "Fin d'impact", 'Photos (IA)', 'Photos analysées le', 'Photos : mon avis'];
+// colonnes de l'analyse des photos par l'IA (voir analyserPhotos_) ; « mon avis » : écrit à la main, OK ou NO OK après vérification
+var COL_PHOTOS = 'Photos (IA)', COL_PHOTOS_LE = 'Photos analysées le', COL_PHOTOS_AVIS = 'Photos : mon avis';
 var JOURS_HISTORIQUE = 90;     // la carte et les statistiques portent sur les clôtures des 90 derniers jours
 var RAPPORTS_PAR_PASSAGE = 4;
 var LECTURE_RAPPORTS = '2';    // à changer quand la lecture des rapports s'enrichit : ceux des 30 derniers jours sont relus une fois  // rapports PDF lus à chaque passage (les plus récents d'abord), pour garder des passages courts
@@ -99,6 +101,9 @@ function onOpen() {
       .addItem('Rapport du soir (fins d\'intervention) : envoyer maintenant', 'rapportSoirMaintenant')
       .addItem('Bilan de la semaine : envoyer maintenant', 'rapportSemaineMaintenant')
       .addItem('Bilan du mois dernier : envoyer maintenant', 'rapportMoisMaintenant'))
+    .addSubMenu(SpreadsheetApp.getUi().createMenu('Analyse des photos (IA)')
+      .addItem('Activer, voir le coût, changer la clé ou arrêter…', 'reglerPhotosIA')
+      .addItem('Analyser maintenant', 'analyserPhotosMaintenant'))
     .addItem("Codes d'accès à la carte", 'afficherCodes')
     .addItem('Clé pour la macro Outlook', 'afficherCle')
     .addToUi();
@@ -506,7 +511,7 @@ function importerExport_(texte) {
   valeurs.forEach(function (r, i) { if (i && !r[iCree] && connues[r[iNum]]) r[iCree] = connues[r[iNum]]; });
   noterSortis_(ss, anciens, valeurs);
   f.clear();
-  f.getRange(1, 1, valeurs.length, n).setNumberFormat('@').setValues(valeurs);
+  grille_(f, valeurs.length, n).getRange(1, 1, valeurs.length, n).setNumberFormat('@').setValues(valeurs);
   f.getRange(1, 1, 1, n).setFontWeight('bold');
   f.setFrozenRows(1);
   PropertiesService.getScriptProperties().setProperty('IMPORTE_LE', maintenant_());
@@ -539,12 +544,13 @@ function noterSortis_(ss, anciens, nouveaux) {
   });
   var tout = garder.concat(lignes);
   feuille.getRange(2, 1, Math.max(feuille.getLastRow() - 1, 1), ENTETES_SORTIS.length).clearContent();
-  if (tout.length) feuille.getRange(2, 1, tout.length, ENTETES_SORTIS.length).setNumberFormat('@').setValues(tout);
+  if (tout.length) grille_(feuille, tout.length + 1, ENTETES_SORTIS.length).getRange(2, 1, tout.length, ENTETES_SORTIS.length).setNumberFormat('@').setValues(tout);
 }
 
 /** Déclencheur toutes les 5 minutes : lit les mails arrivés dans Gmail. Au plus une lecture par minute. */
 function lireMails() {
   var n = lireMails_(60);
+  try { analyserPhotos_(); } catch (err) { console.warn('Photos (IA) : ' + err); }
   try { envoiDuMatin_(); } catch (err) { console.warn('Envoi du matin : ' + err); }
   try { rapportDuSoir_(); } catch (err) { console.warn('Rapport du soir : ' + err); }
   return n;
@@ -574,7 +580,7 @@ function lireMails_(delaiMin) {
       var l = ligneFin_(m.getSubject(), m.getPlainBody(), m.getDate(), m.getId());
       if (l) { while (l.length < ENTETES_FINS.length) l.push(''); ajout.push(l); vus[m.getId()] = 1; }
     });
-    if (ajout.length) f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_FINS.length).setNumberFormat('@').setValues(ajout);
+    if (ajout.length) grille_(f, f.getLastRow() + ajout.length, ENTETES_FINS.length).getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_FINS.length).setNumberFormat('@').setValues(ajout);
     var creees = 0, importe = null, rapports = 0;
     try { rapports = lireRapports_(RAPPORTS_PAR_PASSAGE); } catch (err) { console.warn('Rapports : ' + err); }
     try { creees = lireCreations_(fen.q); } catch (err) { complet = false; console.warn('Créations : ' + err); }
@@ -766,7 +772,7 @@ function lireCreations_(fenetre) {
     if (l) { ajout.push(l.map(texte_)); vus[m.getId()] = 1; }
   });
   if (!ajout.length) return 0;
-  f.getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_CREATIONS.length).setNumberFormat('@').setValues(ajout);
+  grille_(f, f.getLastRow() + ajout.length, ENTETES_CREATIONS.length).getRange(f.getLastRow() + 1, 1, ajout.length, ENTETES_CREATIONS.length).setNumberFormat('@').setValues(ajout);
   geocoder_(ajout.map(function (l) { return [l[4], l[5], l[6]].filter(function (x) { return x; }).join(' '); }));
   return ajout.length;
 }
@@ -907,7 +913,8 @@ function lireDonnees_() {
     return { recu: r[0], num: r[1], commune: r[2], jour: r[3], rapport: r[4], lu: r[7] || '', debut: r[8] || '', fin: r[9] || '',
              duree: r[10] || '', corrige: r[11] || '', definitive: r[12] || '', dommage: r[13] || '', resume: r[14] || '',
              boites: r[15] || '', pm: r[16] || '', nature: r[17] || '', cause: r[18] || '', adresse: r[19] || '', demande: r[20] || '', etiquettes: r[21] || '', autres: r[22] || '', tech: r[23] || '',
-             finImpact: r[24] || (/fin d'impact client : (\d{2}\/\d{2}\/\d{4} \d{1,2}:\d{2})/.exec(r[22] || '') || [])[1] || '' };
+             finImpact: r[24] || (/fin d'impact client : (\d{2}\/\d{2}\/\d{4} \d{1,2}:\d{2})/.exec(r[22] || '') || [])[1] || '',
+             photos: r[25] || '', photosLe: r[26] || '', photosAvis: r[27] || '' };
   });
   var fn = feuille_(ONGLET_NOTES, ENTETES_NOTES);
   var notes = fn.getDataRange().getDisplayValues().slice(1).map(function (r) { return { num: r[0], note: r[1] }; })
@@ -1078,7 +1085,7 @@ function annulerTicket() {
   var m = /^\s*(\S+)\s*([\s\S]*)$/.exec(r.getResponseText() || '');
   if (!m) return;
   var num = m[1].toUpperCase(), f = ongletAnnules_();
-  f.getRange(f.getLastRow() + 1, 1, 1, 3).setNumberFormat('@')
+  grille_(f, f.getLastRow() + 1, 3).getRange(f.getLastRow() + 1, 1, 1, 3).setNumberFormat('@')
     .setValues([[num, Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm'), m[2].trim()].map(texte_)]);
   // le n° est-il connu (dernier export ou mails de création) ?
   var ss = SpreadsheetApp.getActiveSpreadsheet(), connus = {};
@@ -1131,7 +1138,7 @@ function envoyerRapport_(mode, force) {
   // l'historique du backlog (une ligne par rapport du soir) : le stock d'avant, et la courbe de la semaine ou du mois
   var historique = historiqueBacklog_();
   var r = a.rapportFins(res, c, NOW, depuis, mode, d, { lienCarte: props.getProperty('LIEN_CARTE') || '', historique: historique,
-    backlogAvant: historique.length ? historique[historique.length - 1].ouverts : null }, jusqua);
+    backlogAvant: historique.length ? historique[historique.length - 1].ouverts : null, photosIA: etatIA_() }, jusqua);
   if (!hebdo && !force) {
     props.setProperty('RAPPORT_SOIR_DEPUIS', NOW.toISOString());
     try {   // même un soir sans mail : la ligne du jour garde la courbe complète
@@ -1198,7 +1205,7 @@ function ongletsControle_(c) {
     // en gris : ce qui reste est chez l'opérateur (jarretière, brassage), pas une reprise pour nous
     { nom: ONGLET_CLOTURES, entetes: c.clotures.entetes, lignes: c.clotures.lignes,
       couleur: function (l) { return l[cGtr] === 'non' ? '#F8CBAD' : /^À suivre/.test(l[cRes]) ? '#FFE699' : /côté opérateur/.test(l[cRes]) ? '#EDEDED' : null; },
-      largeurs: [120, 160, 170, 150, 120, 120, 80, 120, 120, 200, 120, 90, 200, 190, 150, 180, 480, 260, 480, 320] },
+      largeurs: [120, 160, 170, 150, 120, 120, 80, 120, 120, 200, 120, 90, 200, 190, 150, 180, 480, 260, 480, 320, 360, 140] },
     { nom: ONGLET_STATS_BOITES, entetes: c.statsBoites.entetes, lignes: c.statsBoites.lignes,
       couleur: function (l) { return /^À suivre/.test(l[bRes]) ? '#FFE699' : null; }, largeurs: [190, 150, 170, 90, 100, 90, 90, 90, 90, 100, 100, 220, 240, 420] },
     { nom: ONGLET_STATS_VILLES, entetes: c.statsVilles.entetes, lignes: c.statsVilles.lignes,
@@ -1218,7 +1225,7 @@ function ecrireOnglet_(nom, entetes, lignes, couleur, largeurs) {
   var filtre = f.getFilter();
   if (filtre) filtre.remove();
   f.clear();
-  var tout = f.getRange(1, 1, valeurs.length, n);
+  var tout = grille_(f, valeurs.length, n).getRange(1, 1, valeurs.length, n);
   tout.setNumberFormat('@').setValues(valeurs).setWrap(true).setVerticalAlignment('top');
   f.getRange(1, 1, 1, n).setFontWeight('bold').setBackground('#1F4E78').setFontColor('#FFFFFF');
   f.setFrozenRows(1);
@@ -1236,6 +1243,7 @@ function ecrireOnglet_(nom, entetes, lignes, couleur, largeurs) {
  */
 function lireRapports_(max) {
   var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_FINS), nc = ENTETES_FINS.length;
+  grille_(f, 1, nc);
   if (f.getRange(1, 1, 1, nc).getDisplayValues()[0].join('|') !== ENTETES_FINS.join('|')) f.getRange(1, 1, 1, nc).setValues([ENTETES_FINS]).setFontWeight('bold');
   var n = f.getLastRow() - 1, essais = 0, lus = 0, aPlacer = [], techs = null;
   if (n < 1) return 0;
@@ -1272,7 +1280,8 @@ function lireRapports_(max) {
       try {
         var rep = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
         if (rep.getResponseCode() !== 200) throw new Error('réponse ' + rep.getResponseCode());
-        var c = champsRapport_(texteDuPdf_(Uint8Array.from(rep.getContent())));
+        var octets = Uint8Array.from(rep.getContent()), c = champsRapport_(texteDuPdf_(octets));
+        PDF_LUS_[url] = octets;   // pour l'analyse des photos, juste après
         var base = function (x) { return String(x).split('#')[0].toUpperCase(); };
         if (!c.num && !c.debut && !c.resume) champs = { 'Rapport lu': 'illisible' };
         else if (c.num && base(c.num) !== base(v[i][1])) champs = { 'Rapport lu': 'autre ticket' };
@@ -1289,6 +1298,7 @@ function lireRapports_(max) {
       }
     }
     champs['Technicien'] = v[i][ENTETES_FINS.indexOf('Technicien')] || technicien(v[i][1]);
+    [COL_PHOTOS, COL_PHOTOS_LE, COL_PHOTOS_AVIS].forEach(function (h) { champs[h] = v[i][ENTETES_FINS.indexOf(h)] || ''; });   // une relecture ne les efface pas
     // une valeur par colonne, de « Rapport lu » à la dernière, rangée par nom : ajouter une colonne ne décale rien
     f.getRange(i + 2, 8, 1, nc - 7).setNumberFormat('@').setValues([ENTETES_FINS.slice(7).map(function (h) { return texte_(champs[h] || ''); })]);
   }
@@ -1377,9 +1387,12 @@ function inflate_(src, debut) {
 var CP1252_ = { 128: 8364, 130: 8218, 131: 402, 132: 8222, 133: 8230, 134: 8224, 135: 8225, 136: 710, 137: 8240, 138: 352, 139: 8249, 140: 338, 142: 381,
   145: 8216, 146: 8217, 147: 8220, 148: 8221, 149: 8226, 150: 8211, 151: 8212, 152: 732, 153: 8482, 154: 353, 155: 8250, 156: 339, 158: 382, 159: 376 };
 
-/** Le texte d'un flux de contenu de page : une ligne par positionnement (Tm, Td, T*) ou par bloc BT. */
-function texteContenu_(octets) {
-  var n = octets.length, i = 0, lignes = [], ligne = '', attente = [];
+/**
+ * Le texte d'un flux de contenu de page : une ligne par positionnement (Tm, Td, T*) ou par bloc BT.
+ * images : ajoute une ligne « \u0001Nom » à chaque image dessinée (opérateur Do), là où elle est dans la page.
+ */
+function texteContenu_(octets, images) {
+  var n = octets.length, i = 0, lignes = [], ligne = '', attente = [], nom = '';
   function finLigne() { if (ligne.trim()) lignes.push(ligne.replace(/\s+/g, ' ').trim()); ligne = ''; }
   function car(c) { return String.fromCharCode(CP1252_[c] || c); }
   while (i < n) {
@@ -1406,20 +1419,22 @@ function texteContenu_(octets) {
     } else if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 39 || c === 34 || c === 42) {   // opérateur
       var j = i; while (j < n && ((octets[j] >= 65 && octets[j] <= 90) || (octets[j] >= 97 && octets[j] <= 122) || octets[j] === 42 || octets[j] === 39 || octets[j] === 34)) j++;
       var op = String.fromCharCode.apply(null, octets.slice(i, j)); i = j;
-      if (op === 'TJ' || op === 'Tj') ligne += attente.join('');
+      if (op === 'Do' && images) { finLigne(); lignes.push('\u0001' + nom); }
+      else if (op === 'TJ' || op === 'Tj') ligne += attente.join('');
       else if (op === "'" || op === '"') { finLigne(); ligne += attente.join(''); }
       else if (op === 'Tm' || op === 'Td' || op === 'TD' || op === 'T*' || op === 'BT' || op === 'ET') finLigne();
       attente = [];
     } else if (c === 47) {                            // /Nom
-      i++; while (i < n && octets[i] > 32 && octets[i] !== 47 && octets[i] !== 40 && octets[i] !== 91 && octets[i] !== 93 && octets[i] !== 60 && octets[i] !== 62) i++;
+      var d0 = ++i; while (i < n && octets[i] > 32 && octets[i] !== 47 && octets[i] !== 40 && octets[i] !== 91 && octets[i] !== 93 && octets[i] !== 60 && octets[i] !== 62) i++;
+      if (images) nom = String.fromCharCode.apply(null, octets.slice(d0, i));
     } else i++;
   }
   finLigne();
   return lignes.join('\n');
 }
 
-/** Tout le texte d'un PDF (Uint8Array), dans l'ordre du fichier. Renvoie '' si rien de lisible. */
-function texteDuPdf_(d) {
+/** Tout le texte d'un PDF (Uint8Array), dans l'ordre du fichier. Renvoie '' si rien de lisible. images : voir texteContenu_. */
+function texteDuPdf_(d, images) {
   function cherche(motif, depuis) {
     var m0 = motif.charCodeAt(0), L = motif.length;
     boucle: for (var p = depuis; p <= d.length - L; p++) {
@@ -1441,7 +1456,7 @@ function texteDuPdf_(d) {
     pos = fin + 9;
     if (dict.indexOf('/FlateDecode') < 0 || /\/Length1|\/XRef|\/Image|\/ObjStm|\/FontFile/.test(dict)) continue;
     try {
-      var contenu = inflate_(d, debut), t = texteContenu_(contenu);
+      var contenu = inflate_(d, debut), t = texteContenu_(contenu, images);
       if (t) pages.push(t);
     } catch (err) { /* flux illisible : ignoré */ }
   }
@@ -1518,6 +1533,410 @@ function champsRapport_(t) {
     nature: reponse(/Nature du défaut[^\n]*\n([^\n]+)/i),
     cause: reponse(/Cause du défaut[^\n]*\n([^\n]+)/i)
   };
+}
+
+// ---------- analyse des photos des rapports par l'IA (Claude, d'Anthropic) ----------
+// Facultatif : rien ne part tant que la clé API n'est pas enregistrée (menu Analyse des photos (IA)). Les photos de chaque
+// rapport lu partent par lots à l'API d'Anthropic (moitié prix ; réponse en quelques minutes, une heure au plus en général),
+// avec le strict nécessaire : horaires, commune, boîte et PM, réponses du rapport et compte-rendu sans n° de téléphone.
+// Verdict dans la colonne « Photos (IA) » : « OK (9 photos) — … » ou « NO OK — à vérifier : … ».
+
+var IA_MODELE = 'claude-opus-5-5';   // le modèle qui regarde les photos (moins cher : 'claude-sonnet-5-5' ou 'claude-haiku-5-5', voir IA_PRIX_LOT)
+var IA_EFFORT = 'medium';            // réflexion : low, medium (conseillé ici), high
+var IA_JOURS = 3;                    // seuls les rapports reçus ces 3 derniers jours partent (pas tout l'historique)
+var IA_PAR_PASSAGE = 6;              // rapports envoyés à chaque passage (toutes les 5 minutes)
+var IA_MAX_PAR_JOUR = 80;            // garde-fou sur le coût
+var IA_PHOTOS_MAX = 16;              // photos regardées par rapport, au plus (les premières du rapport)
+var IA_PRIX_LOT = { 'claude-opus-5-5': [2, 10], 'claude-sonnet-5-5': [1, 5], 'claude-haiku-5-5': [0.05, 0.25] };   // $ par million de jetons (entrée, sortie), prix des lots
+var IA_API = 'https://api.anthropic.com', IA_VERSION = '2026-10-21';
+var PDF_LUS_ = {};                   // rapports téléchargés pendant ce passage (lireRapports_), pour ne pas les retélécharger
+
+var IA_CONSIGNES_ = [
+  "Tu fais le contrôle qualité des interventions de maintenance sur un réseau de fibre optique FTTH (Grand Nancy), à partir des photos que le technicien a mises dans son rapport d'intervention Praxedo. Ton verdict est lu par la personne qui pilote l'activité : « OK » valide l'intervention, « A_VERIFIER » lui demande de regarder elle-même les photos.",
+  "",
+  "Ce que montrent les photos d'habitude : boîtiers ouverts (PBO, BPE, BPI) avec leurs cassettes d'épissure, laser rouge pour repérer une fibre, réflectomètre, étiquettes de câble, armoires de PM avec tiroirs optiques et jarretières, câbles, chambres et poteaux. Chaque photo porte en général la date, l'heure, les coordonnées GPS et l'adresse.",
+  "",
+  "Une photo prise pendant le travail est normale : boîtier ou cassette ouverts, laser allumé, fibres en cours de soudure, outils posés. Ne le compte pas comme un problème.",
+  "",
+  "Relève seulement ce qu'un chef d'équipe voudrait faire corriger ou vérifier :",
+  "- fibres ou surlongueurs qui traînent hors des cassettes ou des guides, lovage absent ou en vrac, fibre pincée, écrasée, cassée ou trop pliée, protection d'épissure hors de son logement ;",
+  "- sur une photo de fin de travail : cassette ou boîtier mal refermés, capot absent, câble mal fixé, boîtier abîmé ;",
+  "- au PM : jarretières en vrac, qui pendent devant les tiroirs ou gênent l'accès, surlongueurs non rangées dans les guides, connecteur sans bouchon ;",
+  "- étiquette absente ou illisible sur la photo d'étiquette ;",
+  "- dommage visible sur le réseau (boîtier cassé, câble arraché, poteau ou chambre abîmés) ;",
+  "- photo qui ne correspond pas à sa rubrique, ou trop floue ou trop sombre pour juger ce qu'elle devait montrer ;",
+  "- photos qui contredisent le compte-rendu du technicien.",
+  "",
+  "Gravité : « fort » pour ce qui peut provoquer une panne ou une non-conformité nette ; « moyen » pour un travail peu soigné à reprendre ou un doute réel ; « faible » pour une simple remarque (photo floue sans importance, pas de photo du travail terminé, même photo dans deux rubriques). Verdict A_VERIFIER s'il y a au moins un problème fort ou moyen, sinon OK.",
+  "",
+  "Reste factuel : décris ce que tu vois, sans supposer ce qui est hors de la photo. Si une photo est trop petite ou trop floue pour trancher sur un point important, dis-le en « moyen » plutôt que de deviner. N'invente pas de problème : beaucoup d'interventions sont simplement OK.",
+  "",
+  "Numérote les photos comme dans le message (photo 1, photo 2…). Pour chacune, recopie la date, l'heure et les coordonnées GPS imprimées dessus, chiffre par chiffre ; laisse vide ce que tu ne lis pas avec certitude. Écris en français, avec les mots du métier (cassette, lovage, jarretière, tiroir, PBO, BPE, PM)."
+].join('\n');
+
+var IA_SCHEMA_ = {
+  type: 'object', additionalProperties: false, required: ['verdict', 'resume', 'problemes', 'photos'],
+  properties: {
+    verdict: { type: 'string', enum: ['OK', 'A_VERIFIER'] },
+    resume: { type: 'string', description: 'Une phrase courte en français pour la personne qui pilote l\'activité (25 mots au plus)' },
+    problemes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['photo', 'gravite', 'probleme'], properties: {
+      photo: { type: 'integer', description: 'N° de la photo concernée, 0 si cela concerne tout le rapport' },
+      gravite: { type: 'string', enum: ['fort', 'moyen', 'faible'] },
+      probleme: { type: 'string', description: 'Ce qui ne va pas, en quelques mots concrets (15 mots au plus)' } } } },
+    photos: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['photo', 'contenu', 'horodatage', 'gps'], properties: {
+      photo: { type: 'integer' },
+      contenu: { type: 'string', description: 'Ce que montre la photo, en quelques mots' },
+      horodatage: { type: 'string', description: 'Date et heure imprimées sur la photo, au format AAAA-MM-JJ HH:MM, ou chaîne vide si rien de lisible' },
+      gps: { type: 'string', description: 'Coordonnées imprimées sur la photo en degrés décimaux « latitude longitude » (ex. 48.66455 6.20019), ou chaîne vide' } } } }
+  }
+};
+
+/**
+ * Les photos d'un rapport PDF (Uint8Array) : les images JPEG dans l'ordre du rapport, chacune avec la ou les rubriques
+ * où le technicien l'a mise (« Photo du défaut », « Photo de la réparation mise en place »…). Les logos, les petites
+ * images et les formats que l'IA ne lit pas (CMYK, JPEG 2000) sont laissés de côté.
+ * → [{ octets (Uint8Array), largeur, hauteur, rubriques: [] }]
+ */
+function photosDuPdf_(d) {
+  var s = '', T = 8192;
+  for (var k = 0; k < d.length; k += T) s += String.fromCharCode.apply(null, d.subarray(k, k + T));
+  // les objets « N 0 obj << … /Subtype /Image … /DCTDecode … >> stream … endstream »
+  var images = {}, ordreFichier = [], reObj = /(\d+)\s+\d+\s+obj\b/g, m;
+  while ((m = reObj.exec(s))) {
+    var dd = reObj.lastIndex, e0 = s.indexOf('endobj', dd), st = s.indexOf('stream', dd);
+    if (st < 0 || (e0 >= 0 && e0 < st)) continue;
+    var es = s.indexOf('endstream', st + 6);
+    if (es < 0) break;
+    reObj.lastIndex = es + 9;   // on saute les données (binaires)
+    var dict = s.slice(dd, st);
+    if (!/\/Subtype\s*\/Image/.test(dict) || !/\/DCTDecode/.test(dict) || /\/JPXDecode|\/DeviceCMYK/.test(dict)) continue;
+    var a = st + 6; if (d[a] === 13) a++; if (d[a] === 10) a++;
+    var b = es; while (b > a && (d[b - 1] === 10 || d[b - 1] === 13 || d[b - 1] === 32)) b--;
+    var w = +((/\/Width\s+(\d+)/.exec(dict) || [])[1] || 0), h = +((/\/Height\s+(\d+)/.exec(dict) || [])[1] || 0);
+    if (d[a] !== 0xFF || d[a + 1] !== 0xD8 || w < 120 || h < 120 || w * h < 40000 || Math.max(w, h) > 4 * Math.min(w, h)) continue;
+    images[m[1]] = { debut: a, fin: b, largeur: w, hauteur: h };
+    ordreFichier.push(m[1]);
+  }
+  // le nom de chaque image dans les pages (/X5 25 0 R) ; un même nom pour deux images : l'ordre du fichier suffira
+  var noms = {}, doublon = false, rx = /\/XObject\s*<<([^>]*)>>/g, mx;
+  while ((mx = rx.exec(s))) {
+    var rn = /\/([^\s\/<>\[\]()]+)\s+(\d+)\s+\d+\s+R/g, mn;
+    while ((mn = rn.exec(mx[1]))) { if (noms[mn[1]] && noms[mn[1]] !== mn[2]) doublon = true; noms[mn[1]] = mn[2]; }
+  }
+  var photos = [], parNum = {};
+  function ajouter(num, rubrique) {
+    var im = images[num];
+    if (!im) return;
+    var p = parNum[num];
+    if (!p) { p = parNum[num] = { octets: d.subarray(im.debut, im.fin), largeur: im.largeur, hauteur: im.hauteur, rubriques: [] }; photos.push(p); }
+    if (rubrique && p.rubriques.indexOf(rubrique) < 0) p.rubriques.push(rubrique);
+  }
+  if (!doublon && ordreFichier.length) {
+    // dans le texte des pages, la rubrique (« Photo de l'étiquette ») vient juste avant son image
+    var rubrique = '', depuis = -9;
+    texteDuPdf_(d, true).split('\n').forEach(function (l, i) {
+      if (l.charAt(0) === '\u0001') { ajouter(noms[l.slice(1)], i - depuis <= 3 ? rubrique : ''); rubrique = ''; }
+      else if (/^Photos?\b/i.test(l)) { rubrique = l.trim(); depuis = i; }
+      else if (rubrique && i - depuis <= 2 && l.length <= 40 && /^[a-zà-ÿ(]/.test(l)) rubrique += ' ' + l.trim();   // libellé sur deux lignes
+    });
+  }
+  ordreFichier.forEach(function (num) { ajouter(num, ''); });
+  return photos;
+}
+
+/** Les paramètres d'une demande d'analyse (Messages API) pour une ligne de l'onglet Fins et ses photos. */
+function requetePhotos_(r, photos) {
+  var E = ENTETES_FINS, g = function (nom) { return String(r[E.indexOf(nom)] || '').trim(); };
+  var tel = /(?:\+33\s?|0)[1-9](?:[ .-]?\d{2}){4}/g, mail = /[^\s@]+@[^\s@]+\.[a-z]{2,}/gi;
+  var debut = g('Début'), fin = g('Fin');
+  var autres = g('Autres éléments du rapport').split(' · ').filter(function (x) { return x && !/^(référence client|PTO)\b/i.test(x); }).join(' · ');
+  var contexte = ["Rapport d'intervention de maintenance fibre (FTTH).",
+    'Sur place : ' + (debut ? 'le ' + debut.slice(0, 10) + ' de ' + debut.slice(11) + ' à ' + (fin.slice(0, 10) === debut.slice(0, 10) ? fin.slice(11) : fin) : 'horaires inconnus') +
+      (g('Commune') ? ' · commune : ' + g('Commune') : ''),
+    'Boîte(s) : ' + (g('Boîte(s)') || 'non précisée') + ' · PM (site) : ' + (g('PM (site)') || 'non précisé'),
+    'Défaut corrigé : ' + (g('Défaut corrigé') || '?') + ' · réparation définitive : ' + (g('Réparation définitive') || '?') +
+      (g('Nature du défaut') ? ' · nature : ' + g('Nature du défaut') : '') + (g('Cause du défaut') ? ' · cause : ' + g('Cause du défaut') : ''),
+    autres ? 'Autres réponses du rapport : ' + autres : '',
+    'Compte-rendu du technicien : « ' + (g('Compte-rendu du technicien').replace(tel, '[tél.]').replace(mail, '[mail]').slice(0, 1500) || '(vide)') + ' »',
+    'Le rapport contient ' + photos.length + ' photo' + (photos.length > 1 ? 's' : '') + ', dans son ordre. La rubrique où le technicien a mis chaque photo est indiquée juste avant elle.'
+  ].filter(function (x) { return x; }).join('\n');
+  var blocs = [{ type: 'text', text: contexte }];
+  photos.forEach(function (p, i) {
+    blocs.push({ type: 'text', text: 'Photo ' + (i + 1) + ' — ' + (p.rubriques.length ? 'rubrique « ' + p.rubriques.join(' » et « ') + ' »' : 'rubrique inconnue') });
+    blocs.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: Utilities.base64Encode(signes_(p.octets)) } });
+  });
+  blocs.push({ type: 'text', text: 'Donne ton verdict sur ces photos.' });
+  return { model: IA_MODELE, max_tokens: 16000, system: IA_CONSIGNES_, messages: [{ role: 'user', content: blocs }],
+           output_config: { effort: IA_EFFORT, format: { type: 'json_schema', schema: IA_SCHEMA_ } } };
+}
+
+/** Un appel à l'API d'Anthropic. corps : objet envoyé en JSON (POST), sinon GET. → { code, json, texte } */
+function appelIA_(chemin, cle, corps) {
+  var o = { method: corps ? 'post' : 'get', muteHttpExceptions: true, headers: { 'x-api-key': cle, 'anthropic-version': IA_VERSION } };
+  if (corps) { o.contentType = 'application/json'; o.payload = JSON.stringify(corps); }
+  var r = UrlFetchApp.fetch(IA_API + chemin, o), texte = r.getContentText(), json = null;
+  try { json = JSON.parse(texte); } catch (err) { /* résultats d'un lot : une réponse JSON par ligne */ }
+  return { code: r.getResponseCode(), json: json, texte: texte };
+}
+
+/** Le message d'erreur d'une réponse de l'API, en clair. */
+function erreurIA_(res) {
+  var m = res.json && res.json.error ? String(res.json.error.message || res.json.error.type || '') : String(res.texte || '').slice(0, 200);
+  if (res.code === 401) return 'clé refusée (vérifiez-la dans la console Anthropic, rubrique API keys)';
+  if (/credit balance/i.test(m)) return 'plus de crédit sur le compte Anthropic : ajoutez-en dans la console (rubrique Billing)';
+  if (res.code === 404) return 'modèle ' + IA_MODELE + ' introuvable pour ce compte (' + m + ')';
+  if (res.code === 429 || res.code === 529) return 'service occupé, nouvel essai au prochain passage (' + m + ')';
+  return 'erreur ' + res.code + ' : ' + m;
+}
+
+function noterErreurIA_(texte) {
+  PropertiesService.getScriptProperties().setProperty('IA_ERREUR', Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm') + ' : ' + texte);
+}
+
+/**
+ * Le texte de la colonne « Photos (IA) », d'après la réponse de l'IA et deux contrôles faits ici : les photos sont-elles
+ * datées du jour de l'intervention, et prises à moins de 5 km de l'adresse ? r : ligne de l'onglet Fins, n : nombre de
+ * photos regardées, geo : { lat, lon } de l'adresse du rapport, ou null.
+ */
+function verdictPhotos_(rep, n, r, geo) {
+  var E = ENTETES_FINS, P = [], J = 86400000;
+  // les valeurs d'une liste fixe peuvent revenir avec d'autres majuscules : comparées en minuscules
+  (rep.problemes || []).forEach(function (p) { var t = String(p.probleme || '').trim(); if (t) P.push({ photo: +p.photo || 0, g: String(p.gravite || '').toLowerCase(), t: t }); });
+  function date(v) { var m = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2})/.exec(String(v || '')); return m ? new Date(+m[3], m[2] - 1, +m[1], +m[4], +m[5]) : null; }
+  function jour(x) { return Utilities.formatDate(x, 'Europe/Paris', 'dd/MM/yyyy'); }
+  var debut = date(r[E.indexOf('Début')]), fin = date(r[E.indexOf('Fin')]) || debut, autreJour = [], loin = [];
+  (rep.photos || []).forEach(function (ph) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/.exec(String(ph.horodatage || '').trim());
+    if (m && debut) {
+      var q = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]), j0 = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate()), j1 = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate() + 1);
+      if (q < j0 || q >= j1) autreJour.push([ph.photo, q]);
+      else if (q < debut - 2 * 3600000 || q > fin.getTime() + 2 * 3600000) P.push({ photo: ph.photo, g: 'faible', t: 'prise à ' + m[4] + ':' + m[5] + ', loin des horaires déclarés' });
+    }
+    var c = /(-?\d{1,2}[.,]\d{3,})\D+?(-?\d{1,3}[.,]\d{3,})/.exec(String(ph.gps || ''));
+    if (c && geo) {
+      var la = +c[1].replace(',', '.'), lo = +c[2].replace(',', '.'), R = Math.PI / 180;
+      var x = Math.pow(Math.sin((la - geo.lat) * R / 2), 2) + Math.cos(la * R) * Math.cos(geo.lat * R) * Math.pow(Math.sin((lo - geo.lon) * R / 2), 2);
+      var km = 6371 * 2 * Math.asin(Math.sqrt(x));
+      if (km > 5) loin.push([ph.photo, km]);
+    }
+  });
+  if (autreJour.length) P.push({ photo: autreJour.length === 1 ? autreJour[0][0] : 0, g: autreJour.length > 1 ? 'fort' : 'moyen',
+    t: (autreJour.length === 1 ? 'datée du ' + jour(autreJour[0][1]) : autreJour.length + ' photos datées d\'un autre jour (' +
+      autreJour.map(function (a) { return jour(a[1]); }).filter(function (v, i, l) { return l.indexOf(v) === i; }).join(', ') + ')') +
+      (debut ? ', intervention du ' + jour(debut) : '') + (autreJour.length > 1 ? ' : photos d\'une autre intervention ?' : '') });
+  if (loin.length) P.push({ photo: loin.length === 1 ? loin[0][0] : 0, g: 'moyen', t: (loin.length === 1 ? 'prise à ' : loin.length + ' photos prises à ') +
+    Math.round(Math.max.apply(null, loin.map(function (l) { return l[1]; }))) + ' km de l\'adresse du rapport' });
+  var lib = function (p) { return (p.photo ? 'photo ' + p.photo + ' : ' : '') + p.t + (p.g === 'fort' ? ' (important)' : ''); };
+  var graves = P.filter(function (p) { return p.g === 'fort'; }).concat(P.filter(function (p) { return p.g === 'moyen'; })), faibles = P.filter(function (p) { return p.g !== 'fort' && p.g !== 'moyen'; });
+  var resume = String(rep.resume || '').trim(), nb = n + ' photo' + (n > 1 ? 's' : '');
+  var t = /^a_v[ée]rifier$/i.test(String(rep.verdict || '').trim()) || graves.length
+    ? 'NO OK — à vérifier (' + nb + ') : ' + (graves.length ? graves.map(lib).join(' · ') : resume || faibles.map(lib).join(' · '))
+    : 'OK (' + nb + ') — ' + (resume || 'rien à signaler') + (faibles.length ? ' · remarque : ' + faibles.map(lib).join(' ; ') : '');
+  return t.length > 900 ? t.slice(0, 897) + '…' : t;
+}
+
+/** Le texte de la colonne « Photos (IA) » pour un résultat de lot (voir la doc Message Batches). k : erreurs déjà comptées. */
+function resultatPhotos_(res, r, n, geo, k) {
+  var essai = function (pourquoi) { return 'erreur ' + (k + 1) + ' : ' + pourquoi; };
+  if (!res || res.type === 'canceled' || res.type === 'expired') return essai('analyse non faite (lot ' + (res ? res.type : 'perdu') + ')');
+  if (res.type === 'errored') {
+    var e = JSON.stringify(res.error || {});
+    return /invalid_request/.test(e) ? 'À vérifier à la main — photos refusées par l\'IA (' + ((/"message":"([^"]{0,150})/.exec(e) || [])[1] || 'requête invalide') + ')' : essai('erreur du service');
+  }
+  var msg = res.message || {};
+  if (msg.stop_reason === 'refusal') return 'À vérifier à la main — l\'IA n\'a pas voulu analyser ces photos';
+  if (msg.stop_reason === 'max_tokens') return essai('réponse coupée');
+  var bloc = (msg.content || []).filter(function (b) { return b.type === 'text'; })[0], rep = null;
+  try { rep = JSON.parse(bloc.text); } catch (err) { return essai('réponse illisible'); }
+  return verdictPhotos_(rep, n, r, geo);
+}
+
+/**
+ * À chaque passage (déclencheur), si une clé est enregistrée : récupère les lots terminés et écrit leurs verdicts,
+ * puis envoie les photos des derniers rapports lus. → { recus, envoyes, sansPhoto, attente } ou null (pas activé, occupé).
+ */
+function analyserPhotos_(force) {
+  var cle = PropertiesService.getUserProperties().getProperty('CLE_ANTHROPIC');
+  if (!cle) return null;
+  var verrou = LockService.getDocumentLock();   // pas celui de la lecture des mails : la carte n'attend pas
+  if (!verrou || !verrou.tryLock(5000)) return null;
+  try {
+    var b = { recus: 0, envoyes: 0, sansPhoto: 0, attente: 0 };
+    recupererLotsIA_(cle, b);
+    envoyerLotIA_(cle, b, force);
+    if (b.recus) PropertiesService.getScriptProperties().deleteProperty('CONTROLES_LE');   // onglet Qualité refait au passage suivant
+    return b;
+  } finally { verrou.releaseLock(); }
+}
+
+function envoyerLotIA_(cle, b, force) {
+  var props = PropertiesService.getScriptProperties(), f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_FINS);
+  var n = f ? f.getLastRow() - 1 : 0, E = ENTETES_FINS, iP = E.indexOf(COL_PHOTOS), aujourd = Utilities.formatDate(new Date(), 'Europe/Paris', 'yyyy-MM-dd');
+  if (n < 1) return;
+  grille_(f, 1, E.length);
+  // après un refus (clé, crédit, service occupé) : pause, pour ne pas retélécharger les rapports toutes les 5 minutes
+  if (!force && Date.now() < +(props.getProperty('IA_PAUSE') || 0)) return;
+  var compte = JSON.parse(props.getProperty('IA_JOUR') || '{}');
+  if (compte.jour !== aujourd) compte = { jour: aujourd, n: 0 };
+  var place = Math.min(IA_PAR_PASSAGE, IA_MAX_PAR_JOUR - compte.n);
+  if (place <= 0) return;
+  // les 8 premières colonnes et le verdict suffisent pour choisir ; la ligne entière n'est lue que pour les rapports choisis
+  var v = f.getRange(2, 1, n, 8).getDisplayValues(), vp = f.getRange(2, iP + 1, n, 1).getDisplayValues();
+  var limite = new Date(), requetes = [], suivis = [], debut = Date.now();
+  limite.setHours(0, 0, 0, 0); limite.setDate(limite.getDate() - IA_JOURS + 1);   // aujourd'hui et les 2 jours d'avant
+  for (var i = n - 1; i >= 0 && requetes.length < place && Date.now() - debut < 60000; i--) {   // les plus récents d'abord
+    var r = v[i], etat = vp[i][0], k = +((/^erreur (\d)/.exec(etat) || [])[1] || 0);
+    if (r[7] !== 'oui' || !r[6] || (etat && !(k && k < 3))) continue;
+    var m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(r[0]);
+    if (!m || new Date(+m[3], m[2] - 1, +m[1]) < limite) continue;
+    if (!/^https:\/\/([a-z0-9-]+\.)*praxedo\.com\//i.test(r[4])) continue;   // on n'ouvre que les liens de Praxedo
+    var ecrire = function (ligne, txt) { f.getRange(ligne + 2, iP + 1, 1, 2).setNumberFormat('@').setValues([[texte_(txt), Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm')]]); };
+    try {
+      var octets = PDF_LUS_[r[4]];   // déjà téléchargé par lireRapports_ pendant ce passage ?
+      if (!octets) {
+        var rep = UrlFetchApp.fetch(r[4], { muteHttpExceptions: true });
+        if (rep.getResponseCode() !== 200) throw new Error('rapport non téléchargé (réponse ' + rep.getResponseCode() + ')');
+        octets = Uint8Array.from(rep.getContent());
+      }
+      var photos = photosDuPdf_(octets);
+      if (!photos.length) { ecrire(i, 'Sans photo — le rapport ne contient aucune photo'); b.sansPhoto++; continue; }
+      var id = ('p' + i + '_' + String(r[6]).replace(/[^A-Za-z0-9_-]/g, '')).slice(0, 64);
+      requetes.push({ custom_id: id, params: requetePhotos_(f.getRange(i + 2, 1, 1, E.length).getDisplayValues()[0], photos.slice(0, IA_PHOTOS_MAX)) });
+      suivis.push({ id: id, mail: r[6], ligne: i, n: Math.min(photos.length, IA_PHOTOS_MAX), k: k });
+    } catch (err) {
+      console.warn('Photos ' + r[1] + ' : ' + err);
+      ecrire(i, 'erreur ' + (k + 1) + ' : ' + String(err.message || err).slice(0, 150));
+    }
+  }
+  if (!requetes.length) return;
+  var res = appelIA_('/v1/messages/batches', cle, { requests: requetes });
+  if (res.code !== 200 || !res.json || !res.json.id) {   // renvoyés après la pause
+    noterErreurIA_(erreurIA_(res));
+    props.setProperty('IA_PAUSE', String(Date.now() + (res.code === 429 || res.code >= 500 ? 15 : 60) * 60000));
+    return;
+  }
+  props.deleteProperty('IA_PAUSE');
+  var lots = JSON.parse(props.getProperty('IA_LOTS') || '[]');
+  lots.push({ id: res.json.id, le: Date.now(), r: suivis.map(function (s) { return [s.id, s.mail, s.n, s.k]; }) });
+  props.setProperty('IA_LOTS', JSON.stringify(lots));
+  compte.n += requetes.length;
+  props.setProperty('IA_JOUR', JSON.stringify(compte));
+  props.deleteProperty('IA_ERREUR');
+  var quand = Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm');
+  suivis.forEach(function (s) { f.getRange(s.ligne + 2, iP + 1, 1, 2).setNumberFormat('@').setValues([["en cours d'analyse", quand]]); });
+  b.envoyes += requetes.length;
+}
+
+function recupererLotsIA_(cle, b) {
+  var props = PropertiesService.getScriptProperties(), lots = JSON.parse(props.getProperty('IA_LOTS') || '[]');
+  if (!lots.length) return;
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), f = grille_(ss.getSheetByName(ONGLET_FINS), 1, ENTETES_FINS.length), E = ENTETES_FINS, iP = E.indexOf(COL_PHOTOS);
+  var v = null, ligneDe = {}, geo = null, restants = [], conso = { n: 0, entree: 0, sortie: 0 };
+  function lire() {   // l'onglet, relu une fois : les lignes ont pu bouger (tri, ajout)
+    if (v) return;
+    v = f.getRange(2, 1, Math.max(f.getLastRow() - 1, 1), E.length).getDisplayValues();
+    v.forEach(function (r, i) { if (r[6]) ligneDe[r[6]] = i; });
+    geo = {};
+    var fa = ss.getSheetByName(ONGLET_ADRESSES);
+    if (fa) fa.getDataRange().getValues().slice(1).forEach(function (r) { if (r[1] !== '' && r[2] !== '') geo[r[0]] = { lat: +r[1], lon: +r[2] }; });
+  }
+  function ecrire(s, texte) {
+    lire();
+    var i = ligneDe[s[1]];
+    if (i == null) return;
+    f.getRange(i + 2, iP + 1, 1, 2).setNumberFormat('@').setValues([[texte_(texte), Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm')]]);
+    if (!/^erreur/.test(texte)) b.recus++;   // les erreurs repartent au passage suivant
+  }
+  lots.forEach(function (lot) {
+    var st = appelIA_('/v1/messages/batches/' + lot.id, cle);
+    var perdu = st.code === 404 || (st.code === 200 && st.json && st.json.processing_status !== 'ended' && Date.now() - lot.le > 30 * 3600000);
+    if (perdu) { lot.r.forEach(function (s) { ecrire(s, resultatPhotos_(null, null, 0, null, s[3])); }); return; }
+    if (st.code !== 200 || !st.json || st.json.processing_status !== 'ended') {
+      if (st.code !== 200) noterErreurIA_(erreurIA_(st));
+      restants.push(lot); b.attente += lot.r.length; return;
+    }
+    var res = appelIA_('/v1/messages/batches/' + lot.id + '/results', cle);
+    if (res.code !== 200) { noterErreurIA_(erreurIA_(res)); restants.push(lot); return; }
+    var vus = {};
+    res.texte.split('\n').forEach(function (l) {
+      var x = null;
+      try { x = l.trim() ? JSON.parse(l) : null; } catch (err) { x = null; }
+      var s = x && lot.r.filter(function (y) { return y[0] === x.custom_id; })[0];
+      if (!s) return;
+      vus[s[0]] = 1;
+      lire();
+      var r = v[ligneDe[s[1]]], u = x.result && x.result.message && x.result.message.usage;
+      if (u) { conso.n++; conso.entree += (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0); conso.sortie += u.output_tokens || 0; }
+      if (r) ecrire(s, resultatPhotos_(x.result, r, s[2], geo[r[E.indexOf('Adresse')]] || null, s[3]));
+    });
+    lot.r.forEach(function (s) { if (!vus[s[0]]) ecrire(s, resultatPhotos_(null, null, 0, null, s[3])); });
+  });
+  props.setProperty('IA_LOTS', JSON.stringify(restants));
+  if (conso.n) {
+    var mois = Utilities.formatDate(new Date(), 'Europe/Paris', 'yyyy-MM'), c = JSON.parse(props.getProperty('IA_CONSO') || '{}');
+    if (c.mois !== mois) c = { mois: mois, rapports: 0, entree: 0, sortie: 0 };
+    c.rapports += conso.n; c.entree += conso.entree; c.sortie += conso.sortie;
+    props.setProperty('IA_CONSO', JSON.stringify(c));
+    props.deleteProperty('IA_ERREUR');
+  }
+}
+
+/** L'état de l'analyse des photos : { actif, erreur, attente, mois: { rapports, cout ($) } }. */
+function etatIA_() {
+  var props = PropertiesService.getScriptProperties(), c = JSON.parse(props.getProperty('IA_CONSO') || '{}'), prix = IA_PRIX_LOT[IA_MODELE] || [0, 0];
+  var mois = Utilities.formatDate(new Date(), 'Europe/Paris', 'yyyy-MM'), lots = JSON.parse(props.getProperty('IA_LOTS') || '[]');
+  var actif = false;
+  try { actif = !!PropertiesService.getUserProperties().getProperty('CLE_ANTHROPIC'); } catch (err) { /* autre compte */ }
+  return { actif: actif, erreur: actif ? props.getProperty('IA_ERREUR') || '' : '', attente: lots.reduce(function (a, l) { return a + l.r.length; }, 0),
+           mois: c.mois === mois ? { rapports: c.rapports, cout: (c.entree * prix[0] + c.sortie * prix[1]) / 1e6 } : { rapports: 0, cout: 0 } };
+}
+
+/** Un essai, avec la vraie forme des demandes (sans photo) : la clé, le crédit et le modèle. → { ok, message } */
+function testerCleIA_(cle) {
+  var res = appelIA_('/v1/messages', cle, { model: IA_MODELE, max_tokens: 4000, system: IA_CONSIGNES_,
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'Essai de réglage, sans photo : réponds OK, avec « essai » comme résumé et des listes vides.' }] }],
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: IA_SCHEMA_ } } });
+  if (res.code !== 200 || !res.json) return { ok: false, message: erreurIA_(res) };
+  var bloc = (res.json.content || []).filter(function (x) { return x.type === 'text'; })[0];
+  try { JSON.parse(bloc.text); } catch (err) { return { ok: false, message: 'réponse inattendue (' + (res.json.stop_reason || '?') + ')' }; }
+  return { ok: true, message: '' };
+}
+
+/** Menu « Analyse des photos (IA) → Activer, voir le coût… » : la clé API (gardée dans les propriétés du propriétaire), l'état, le coût. */
+function reglerPhotosIA() {
+  proprietaire_();
+  var ui = SpreadsheetApp.getUi(), up = PropertiesService.getUserProperties(), e = etatIA_();
+  var etat = e.actif ? 'Activée (' + IA_MODELE + '). Ce mois-ci : ' + e.mois.rapports + ' rapport' + (e.mois.rapports > 1 ? 's' : '') + ' analysé' + (e.mois.rapports > 1 ? 's' : '') +
+      ', coût estimé ' + e.mois.cout.toFixed(2).replace('.', ',') + ' $.' + (e.attente ? ' En cours : ' + e.attente + '.' : '') + (e.erreur ? '\nDernier problème : ' + e.erreur : '')
+    : "Pas activée. Les photos de chaque rapport lu partiraient à l'API d'Anthropic (Claude), qui répond OK ou NO OK — à vérifier.";
+  var r = ui.prompt('Analyse des photos par l\'IA', etat + '\n\n' + (e.actif ? 'Pour changer de clé, collez la nouvelle. Pour arrêter l\'analyse, tapez STOP.'
+    : 'Pour l\'activer, collez votre clé API Anthropic (elle commence par sk-ant-).'), ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var t = r.getResponseText().trim();
+  if (!t) return;
+  if (/^stop$/i.test(t)) { up.deleteProperty('CLE_ANTHROPIC'); ui.alert("Analyse des photos arrêtée. Les verdicts déjà écrits restent dans l'onglet Fins d'intervention."); return; }
+  if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(t)) { ui.alert("Ce n'est pas une clé API Anthropic : elle commence par sk-ant-."); return; }
+  var test = testerCleIA_(t);
+  if (!test.ok) { ui.alert('La clé ne marche pas : ' + test.message); return; }
+  up.setProperty('CLE_ANTHROPIC', t);
+  PropertiesService.getScriptProperties().deleteProperty('IA_ERREUR');
+  PropertiesService.getScriptProperties().deleteProperty('IA_PAUSE');
+  ui.alert("C'est activé. Les rapports lus ces " + IA_JOURS + " derniers jours partent au prochain passage (5 minutes), puis chaque nouveau rapport. " +
+    "Les verdicts arrivent en général en moins d'une heure dans la colonne « Photos (IA) » de l'onglet Fins d'intervention, dans l'onglet Qualité et dans le rapport du soir.");
+}
+
+/** Menu « Analyse des photos (IA) → Analyser maintenant » : un passage tout de suite. Réservé au propriétaire. */
+function analyserPhotosMaintenant() {
+  proprietaire_();
+  var ui = SpreadsheetApp.getUi(), b = analyserPhotos_(true);
+  if (!b) { ui.alert(etatIA_().actif ? 'Une analyse est déjà en cours : réessayez dans une minute.' : "L'analyse des photos n'est pas activée (menu Analyse des photos (IA) → Activer…)."); return; }
+  var e = etatIA_();
+  ui.alert([b.recus ? b.recus + ' verdict' + (b.recus > 1 ? 's' : '') + ' écrit' + (b.recus > 1 ? 's' : '') + ' dans la colonne « Photos (IA) ».' : '',
+    b.envoyes ? b.envoyes + ' rapport' + (b.envoyes > 1 ? 's' : '') + ' envoyé' + (b.envoyes > 1 ? 's' : '') + ' à l\'analyse : réponse en général en moins d\'une heure.' : '',
+    b.sansPhoto ? b.sansPhoto + ' rapport' + (b.sansPhoto > 1 ? 's' : '') + ' sans photo.' : '',
+    b.attente ? b.attente + ' rapport' + (b.attente > 1 ? 's' : '') + ' en cours d\'analyse.' : '',
+    e.erreur ? 'Problème : ' + e.erreur : '',
+    !b.recus && !b.envoyes && !b.sansPhoto && !b.attente && !e.erreur ? 'Rien de nouveau à analyser.' : ''].filter(function (x) { return x; }).join('\n'));
 }
 
 // ---------- outils ----------
@@ -1608,10 +2027,22 @@ function ligneCreation_(objet, corps, recu, id) {
           adresse, cp, ville, champ('nom client'), desc, id];
 }
 
+/**
+ * Agrandit la grille d'un onglet avant d'y écrire jusqu'à la ligne « lignes » et la colonne « colonnes » : un onglet neuf
+ * n'a que 1 000 lignes et 26 colonnes (A à Z), et Google refuse d'écrire au-delà.
+ */
+function grille_(f, lignes, colonnes) {
+  var ml = f.getMaxRows(), mc = f.getMaxColumns();
+  if (lignes > ml) f.insertRowsAfter(ml, lignes - ml + 200);
+  if (colonnes > mc) f.insertColumnsAfter(mc, colonnes - mc);
+  return f;
+}
+
 function feuille_(nom, entetes) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), f = ss.getSheetByName(nom);
   if (!f) {
     f = ss.insertSheet(nom);
+    grille_(f, 1, entetes.length);
     f.getRange(1, 1, 1, entetes.length).setValues([entetes]).setFontWeight('bold');
     f.setFrozenRows(1);
     f.getRange('A:Z').setNumberFormat('@');
@@ -1642,7 +2073,7 @@ function geocoder_(adresses) {
                        : [lot[j], '', '', '', '', '', '', '']);
     });
   }
-  if (lignes.length) f.getRange(f.getLastRow() + 1, 1, lignes.length, ENTETES_ADRESSES.length).setValues(lignes.map(function (l) { return l.map(texte_); }));
+  if (lignes.length) grille_(f, f.getLastRow() + lignes.length, ENTETES_ADRESSES.length).getRange(f.getLastRow() + 1, 1, lignes.length, ENTETES_ADRESSES.length).setValues(lignes.map(function (l) { return l.map(texte_); }));
   return lignes.length;
 }
 
