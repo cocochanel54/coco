@@ -2035,11 +2035,18 @@ function acces_() {
            mailsAnnul: mails.filter(function (m) { return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(m); }) };
 }
 
-/** Bloque les fonctions qui modifient le Sheet quand elles ne sont pas lancées par son propriétaire (depuis le Sheet ou l'éditeur). */
+/**
+ * Bloque les fonctions des menus quand elles ne sont pas lancées par le propriétaire du Sheet lui-même : ni depuis la carte
+ * (qui tourne avec le compte du propriétaire), ni par une personne à qui le Sheet est partagé (le menu tournerait avec son
+ * compte : sa boîte mail, ses envois).
+ */
 function proprietaire_() {
-  var actif = '', moi = '';
+  var actif = '', moi = '', proprio = '';
   try { actif = Session.getActiveUser().getEmail(); moi = Session.getEffectiveUser().getEmail(); } catch (err) { /* inconnu : refusé */ }
-  if (!actif || actif !== moi) throw new Error('Réservé au propriétaire du Google Sheet.');
+  try { var o = SpreadsheetApp.getActiveSpreadsheet().getOwner(); proprio = o ? o.getEmail() : ''; } catch (err) { proprio = ''; }
+  if (!actif || actif !== moi || (proprio && actif.toLowerCase() !== proprio.toLowerCase())) {
+    throw new Error('Réservé au propriétaire du Google Sheet. Pour les autres : la carte (avec le code) et les onglets du Sheet.');
+  }
 }
 
 /** [reçu le, N°, commune, intervention du, rapport, objet, id] ou null si l'objet n'a pas de n° de ticket. */

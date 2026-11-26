@@ -89,7 +89,15 @@ Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut ri
 
 Elle reçoit aussi l'Excel et la carte du matin si son adresse est dans l'onglet **Envoi du matin**, et le rapport du soir et les bilans si tu écris **oui** en colonne B à côté.
 
-Si un jour Google Sheets est débloqué chez Circet, tu peux aussi lui partager le Sheet (**Partager**, en « Éditeur ») : elle pourra tout modifier dans les onglets. Les menus Carte tickets restent réservés à toi. Attention, un éditeur voit aussi les codes de l'onglet Accès et peut ouvrir le code du script.
+**Lui donner aussi le Google Sheet** (quand Circet a débloqué Google Sheets sur son PC) :
+
+1. Il lui faut un compte Google à son adresse : son adresse Circet si Circet est d'accord (<https://accounts.google.com/signup>, « Utiliser mon adresse e-mail actuelle »), sinon une adresse Gmail.
+2. Dans le Sheet : **Partager** → son adresse → **Éditeur** → **Envoyer**.
+3. Facultatif : clic droit sur l'onglet **Accès** → **Protéger la feuille** → **Définir les autorisations** → **Seulement vous**, pour que les codes ne changent pas par erreur.
+
+Dans le Sheet, elle voit tout et peut modifier les onglets : **Notes**, **Annulés**, **Corrélés**, la colonne **Photos vérifiées** de l'onglet Fins d'intervention… Ce qu'elle y écrit compte comme si tu l'avais écrit (carte, listes et rapports dans les 5 minutes, onglets de contrôle dans l'heure).
+
+Le menu **Carte tickets** reste à toi seul. Dis-lui de ne pas s'en servir : Google lui demanderait d'abord des autorisations sur son compte, puis le menu refuserait. Pour importer un export Praxedo, elle l'envoie en pièce jointe (.csv) à ton adresse Gmail : il est importé tout seul dans les 5 minutes. Une personne qui peut modifier le Sheet voit aussi les codes de l'onglet Accès et peut ouvrir le code du script : ne le partage qu'à elle.
 
 ## Là où Google est bloqué : la carte et l'Excel du jour
 
