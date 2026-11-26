@@ -106,16 +106,19 @@ function motifsSuite(f) {
   return m;
 }
 /**
- * Le verdict des photos d'une fin d'intervention (colonne « Photos (IA) ») et l'avis noté à la main (« Photos : mon avis »).
- * etat : ok, nok (NO OK — à vérifier), sans (pas de photo), main (à regarder à la main), encours, erreur, ou '' ;
- * moi : '' (pas encore vu), ok (vérifié, c'est bon) ou nok (vérifié, c'est confirmé) ; detail : le verdict sans « NO OK — à vérifier ».
+ * Le verdict des photos d'une fin d'intervention (colonne « Photos (IA) ») et l'avis noté après vérification (« Photos vérifiées »,
+ * dans le Sheet ou depuis la carte). etat : ok, nok (NO OK — à vérifier), sans (pas de photo), main (à regarder à la main), encours,
+ * erreur, ou '' (pas analysé) ; moi : '' (pas vérifié), ok ou nok ; detail : le verdict sans « NO OK — à vérifier » ;
+ * avisDetail : le commentaire de la vérification ; avisLe : sa date, quand elle est écrite (« (carte, 26/11/2026 14:05) »).
  */
 function etatPhotos(f) {
   var t = String((f && f.photos) || '').trim(), a = String((f && f.photosAvis) || '').trim();
   var etat = /^NO\s*OK/i.test(t) ? 'nok' : /^OK\b/i.test(t) ? 'ok' : /^Sans photo/i.test(t) ? 'sans' : /^À vérifier à la main/i.test(t) ? 'main'
     : /^en cours/i.test(t) ? 'encours' : /^erreur/i.test(t) ? 'erreur' : '';
   var moi = !a ? '' : /^(no\s*ok|nok|ko|non|pas\s+(ok|bon))(?![a-zà-ÿ])/i.test(a) ? 'nok' : 'ok';
-  return { etat: etat, texte: t, detail: t.replace(/^(NO\s*OK|OK)\s*(—\s*à vérifier)?\s*(\([^)]*\))?\s*[—:]\s*/i, ''), le: dt(f && f.photosLe), avis: a, moi: moi };
+  var avisLe = (/(\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2})\)?\s*$/.exec(a) || [])[1];
+  return { etat: etat, texte: t, detail: t.replace(/^(NO\s*OK|OK)\s*(—\s*à vérifier)?\s*(\([^)]*\))?\s*[—:]\s*/i, ''), le: dt(f && f.photosLe), avis: a, moi: moi,
+           avisDetail: a.replace(/^(no\s*ok|nok|ko|ok|non|oui)\b\s*[—:,-]?\s*/i, '').replace(/\s*\(carte, [^)]*\)\s*$/, '').trim(), avisLe: avisLe ? dt(avisLe) : null };
 }
 var STATUTS_OUVERTS = ['Qualifiée', 'Pré-planifiée', 'Planifiée', 'Synchronisée'];
 // Coordonnées GPS écrites par Praxedo dans la colonne « Desc. site » : « Lat/Long: 48.67439/6.22068 »
@@ -368,7 +371,7 @@ function statistiques(donnees, NOW, techDe) {
     fins: F,   // les clôtures détaillées (pour le rapport du soir ; pas envoyées à la carte)
     // une ligne légère par clôture, pour les graphiques (bilan) : date, commune, boîtes, à reprendre ou non, GTR, minutes
     liste: F.map(function (x) { return { t: +x.recu, commune: x.commune, boites: x.boites, retourDans: x.retourDans, suite: x.motifs.length > 0, lu: x.lu, dansGtr: x.dansGtr, min: x.min }; }),
-    clotures: { entetes: ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Début', 'Fin', 'Durée', "Fin d'impact client", 'Demande le', 'GTR', 'Échéance GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'Nature du défaut', 'Cause du défaut', 'Compte-rendu du technicien', 'Rapport', 'Autres éléments du rapport', 'À vérifier', 'Photos (IA)', 'Photos : mon avis'],
+    clotures: { entetes: ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Début', 'Fin', 'Durée', "Fin d'impact client", 'Demande le', 'GTR', 'Échéance GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'Nature du défaut', 'Cause du défaut', 'Compte-rendu du technicien', 'Rapport', 'Autres éléments du rapport', 'À vérifier', 'Photos (IA)', 'Photos vérifiées (OK / NO OK)'],
       lignes: F.map(function (x) { var f = x.f;
         return [f.recu, f.num, x.commune, x.tech, f.debut, f.fin, f.duree, f.finImpact || '', f.demande, x.regle, fd(x.echeance), x.dansGtr === null ? '' : x.dansGtr ? 'oui' : 'non', x.resultat,
                 x.boites.join(', '), f.nature, f.cause, court(f.resume, 400), f.rapport || '', f.autres || '', (x.retour ? 'retour sous 30 j dans ' + x.retourDans.join(', ') + (x.aVerifier ? ' · ' : '') : '') + x.aVerifier,
@@ -841,13 +844,14 @@ function qualite(res, NOW) {
       if (manque.length) constat('correction', 'info', x.finLe, x.recu, f.num, x, t, 'rapport incomplet : ' + manque.join(', '), null, 'Demander au technicien de compléter le rapport');
     }
   });
-  // 4. photos du rapport regardées par l'IA : NO OK pas encore vérifié, ou confirmé à la main ; rapport sans photo
+  // 4. photos des interventions : NO OK après vérification (avec ou sans l'IA), NO OK de l'IA pas encore vérifié, rapport sans photo
   F.filter(function (x) { return NOW - x.recu <= 30 * J; }).forEach(function (x) {
     var p = x.photos, t = parNum[x.f.num], le = p.le || x.recu;
     if (p.moi === 'ok') return;   // vérifié : c'est bon
-    if (p.etat === 'nok') constat('photos', p.moi === 'nok' || /\(important\)/.test(p.texte) ? 'fort' : 'moyen', x.finLe, le, x.f.num, x, t,
-      (p.moi === 'nok' ? 'photos NO OK, confirmé à la vérification : ' : 'photos à vérifier : ') + p.detail, null,
-      p.moi === 'nok' ? 'Faire reprendre le travail ou en parler au technicien' : 'Regarder les photos du rapport, puis noter OK ou NO OK dans la colonne « Photos : mon avis » (onglet Fins d\'intervention)');
+    if (p.moi === 'nok') constat('photos', 'fort', x.finLe, p.avisLe || le, x.f.num, x, t, 'NO OK après vérification' + (p.avisDetail ? ' : ' + p.avisDetail : '') +
+      (p.etat === 'nok' ? ' · l\'IA avait vu : ' + p.detail : ''), null, 'Faire reprendre le travail ou en parler au technicien');
+    else if (p.etat === 'nok') constat('photos', /\(important\)/.test(p.texte) ? 'fort' : 'moyen', x.finLe, le, x.f.num, x, t, 'photos à vérifier : ' + p.detail, null,
+      'Regarder les photos du rapport, puis noter OK ou NO OK (fiche de la carte, ou colonne « Photos vérifiées » de l\'onglet Fins d\'intervention)');
     else if (p.etat === 'main') constat('photos', 'info', x.finLe, le, x.f.num, x, t, p.texte, null, 'Regarder les photos du rapport');
     else if (p.etat === 'sans' && /^oui$/i.test(x.f.corrige || '')) constat('photos', 'info', x.finLe, le, x.f.num, x, t, 'défaut corrigé, mais aucune photo dans le rapport', null, 'Demander les photos au technicien');
   });
@@ -998,7 +1002,7 @@ function controles(res, NOW) {
     incoherences: INC.map(function (i) { return [i[0], i[1].num, i[1].statutExport, i[2], i[3], i[1].tech, i[1].ville, i[1].adresse]; }),
     lies: lies, pm: pm, groupeDe: groupeDe,
     qualite: (function () {
-      var Q = qualite(res, NOW), LIB = { cause: 'Peut-être causé par nous', redondance: 'Redondance', correction: 'Correction à faire', photos: 'Photos (IA)' };
+      var Q = qualite(res, NOW), LIB = { cause: 'Peut-être causé par nous', redondance: 'Redondance', correction: 'Correction à faire', photos: 'Photos' };
       return { constats: Q, entetes: ['Type', 'Niveau', 'Date', 'N°', 'Commune', 'Technicien', 'Constat', 'Lié à', 'À faire', 'Rapport'],
                lignes: Q.map(function (q) { return [LIB[q.type], q.niveau, fd(q.le), q.num, q.commune, q.tech, q.detail, q.lie, q.action, q.rapport]; }) };
     })(),
@@ -1061,11 +1065,11 @@ function listesDuJour(res, ctrl, NOW, infos, donnees) {
   ligne('Réparées en définitif', k.avecReponse ? k.pctDefinitif + ' (' + k.definitives + ' sur ' + k.avecReponse + ')' : '');
   ligne('Retours dans une boîte sous 30 j', k.avecBoite ? k.pctRetours + ' (' + k.retours + ' sur ' + k.avecBoite + ')' : '');
   ligne('Suites à prévoir (30 derniers jours)', ctrl.suites.length);
-  var FP = (res.stats.fins || []).filter(function (x) { return NOW - x.recu <= 30 * 86400e3 && x.photos.etat; });
+  var FP = (res.stats.fins || []).filter(function (x) { return NOW - x.recu <= 30 * 86400e3 && (x.photos.etat || x.photos.moi); });
   if (FP.length) {
-    ligne('Photos regardées par l\'IA (30 derniers jours) : OK', FP.filter(function (x) { return x.photos.etat === 'ok' || x.photos.moi === 'ok'; }).length);
-    ligne('  NO OK, à vérifier (onglet Qualité)', FP.filter(function (x) { return x.photos.etat === 'nok' && !x.photos.moi; }).length);
-    ligne('  NO OK confirmés après vérification', FP.filter(function (x) { return x.photos.moi === 'nok'; }).length);
+    ligne('Photos des interventions (30 derniers jours) : OK', FP.filter(function (x) { return x.photos.moi === 'ok' || (x.photos.etat === 'ok' && !x.photos.moi); }).length);
+    ligne('  NO OK de l\'IA, à vérifier (onglet Qualité)', FP.filter(function (x) { return x.photos.etat === 'nok' && !x.photos.moi; }).length);
+    ligne('  NO OK après vérification', FP.filter(function (x) { return x.photos.moi === 'nok'; }).length);
   }
   titre('CONTRÔLES');
   ligne('Incohérences', ctrl.incoherences.length);
@@ -1237,9 +1241,9 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
     return { n: L.length, gN: gN, gOk: gOk, gtr: gN ? Math.round(100 * gOk / gN) + ' %' : '—', reprendre: L.filter(function (x) { return x.motifs.length; }).length,
       operateur: L.filter(function (x) { return x.operateur; }).length, retours: L.filter(function (x) { return x.retour; }).length,
       definitives: L.filter(function (x) { return /^oui$/i.test(x.f.definitive); }).length, nonLus: L.filter(function (x) { return !x.lu; }).length,
-      photosOk: L.filter(function (x) { return x.photos.etat === 'ok' || (x.photos.etat === 'nok' && x.photos.moi === 'ok'); }).length,
-      photosNok: L.filter(function (x) { return x.photos.etat === 'nok' && x.photos.moi !== 'ok'; }).length,
-      photosAttente: L.filter(function (x) { return x.photos.etat === 'encours'; }).length,
+      photosOk: L.filter(function (x) { return x.photos.moi === 'ok' || (x.photos.etat === 'ok' && !x.photos.moi); }).length,
+      photosNok: L.filter(function (x) { return x.photos.moi === 'nok' || (x.photos.etat === 'nok' && !x.photos.moi); }).length,
+      photosAttente: L.filter(function (x) { return x.photos.etat === 'encours' && !x.photos.moi; }).length,
       moyen: fduree(nMin ? min / nMin : 0) || '—', total: fduree(min) || '—' };
   }
   var K = chiffres(X), aTraiter = 0, aSurveiller = 0;
@@ -1267,7 +1271,7 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
       : 'Clôtures reçues du ' + fd(depuis, false) + ' au ' + fd(M === 'mois' ? fin1 : NOW, false)) + '</p>' +
     '<table style="border-collapse:separate;border-spacing:6px;margin:0 -6px 10px"><tr>' + carte(K.n, 'clôtures') + carte(K.gtr, 'GTR respectée' + (K.gN ? ' (' + K.gOk + '/' + K.gN + ')' : '')) +
     carte(K.reprendre, 'à reprendre') + carte(QC.length, 'peut-être causés par nous') + carte(K.moyen, 'en moyenne sur place') + '</tr></table>' +
-    (photosVues ? '<p style="margin:0 0 10px">' + h('Photos des rapports regardées par l\'IA : ' + K.photosOk + ' OK, ' + K.photosNok + ' NO OK à vérifier' +
+    (photosVues ? '<p style="margin:0 0 10px">' + h('Photos des interventions (IA et vérifications) : ' + K.photosOk + ' OK, ' + K.photosNok + ' NO OK' +
       (K.photosAttente ? ', ' + K.photosAttente + ' en cours d\'analyse' : '')) + '</p>' : '');
   // backlog : entrées, sorties et stock (le soir depuis le rapport d'avant ; la semaine par jour ; le mois par semaine)
   var BK = backlog(res, donnees, depuis, FIN, NOW), st = BK.stock, hist = (infos.historique || []).filter(function (x) { return x.le; });
@@ -1308,7 +1312,7 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
         (x.estime ? ' (estimé)' : '') + ' → ' + x.fin + ' (' + signe(x.ecart) + ').') + '</p>'; }).join('');
   }
   var texte = titre + '\n' + K.n + ' clôtures · GTR respectée ' + K.gtr + ' · à reprendre ' + K.reprendre + ' · peut-être causés par nous ' + QC.length + ' · ' + K.moyen + ' en moyenne\n' +
-    (photosVues ? 'Photos (IA) : ' + K.photosOk + ' OK, ' + K.photosNok + ' NO OK à vérifier' + (K.photosAttente ? ', ' + K.photosAttente + ' en cours' : '') + '\n' : '');
+    (photosVues ? 'Photos : ' + K.photosOk + ' OK, ' + K.photosNok + ' NO OK' + (K.photosAttente ? ', ' + K.photosAttente + ' en cours d\'analyse' : '') + '\n' : '');
   RB.forEach(function (x) { texte += x.lib + ' : ' + x.crees + ' ouverts, ' + x.clotures + ' clôturés, backlog ' + x.debut + ' → ' + x.fin + ' (' + signe(x.ecart) + ')\n'; });
   texte += 'Backlog : ' + BK.crees + ' créés, ' + BK.clotures + ' clôturés, ' + BK.sortis + ' sortis de l\'export, ' + BK.annules + ' annulés, ' + BK.regroupes + ' regroupés · ' +
     st.ouverts + ' ouverts' + (ev !== '' ? ' (' + ev + ')' : '') + ' dont ' + st.aPlanifier + ' à planifier (' + st.ko + ' GTR KO) et ' + st.planifies + ' planifiés\n';
@@ -1319,7 +1323,7 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
     var pl = function (n, mot) { return n + ' ' + mot.replace(/(\S+)/g, function (w) { return n > 1 ? w + 's' : w; }); };
     html += '<p style="margin:0 0 10px">' + h(pl(K.n, 'clôture') + ecart(K.n, avant.n) + ' · ' + K.total + ' sur place au total · ' + pl(K.definitives, 'réparée') + ' en définitif · ' +
       pl(K.operateur, 'restée') + ' côté opérateur · ' + pl(K.retours, 'retour') + ' dans une boîte sous 30 j · ' + pl(K.nonLus, 'rapport') + ' non lu' + (K.nonLus > 1 ? 's' : '') +
-      (photosVues ? ' · photos regardées par l\'IA : ' + K.photosOk + ' OK, ' + K.photosNok + ' NO OK' : '')) + '</p>';
+      (photosVues ? ' · photos : ' + K.photosOk + ' OK, ' + K.photosNok + ' NO OK' : '')) + '</p>';
     if (avant.gN && K.gN) html += '<p style="margin:0 0 10px">' + h('GTR respectée : ' + K.gtr + ' sur la période, ' + avant.gtr + ' ' + periode) + '</p>';
     // par jour (semaine) ou par semaine (mois)
     var lignesP = [];
@@ -1347,7 +1351,7 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
     if (techs.length) html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:14px 0 2px">Par technicien</h3>' +
       tab(['Technicien', 'Clôtures', 'Temps moyen', 'GTR respectée', 'À reprendre', 'Retours < 30 j', 'Défauts peut-être liés'].concat(photosVues ? ['Photos NO OK'] : []), techs) +
       '<p style="margin:-8px 0 12px;color:#777;font-size:12px">« Défauts peut-être liés » : nouveaux défauts apparus après un passage de ce technicien au même endroit. À vérifier, pas une certitude.' +
-      (photosVues ? ' « Photos NO OK » : rapports dont l\'IA a jugé les photos à vérifier, sur ceux qu\'elle a regardés (sans ceux que vous avez notés OK).' : '') + '</p>';
+      (photosVues ? ' « Photos NO OK » : interventions notées NO OK après vérification, ou jugées NO OK par l\'IA et pas encore vérifiées, sur celles dont les photos ont été regardées.' : '') + '</p>';
     var C = {}, B = {};
     X.forEach(function (x) { C[x.commune] = (C[x.commune] || 0) + 1; x.boites.forEach(function (b) { B[b] = (B[b] || 0) + 1; }); });
     var topC = Object.keys(C).sort(function (a, b) { return C[b] - C[a] || (a < b ? -1 : 1); }).slice(0, M === 'mois' ? 10 : 5).map(function (k) { return k + ' (' + C[k] + ')'; });
@@ -1364,7 +1368,7 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
   // constats qualité : peut-être causé par nous, redondances, corrections
   var MAX = soir ? 30 : 40, COUL = { fort: '#b00', moyen: '#a35208', info: '#555' };
   [[QC, 'Peut-être causé par nos interventions', '#b00', 'Un nouveau défaut est apparu peu après le passage d\'un de nos techniciens au même endroit. C\'est à vérifier avec les deux rapports, pas une certitude.'],
-   [QP, 'Photos à vérifier (analyse IA)', '#b00', 'L\'IA a regardé les photos des rapports : c\'est un avis, pas une certitude. Regardez les photos (n° de ticket), puis notez OK ou NO OK dans la colonne « Photos : mon avis » de l\'onglet Fins d\'intervention.'],
+   [QP, 'Photos à vérifier ou NO OK', '#b00', 'Interventions notées NO OK après vérification, et photos que l\'IA juge à vérifier (un avis, pas une certitude). Pour noter OK ou NO OK : la fiche du ticket sur la carte (code « Annulations et corrélations »), ou la colonne « Photos vérifiées » de l\'onglet Fins d\'intervention.'],
    [QR, 'Redondances', '#a35208', ''], [QK, 'Corrections à faire', BLEU, '']].forEach(function (g) {
     if (!g[0].length) return;
     html += '<h3 style="font-size:16px;color:' + g[2] + ';margin:16px 0 4px">' + g[1] + ' (' + g[0].length + ')</h3>' + (g[3] ? '<p style="margin:0 0 4px;color:#777;font-size:12px">' + h(g[3]) + '</p>' : '') +
@@ -1402,7 +1406,8 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
           x.dansGtr === null ? (x.regle || 'GTR inconnue') : x.dansGtr ? 'GTR respectée' : 'GTR non respectée', x.resultat, x.boites.join(', '),
           x.cables.length ? 'câble ' + x.cables.join(', ') : '', x.positions.length ? 'PM ' + (f.pm || '') + ' ' + x.positions.map(function (q) { return q.txt; }).join(', ') : '',
           f.cause ? 'cause : ' + f.cause : '',
-          { ok: 'photos OK (IA)', nok: x.photos.moi === 'ok' ? 'photos vérifiées OK' : 'photos NO OK (IA)', encours: 'photos en cours d\'analyse', sans: 'sans photo', main: 'photos à regarder à la main' }[x.photos.etat] || ''];
+          x.photos.moi === 'nok' ? 'NO OK après vérification' : x.photos.moi === 'ok' ? 'photos vérifiées OK'
+            : { ok: 'photos OK (IA)', nok: 'photos NO OK (IA)', encours: 'photos en cours d\'analyse', sans: 'sans photo', main: 'photos à regarder à la main' }[x.photos.etat] || ''];
         return '<li style="margin:6px 0">' + lienNum(f.num, f.rapport) + ' · ' + qui(x.commune, x.tech) + ' · reçue à ' + h(fd(x.recu).slice(11)) + '<br><span style="color:#444">' + h(bits.filter(function (b) { return b; }).join(' · ')) + '</span>' +
           (f.resume ? '<br><span style="color:#777;font-size:12.5px">' + h(court(f.resume, 220)) + '</span>' : '') + '</li>';
       }).join('') + '</ul>';

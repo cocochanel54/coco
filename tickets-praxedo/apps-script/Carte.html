@@ -28,7 +28,8 @@ html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#fff;co
 .nv.urgent{background:#fdecea;border-color:#f3c0bb}.nv.urgent b{color:#b00}
 .pop .autour{margin:4px 0 0;padding:0;list-style:none}.pop .autour li{margin:2px 0}.pop .autour b{font-size:inherit}
 .pop a[data-aller]{color:#174a8b;font-weight:600}
-.pop .annuler{margin-top:8px;padding-top:6px;border-top:1px solid #e3e3e3}.pop .annuler input{font:inherit;width:100%;box-sizing:border-box;margin:4px 0}
+.pop .annuler{margin-top:8px;padding-top:6px;border-top:1px solid #e3e3e3}.pop .annuler input,.pop .annuler textarea{font:inherit;width:100%;box-sizing:border-box;margin:4px 0}
+#tableau .verif button:not(.lien){display:block;margin:2px 0;white-space:nowrap}#tableau .verif input{font:inherit;width:170px;margin:2px 0}#tableau .verif label{display:block}
 #info{color:#1d7444;font-weight:600;margin-top:4px}
 .nv:hover,.nv:focus-visible{border-color:#333;outline:none}
 .pop b{font-size:14px}.pop small{color:#555}.pop .foulee{color:#6c2e91;font-weight:600}.pop .fin{color:#1d7444;font-weight:600}
@@ -242,10 +243,12 @@ function texteRapport(f, avecResume) {
   if (op) h += '<br><small>Reste côté opérateur (jarretière, brassage) : pas une reprise pour nous</small>';
   else if (!m.length && (f.corrige || f.definitive)) h += '<br><small>' + esc([f.corrige ? 'Défaut corrigé : ' + f.corrige.toLowerCase() : '', f.definitive ? 'réparation définitive : ' + f.definitive.toLowerCase() : ''].filter(function (x) { return x; }).join(' · ')) + '</small>';
   if (avecResume && f.resume) h += '<br><small><b>Compte-rendu :</b> ' + esc(court(f.resume, 320)) + '</small>';
-  // les photos du rapport regardées par l'IA (conduite d'activité seulement)
-  var ph = role === 'ca' ? etatPhotos(f) : { etat: '' };
-  if (ph.etat === 'nok' && ph.moi !== 'ok') h += '<br><b style="color:#b00">Photos NO OK' + (ph.moi === 'nok' ? ' (confirmé)' : ' — à vérifier') + '</b><br><small>' + esc(court(ph.detail, 260)) + '</small>';
-  else if (ph.etat === 'ok' || ph.moi === 'ok') h += '<br><small style="color:#1d7444">Photos OK' + (ph.etat === 'nok' ? ' (vérifiées à la main)' : ' (vues par l\'IA)') + '</small>';
+  // les photos de l'intervention : vérification notée (Sheet ou carte), sinon l'avis de l'IA (conduite d'activité seulement)
+  var ph = role === 'ca' ? etatPhotos(f) : { etat: '', moi: '' };
+  if (ph.moi === 'nok') h += '<br><b style="color:#b00">NO OK après vérification</b>' + (ph.avisDetail ? '<br><small>' + esc(court(ph.avisDetail, 200)) + '</small>' : '');
+  else if (ph.moi === 'ok') h += '<br><small style="color:#1d7444">Photos vérifiées OK' + (ph.etat === 'nok' ? ' (l\'IA avait vu un problème)' : '') + '</small>';
+  else if (ph.etat === 'nok') h += '<br><b style="color:#b00">Photos NO OK — à vérifier</b><br><small>' + esc(court(ph.detail, 260)) + '</small>';
+  else if (ph.etat === 'ok') h += '<br><small style="color:#1d7444">Photos OK (vues par l\'IA)</small>';
   else if (ph.etat === 'encours') h += '<br><small>Photos en cours d\'analyse par l\'IA</small>';
   else if (ph.etat === 'sans') h += '<br><small>Rapport sans photo</small>';
   else if (ph.etat === 'main') h += '<br><small>' + esc(court(ph.texte, 200)) + '</small>';
@@ -282,8 +285,18 @@ document.addEventListener('click', function (e) {
 // tickets sous celui-ci (onglet Corrélés), ou les remettre
 var candidatsDe = {};   // pour chaque ticket : les tickets liés qu'on peut regrouper dessous
 function blocAnnuler(num) {
-  return '<div class="annuler" data-num="' + esc(num) + '"><button type="button" class="lien" data-annuler>Annulé dans Praxedo ? Retirer ce ticket</button>' +
+  return '<div class="annuler" data-num="' + esc(num) + '"><button type="button" class="lien" data-noter>Ajouter une note (justifié, relance…)</button>' +
+    '<br><button type="button" class="lien" data-annuler>Annulé dans Praxedo ? Retirer ce ticket</button>' +
     '<br><button type="button" class="lien" data-regrouper>Regrouper des tickets sous celui-ci (corrélation)</button></div>';
+}
+// … et noter OK ou NO OK une intervention terminée, après avoir vérifié ses photos (colonne « Photos vérifiées » du Sheet).
+// compact : dans les listes de contrôle (Clôtures, Qualité)
+function blocVerif(num, moi, compact) {
+  var etat = moi === 'nok' ? 'NO OK' : moi === 'ok' ? 'OK' : '';
+  return '<div class="' + (compact ? 'verif' : 'annuler verif') + '" data-num="' + esc(num) + '" data-moi="' + esc(moi || '') + '"' + (compact ? ' data-compact="1"' : '') + '>' +
+    (compact ? '' : '<b>Photos vérifiées ?</b>' + (etat ? ' <small>noté ' + etat + '</small>' : '') + '<br>') +
+    '<button type="button" data-avis="OK">OK</button> <button type="button" data-nok>NO OK…</button>' +
+    (etat ? ' <button type="button" class="lien" data-avis="">effacer</button>' : '') + '</div>';
 }
 // une fiche qui grandit (formulaire ouvert) : on la redescend sous le bandeau des chiffres clés si besoin
 function recadrerFiche() {
@@ -300,12 +313,51 @@ function info(t) {
 document.addEventListener('click', function (e) {
   var cible = e.target.closest ? e.target : null;
   if (!cible) return;
+  var bv = cible.closest('.verif');
+  if (bv && (cible.closest('[data-avis]') || cible.closest('[data-nok]') || cible.closest('[data-renoncer-verif]'))) {
+    var nv = bv.dataset.num, compact = bv.dataset.compact === '1';
+    if (cible.closest('[data-nok]')) {
+      bv.innerHTML = '<label>Ce qui ne va pas (facultatif)<input type="text" data-commentaire maxlength="200" placeholder="fibre qui pend dans la BPE…"></label>' +
+        '<button type="button" data-avis="NO OK">Noter NO OK</button> <button type="button" class="lien" data-renoncer-verif>Non</button>';
+      bv.querySelector('input').focus();
+      if (!compact) recadrerFiche();
+    } else if (cible.closest('[data-renoncer-verif]')) {
+      bv.outerHTML = blocVerif(nv, bv.dataset.moi, compact);
+    } else {
+      var bt = cible.closest('[data-avis]'), avis = bt.dataset.avis, lib = bt.textContent, champ = bv.querySelector('[data-commentaire]');
+      bt.disabled = true; bt.textContent = 'Envoi…';
+      google.script.run.withSuccessHandler(function () {
+        if (!compact) map.closePopup();
+        info(avis ? nv + ' noté ' + avis + ' (colonne « Photos vérifiées »).' : 'Vérification de ' + nv + ' effacée.'); charger();
+      }).withFailureHandler(function (err) {
+        bt.disabled = false; bt.textContent = lib;
+        bv.insertAdjacentHTML('beforeend', '<br><b style="color:#b00">' + esc((err && err.message) || err) + '</b>');
+      }).verifierDepuisCarte(code, nv, avis, champ ? champ.value : '');
+    }
+    return;
+  }
   var bloc = cible.closest('.annuler'), num = bloc && bloc.dataset.num;
   if (cible.closest('[data-annuler]')) {
     bloc.innerHTML = '<label>Raison (facultatif)<input type="text" maxlength="120" placeholder="annulé par Altitude…"></label>' +
       '<button type="button" data-confirmer>Retirer de la carte</button> <button type="button" class="lien" data-renoncer>Non</button>';
     bloc.querySelector('input').focus();
     recadrerFiche();
+  } else if (cible.closest('[data-noter]')) {
+    bloc.innerHTML = '<label>Note sur ' + esc(num) + '<textarea data-note maxlength="300" rows="3" placeholder="GTR justifiée : attente Orange…"></textarea></label>' +
+      '<button type="button" data-enregistrer-note>Enregistrer la note</button> <button type="button" class="lien" data-renoncer>Non</button>' +
+      '<br><small>« GTR justifiée », « attente Orange / Enedis / nacelle… », « poteau à remplacer » : le ticket passe en gris. « relance Orange 12/11 », « prévu le 25/11 » : dates de suivi.</small>';
+    bloc.querySelector('textarea').focus();
+    recadrerFiche();
+  } else if (cible.closest('[data-enregistrer-note]')) {
+    var bn = cible.closest('[data-enregistrer-note]'), txt = bloc.querySelector('textarea').value.trim();
+    if (!txt) { info('Écris d\'abord la note.'); return; }
+    bn.disabled = true; bn.textContent = 'Envoi…';
+    google.script.run.withSuccessHandler(function () {
+      map.closePopup(); info('Note ajoutée sur ' + num + ' (onglet Notes). Elle apparaît dans sa fiche.'); charger();
+    }).withFailureHandler(function (err) {
+      bn.disabled = false; bn.textContent = 'Enregistrer la note';
+      bloc.insertAdjacentHTML('beforeend', '<br><b style="color:#b00">' + esc((err && err.message) || err) + '</b>');
+    }).noterDepuisCarte(code, num, txt);
   } else if (cible.closest('[data-renoncer]')) {
     bloc.outerHTML = blocAnnuler(num);
   } else if (cible.closest('[data-confirmer]')) {
@@ -390,7 +442,7 @@ function tableauControles() {
     var idx = noms.map(function (n) { return t.entetes.indexOf(n); }).filter(function (i) { return i >= 0; });
     return [idx.map(function (i) { return t.entetes[i]; }), t.lignes.map(function (l) { return idx.map(function (i) { return l[i]; }); })];
   };
-  var clo = choisir(c.clotures, ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Durée', 'GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'À vérifier']);
+  var clo = choisir(c.clotures, ['Clôturée le', 'N°', 'Commune', 'Technicien', 'Durée', 'GTR', 'Dans la GTR', 'Résultat', 'Boîte(s)', 'À vérifier', 'Photos (IA)', 'Photos vérifiées (OK / NO OK)']);
   var boi = choisir(c.statsBoites, ['Boîte', 'PM', 'Commune', 'Interventions', 'Retours sous 30 j', 'dont provisoires', 'dont non corrigées', 'Temps total', 'Temps moyen', 'Dernière', 'Dernier résultat']);
   var qua = choisir(c.qualite, ['Type', 'Niveau', 'Date', 'N°', 'Commune', 'Technicien', 'Constat', 'Lié à', 'À faire']);
   var vil = choisir(c.statsVilles, ['Commune', 'Interventions', 'Part du total', 'GTR respectée', 'Retours sous 30 j', 'dont provisoires', 'dont non corrigées', 'dont dommage réseau', 'Temps total', 'Temps moyen', 'Boîtes les plus touchées']);
@@ -411,7 +463,8 @@ function tableauControles() {
       .map(function (c) { return [c.num, c.principal, c.le, c.pourquoi, '']; }), -1, -1]
   }[ongletCtrl];
   var en = function (nom) { return defs[0].indexOf(nom); };
-  var h = '<table><thead><tr>' + defs[0].map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  var avecVerif = peutAnnuler && (ongletCtrl === 'clotures' || ongletCtrl === 'qualite');   // code « Annulations et corrélations »
+  var h = '<table><thead><tr>' + (avecVerif ? ['Photos vérifiées ?'] : []).concat(defs[0]).map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
   defs[1].forEach(function (l, i) {
     if (ongletCtrl === 'correles') {
       h += '<tr><td>' + esc(l[0]) + '</td><td>' + (marqueurs[l[1]] ? '<a href="#" data-aller="' + esc(l[1]) + '">' + esc(l[1]) + '</a>' : esc(l[1])) + '</td><td>' + esc(l[2]) + '</td><td>' + esc(l[3]) + '</td><td>' +
@@ -432,7 +485,9 @@ function tableauControles() {
     else if (ongletCtrl === 'qualite') g = l[en('Niveau')] === 'fort' ? ' g1' : l[en('Niveau')] === 'moyen' ? ' g2' : '';
     if (ongletCtrl === 'suites' && !marqueurs[num]) num = (l[5].match(/^[^ ,]+/) || [''])[0];  // intervention sortie de la carte : on montre son ticket de suite
     var clic = (num && marqueurs[num]) || (boite && marqueursBoites[boite]);
-    h += '<tr class="' + (clic ? 'cliquable' : '') + g + '" data-num="' + esc(num) + '" data-boite="' + esc(boite) + '">' + l.slice(0, defs[0].length).map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>';
+    var verif = !avecVerif ? '' : '<td>' + (num && (ongletCtrl === 'clotures' || l[en('Type')] === 'Photos')
+      ? blocVerif(num, ongletCtrl === 'clotures' ? etatPhotos({ photosAvis: l[en('Photos vérifiées (OK / NO OK)')] }).moi : '', true) : '') + '</td>';
+    h += '<tr class="' + (clic ? 'cliquable' : '') + g + '" data-num="' + esc(num) + '" data-boite="' + esc(boite) + '">' + verif + l.slice(0, defs[0].length).map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>';
   });
   h += '</tbody></table>' + (defs[1].length ? '' : '<p style="padding:10px">' + (/clotures|boites|villes/.test(ongletCtrl) ? 'Aucune clôture reçue pour l\'instant : ces tableaux se remplissent avec les mails de fin d\'intervention.'
       : ongletCtrl === 'annules' ? 'Aucun ticket retiré pour l\'instant.' + (peutAnnuler ? ' Pour en retirer un : sa fiche sur la carte, « Annulé dans Praxedo ? », ou un mail « ANNULÉ » avec son n°.' : '')
@@ -441,7 +496,8 @@ function tableauControles() {
   var t = document.getElementById('tableau');
   t.innerHTML = h;
   t.querySelectorAll('tr.cliquable').forEach(function (tr) {
-    tr.onclick = function () {
+    tr.onclick = function (e) {
+      if (e.target.closest('.verif')) return;   // boutons OK / NO OK : pas de saut vers le ticket
       var m = marqueursBoites[tr.dataset.boite];
       if (tr.dataset.num && marqueurs[tr.dataset.num]) aller(tr.dataset.num);
       else if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); }
@@ -677,7 +733,8 @@ function afficher(d) {
       return x.replace(/^Échéance dépassée de /, 'GTR KO depuis ').replace(/^Échéance dans moins de 48 h et pas planifié$/, t.gtrTexte || x);
     });
     if (al.length) html += '<br><b style="color:#b00">' + esc(al.join(' · ')) + '</b>';
-    html += '<br><small>' + esc(court(t.desc, 220)) + '</small>' + (peutAnnuler && !t.termine ? blocAnnuler(t.num) : '') + '</div>';
+    html += '<br><small>' + esc(court(t.desc, 220)) + '</small>' + (peutAnnuler && !t.termine ? blocAnnuler(t.num) : '') +
+      (peutAnnuler && t.fin ? blocVerif(t.fin.num, etatPhotos(t.fin).moi) : '') + '</div>';
     m.bindPopup(html, {maxWidth: 320});
     m.numTicket = t.num;
     m.addTo(calques[k]);

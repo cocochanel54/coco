@@ -49,7 +49,7 @@ var ONGLET_CLOTURES = 'Clôtures', ONGLET_STATS_BOITES = 'Stats boîtes', ONGLET
 var ONGLET_ACCES = 'Accès';
 var ONGLET_ANNULES = 'Annulés', ENTETES_ANNULES = ['N° ticket', 'Annulé le', 'Pourquoi'];
 var ONGLET_CORRELES = 'Corrélés', ENTETES_CORRELES = ['N° ticket regroupé', 'Sous le ticket', 'Le', 'Par / pourquoi'];
-var ONGLET_NOTES = 'Notes', ENTETES_NOTES = ['N° ticket', 'Note'];
+var ONGLET_NOTES = 'Notes', ENTETES_NOTES = ['N° ticket', 'Note', 'Ajoutée'];
 var COULEURS_GRAVITE = { '1 - Urgent': '#F8CBAD', '2 - Important': '#FFE699', '3 - À vérifier': '#DDEBF7', '4 - Info': '#EDEDED' };
 var ENTETES_CREATIONS = ['Reçu le', 'N° ticket', 'Type', 'Commune (objet)', 'Adresse', 'CP', 'Ville', 'Nom client', 'Description', 'Id du mail'];
 var RECHERCHE_CREATIONS = 'subject:"CREATION INTERVENTION"';
@@ -57,9 +57,10 @@ var ENTETES_SORTIS = ['Sorti le', 'N°', 'Statut avant', 'Planifiée', 'Technici
 var ENTETES_FINS = ['Reçu le', 'N° ticket', 'Commune', 'Intervention du', 'Rapport', 'Objet du mail', 'Id du mail',
   'Rapport lu', 'Début', 'Fin', 'Durée', 'Défaut corrigé', 'Réparation définitive', 'Dommage réseau', 'Compte-rendu du technicien',
   'Boîte(s)', 'PM (site)', 'Nature du défaut', 'Cause du défaut', 'Adresse', 'Demande le', 'Étiquettes GTR', 'Autres éléments du rapport', 'Technicien',
-  "Fin d'impact", 'Photos (IA)', 'Photos analysées le', 'Photos : mon avis'];
-// colonnes de l'analyse des photos par l'IA (voir analyserPhotos_) ; « mon avis » : écrit à la main, OK ou NO OK après vérification
-var COL_PHOTOS = 'Photos (IA)', COL_PHOTOS_LE = 'Photos analysées le', COL_PHOTOS_AVIS = 'Photos : mon avis';
+  "Fin d'impact", 'Photos (IA)', 'Photos analysées le', 'Photos vérifiées (OK / NO OK)'];
+// colonnes de l'analyse des photos par l'IA (voir analyserPhotos_) ; « Photos vérifiées » : OK ou NO OK après vérification, écrit à la
+// main dans le Sheet ou depuis la carte (code « Annulations et corrélations »), avec ou sans analyse par l'IA
+var COL_PHOTOS = 'Photos (IA)', COL_PHOTOS_LE = 'Photos analysées le', COL_PHOTOS_AVIS = 'Photos vérifiées (OK / NO OK)';
 var JOURS_HISTORIQUE = 90;     // la carte et les statistiques portent sur les clôtures des 90 derniers jours
 var RAPPORTS_PAR_PASSAGE = 4;
 var LECTURE_RAPPORTS = '2';    // à changer quand la lecture des rapports s'enrichit : ceux des 30 derniers jours sont relus une fois  // rapports PDF lus à chaque passage (les plus récents d'abord), pour garder des passages courts
@@ -888,6 +889,44 @@ function annulerDepuisCarte(code, num, raison) {
   return num;
 }
 
+/**
+ * Depuis la carte, avec le code « Annulations et corrélations » : OK ou NO OK après vérification des photos d'une intervention
+ * (colonne « Photos vérifiées » de sa fin d'intervention la plus récente), avec un commentaire. avis '' : efface. → le texte écrit.
+ */
+function verifierDepuisCarte(code, num, avis, commentaire) {
+  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations et les corrélations.');
+  num = String(num || '').replace(/\s+/g, '').toUpperCase();
+  avis = String(avis || '').toUpperCase();
+  if (['OK', 'NO OK', ''].indexOf(avis) < 0) throw new Error('Avis inconnu.');
+  var verrou = LockService.getScriptLock();   // pas pendant une relecture des rapports, qui réécrit les lignes
+  if (!verrou.tryLock(15000)) throw new Error('Le Sheet est occupé : réessaie dans une minute.');
+  try {
+    var f = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLET_FINS), n = f ? f.getLastRow() - 1 : 0, i = n - 1;
+    var nums = n > 0 ? f.getRange(2, 2, n, 1).getDisplayValues() : [];
+    while (i >= 0 && String(nums[i][0]).replace(/\s+/g, '').toUpperCase() !== num) i--;   // la fin la plus récente de ce ticket
+    if (i < 0) throw new Error('Intervention ' + num + ' introuvable dans l\'onglet Fins d\'intervention.');
+    var c = String(commentaire || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    var t = avis ? avis + (c ? ' — ' + c : '') + ' (carte, ' + Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm') + ')' : '';
+    grille_(f, 1, ENTETES_FINS.length).getRange(i + 2, ENTETES_FINS.indexOf(COL_PHOTOS_AVIS) + 1).setNumberFormat('@').setValue(texte_(t));
+    PropertiesService.getScriptProperties().deleteProperty('CONTROLES_LE');
+    return t;
+  } finally { verrou.releaseLock(); }
+}
+
+/** Depuis la carte, avec le code « Annulations et corrélations » : une note sur un ticket (onglet Notes), comme si elle était tapée dans le Sheet. */
+function noterDepuisCarte(code, num, note) {
+  if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations et les corrélations.');
+  num = String(num || '').replace(/\s+/g, '').toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9#._-]{3,39}$/.test(num)) throw new Error('N° de ticket invalide.');
+  var t = String(note || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!t) throw new Error('La note est vide.');
+  var f = feuille_(ONGLET_NOTES, ENTETES_NOTES);
+  if (!f.getRange(1, 3).getDisplayValue()) f.getRange(1, 3).setValue('Ajoutée').setFontWeight('bold');
+  f.appendRow([num, t, 'carte, ' + Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy HH:mm')].map(texte_));
+  PropertiesService.getScriptProperties().deleteProperty('CONTROLES_LE');
+  return t;
+}
+
 /** Depuis la carte, avec le code « Annulations » : remet un ticket retiré par erreur (efface ses lignes de l'onglet Annulés). */
 function retablirDepuisCarte(code, num) {
   if (!droits_(code).annul) throw new Error('Réservé à la personne qui gère les annulations et les corrélations.');
@@ -1030,19 +1069,40 @@ function envoyerMaintenant() {
 
 /** Les adresses de l'onglet « Envoi du matin » (colonne A), sans doublon. L'onglet est créé s'il n'existe pas. */
 function adressesEnvoi_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet(), f = ss.getSheetByName(ONGLET_ENVOI);
+  return lignesEnvoi_().map(function (l) { return l.adresse; });
+}
+
+/**
+ * Les lignes de l'onglet « Envoi du matin » : [{ adresse, rapports }]. rapports : « oui » en colonne B, cette adresse reçoit
+ * aussi les rapports du soir et les bilans (sinon, seulement l'Excel et la carte du matin).
+ */
+function lignesEnvoi_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), f = ss.getSheetByName(ONGLET_ENVOI), aSavoir = 'Une adresse par ligne, en colonne A. Chaque jour ouvré vers 7 h, ' +
+    'l\'Excel du jour puis la carte du jour partent à ces adresses, en deux mails. Écris « oui » en colonne B pour qu\'une adresse reçoive aussi le ' +
+    'rapport du soir (vers 17 h) et les bilans de la semaine et du mois. Tant que la colonne A est vide, rien n\'est envoyé.';
   if (!f) {
-    f = feuille_(ONGLET_ENVOI, ['Adresse mail', 'Remarque', 'À savoir']);
-    f.getRange(2, 3).setValue('Une adresse par ligne, en colonne A. Chaque jour ouvré vers 7 h, l\'Excel du jour puis la carte du jour partent à ces ' +
-      'adresses, en deux mails. Tant que la colonne A est vide, rien n\'est envoyé.');
-    f.setColumnWidth(1, 260); f.setColumnWidth(2, 200); f.setColumnWidth(3, 520);
-    f.getRange(2, 3).setWrap(true);
+    f = feuille_(ONGLET_ENVOI, ['Adresse mail', 'Rapports du soir et bilans aussi (oui / non)', 'Remarque', 'À savoir']);
+    f.getRange(2, 4).setValue(aSavoir).setWrap(true);
+    f.setColumnWidth(1, 260); f.setColumnWidth(2, 170); f.setColumnWidth(3, 200); f.setColumnWidth(4, 520);
+  } else if (f.getRange(1, 2).getDisplayValue() === 'Remarque') {   // onglet d'une version d'avant : la colonne B est ajoutée
+    f.insertColumnBefore(2);
+    f.getRange(1, 2).setValue('Rapports du soir et bilans aussi (oui / non)').setFontWeight('bold');
+    f.getRange(2, 4).setValue(aSavoir).setWrap(true);
+    f.setColumnWidth(2, 170);
   }
   var vus = {}, out = [];
-  if (f.getLastRow() > 1) f.getRange(2, 1, f.getLastRow() - 1, 1).getDisplayValues().forEach(function (r) {
+  if (f.getLastRow() > 1) f.getRange(2, 1, f.getLastRow() - 1, 2).getDisplayValues().forEach(function (r) {
     var a = String(r[0] || '').trim().toLowerCase();
-    if (/^[^\s@,;]+@[^\s@,;]+\.[a-z]{2,}$/.test(a) && !vus[a]) { vus[a] = 1; out.push(a); }
+    if (/^[^\s@,;]+@[^\s@,;]+\.[a-z]{2,}$/.test(a) && !vus[a]) { vus[a] = 1; out.push({ adresse: a, rapports: /^\s*oui\b/i.test(r[1]) }); }
   });
+  return out;
+}
+
+/** Les destinataires des rapports du soir et des bilans : le propriétaire, puis les adresses avec « oui » en colonne B de l'onglet Envoi du matin. */
+function destRapports_() {
+  var moi = Session.getEffectiveUser().getEmail(), out = [moi];
+  try { lignesEnvoi_().forEach(function (l) { if (l.rapports && l.adresse !== String(moi).toLowerCase()) out.push(l.adresse); }); }
+  catch (err) { console.warn('Envoi du matin : ' + err); }
   return out;
 }
 
@@ -1148,7 +1208,8 @@ function envoyerRapport_(mode, force) {
     } catch (err) { console.warn('Backlog : ' + err); }
   }
   if (!r.aEnvoyer && !force) return 0;
-  GmailApp.sendEmail(Session.getEffectiveUser().getEmail(), r.sujet, r.texte, { htmlBody: r.html, name: 'Carte des tickets' });
+  // à la main (menu, pour voir) : seulement au propriétaire ; tout seul : aussi aux adresses avec « oui » en colonne B de l'onglet Envoi du matin
+  GmailApp.sendEmail((force ? [Session.getEffectiveUser().getEmail()] : destRapports_()).join(','), r.sujet, r.texte, { htmlBody: r.html, name: 'Carte des tickets' });
   return 1;
 }
 
@@ -1166,17 +1227,23 @@ function historiqueBacklog_() {
 function rapportSoirMaintenant() {
   proprietaire_();
   envoyerRapport_('soir', true);
-  SpreadsheetApp.getUi().alert('Rapport des fins d\'intervention envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul chaque soir vers 17 h.');
+  SpreadsheetApp.getUi().alert('Rapport des fins d\'intervention envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul chaque soir vers 17 h.' + autresDest_());
 }
 function rapportSemaineMaintenant() {
   proprietaire_();
   envoyerRapport_('semaine', true);
-  SpreadsheetApp.getUi().alert('Bilan de la semaine envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul le dimanche vers 17 h.');
+  SpreadsheetApp.getUi().alert('Bilan de la semaine envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul le dimanche vers 17 h.' + autresDest_());
 }
 function rapportMoisMaintenant() {
   proprietaire_();
   envoyerRapport_('mois', true);
-  SpreadsheetApp.getUi().alert('Bilan du mois dernier envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul le 1er de chaque mois vers 17 h.');
+  SpreadsheetApp.getUi().alert('Bilan du mois dernier envoyé à ' + Session.getEffectiveUser().getEmail() + '.\n\nIl part aussi tout seul le 1er de chaque mois vers 17 h.' + autresDest_());
+}
+
+/** Pour les menus des rapports : à qui ils partent aussi quand ils sont envoyés tout seuls. */
+function autresDest_() {
+  var autres = destRapports_().slice(1);
+  return autres.length ? ' À ' + (autres.length > 1 ? 'ces heures-là, il part aussi à : ' : 'ce moment-là, il part aussi à ') + autres.join(', ') + ' (onglet Envoi du matin, colonne B).' : '';
 }
 
 /** Les fonctions du fichier Analyse (les mêmes que la carte), pour s'en servir côté serveur. */
@@ -1955,8 +2022,9 @@ function acces_() {
   if (f.getLastRow() < 4) {
     var v0 = f.getRange(2, 2, 2, 1).getDisplayValues(), c = code();
     while (c === v0[0][0].trim() || c === v0[1][0].trim()) c = code();
-    f.getRange(4, 1, 1, 3).setNumberFormat('@').setValues([['Annulations et corrélations', c, 'Comme la conduite d\'activité, et peut retirer de la carte un ticket annulé ' +
-      'dans Praxedo, ou regrouper des tickets sous un ticket principal (corrélation), et les remettre. En colonne D : son adresse mail, pour le faire par mail ' +
+    f.getRange(4, 1, 1, 3).setNumberFormat('@').setValues([['Annulations et corrélations', c, 'Comme la conduite d\'activité, et peut modifier depuis la carte : retirer ' +
+      'un ticket annulé dans Praxedo, regrouper des tickets sous un ticket principal (corrélation), et les remettre ; ajouter une note à un ticket (justifié, ' +
+      'relance…) ; noter OK ou NO OK une intervention après avoir vérifié ses photos. En colonne D : son adresse mail, pour annuler ou regrouper par mail ' +
       '(« ANNULÉ » ou « CORRÉLATION » dans l\'objet, avec les n° des tickets).']]);
     f.getRange(1, 4).setValue('Adresse mail (annulations et corrélations par mail)').setFontWeight('bold');
     f.getRange(4, 4).setNumberFormat('@');

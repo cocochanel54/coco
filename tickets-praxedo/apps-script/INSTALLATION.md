@@ -10,7 +10,7 @@ La carte se met à jour à chaque export Praxedo que tu importes et à chaque ma
 4. **Déployer → Gérer les déploiements** → crayon → **Version : Nouvelle version** → **Déployer**. Le lien de la carte ne change pas. (Pas « Nouveau déploiement » : ça créerait un autre lien.)
 5. Dans le Sheet, **F5**, puis **Carte tickets → Mettre à jour les onglets de contrôle**. De nouveaux onglets apparaissent : **Qualité**, **Graphiques**, **Envoi du matin**, **Annulés**, **Corrélés** (et **Backlog** après le premier rapport du soir).
 6. **Onglet Accès**, ligne **Annulations et corrélations** : écris en **colonne D** l'adresse mail de la personne qui gère les annulations et les corrélations (et la tienne si tu veux le faire depuis Outlook, séparée par une virgule). Donne-lui le code de cette ligne.
-7. **Onglet Envoi du matin** : les adresses qui recevront l'Excel et la carte chaque jour ouvré vers 7 h (une par ligne, en colonne A).
+7. **Onglet Envoi du matin** : les adresses qui recevront l'Excel et la carte chaque jour ouvré vers 7 h (une par ligne, en colonne A). **oui** en colonne B : elle reçoit aussi le rapport du soir et les bilans.
 8. Pour voir les mails tout de suite : **Carte tickets → Rapports par mail** et **Carte tickets → Envoi du matin : envoyer maintenant**. Ensuite tout part seul : rapport chaque soir vers 17 h, bilan de la semaine le dimanche, bilan du mois le 1er.
 9. Facultatif : **l'analyse des photos des rapports par l'IA** (OK ou NO OK — à vérifier). Elle demande une clé payante : voir « Analyse des photos par l'IA » plus bas. Sans clé, rien ne change.
 
@@ -77,9 +77,19 @@ La carte demande un **code** à la première ouverture (gardé ensuite sur le t�
 
 - **Conduite d'activité** : la carte, les chiffres clés, le **Bilan en graphiques** et les **Listes de contrôle** (Incohérences, Tickets liés, PM chargés, Suites à prévoir, Clôtures, Boîtes, Villes, Qualité, Annulés, Corrélés ; un clic sur une ligne montre le ticket sur la carte).
 - **Techniciens** : la carte (tickets, priorités, nouveaux, terminés). Chacun choisit son nom dans **Mes interventions** : ses interventions ont un contour noir, et la liste montre aussi les tickets à côté des siennes.
-- **Annulations et corrélations** : tout ce que voit la conduite d'activité, plus les boutons pour retirer un ticket annulé et regrouper des tickets (voir plus bas). À ne donner qu'à la personne qui les gère.
+- **Annulations et corrélations** : tout ce que voit la conduite d'activité, plus des boutons pour modifier (voir « Ce qu'elle peut modifier depuis la carte » plus bas). À ne donner qu'à la personne qui gère la planification, les annulations et les corrélations.
 
-Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte, sauf la personne qui a le code **Annulations et corrélations** (troisième ligne de l'onglet Accès) : elle peut retirer un ticket annulé dans Praxedo ou regrouper des tickets sous un ticket principal, et les remettre. L'import et les mises à jour ne marchent que pour toi, depuis le Sheet. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
+Envoie l'adresse `/exec` et le bon code par SMS ou WhatsApp. Personne ne peut rien modifier depuis la carte, sauf la personne qui a le code **Annulations et corrélations** (troisième ligne de l'onglet Accès). L'import et les menus du Sheet ne marchent que pour toi. Pour couper l'accès à quelqu'un, change le code dans l'onglet Accès et donne le nouveau aux autres.
+
+**Ce qu'elle peut modifier depuis la carte, avec son code :**
+
+- **retirer un ticket annulé** dans Praxedo, ou **regrouper des tickets** sous un ticket principal (voir plus bas), et les remettre ;
+- **ajouter une note** sur un ticket (fiche du ticket → « Ajouter une note ») : « GTR justifiée… », « attente Orange », « relance Orange 12/11 », « prévu le 25/11 »… Elle part dans l'onglet **Notes** et compte comme une note tapée dans le Sheet (le ticket passe en gris s'il est justifié) ;
+- **noter OK ou NO OK une intervention** après avoir vérifié ses photos (le lien « rapport » ouvre le PDF), avec un commentaire : dans la fiche d'un ticket terminé (« Photos vérifiées ? »), ou dans **Listes de contrôle → Clôtures** (toutes les clôtures des 90 derniers jours) et **→ Qualité**. C'est écrit dans la colonne **Photos vérifiées** de l'onglet Fins d'intervention, avec la date. Ça marche aussi sans l'analyse par l'IA.
+
+Elle reçoit aussi l'Excel et la carte du matin si son adresse est dans l'onglet **Envoi du matin**, et le rapport du soir et les bilans si tu écris **oui** en colonne B à côté.
+
+Si un jour Google Sheets est débloqué chez Circet, tu peux aussi lui partager le Sheet (**Partager**, en « Éditeur ») : elle pourra tout modifier dans les onglets. Les menus Carte tickets restent réservés à toi. Attention, un éditeur voit aussi les codes de l'onglet Accès et peut ouvrir le code du script.
 
 ## Là où Google est bloqué : la carte et l'Excel du jour
 
@@ -125,7 +135,7 @@ L'analyse qualité **propose** aussi des regroupements : des tickets ouverts sur
 
 Pour que l'équipe reçoive l'Excel et la carte du jour sans que tu aies à les refaire :
 
-1. Dans le Sheet, onglet **Envoi du matin** (il apparaît après la mise à jour des onglets), écris les adresses mail en **colonne A**, une par ligne.
+1. Dans le Sheet, onglet **Envoi du matin** (il apparaît après la mise à jour des onglets), écris les adresses mail en **colonne A**, une par ligne. Écris **oui** en **colonne B** pour qu'une adresse reçoive aussi le rapport du soir et les bilans de la semaine et du mois (par exemple la personne qui fait la planification).
 2. Pour essayer tout de suite : **Carte tickets → Envoi du matin : envoyer maintenant**.
 3. Ensuite, c'est automatique : chaque **jour ouvré vers 7 h**, deux mails partent à ces adresses, d'abord l'**Excel du jour** (avec les chiffres du jour dans le texte), puis la **carte du jour**. Si la messagerie de l'entreprise bloque la carte (fichier .html), l'Excel arrive quand même.
 
@@ -133,7 +143,7 @@ Rien ne part tant que la colonne A est vide ; pour arrêter, vide-la. Gmail limi
 
 ## Rapports par mail : chaque soir, chaque dimanche, chaque 1er du mois
 
-Sans rien régler, tu reçois sur ton Gmail :
+Sans rien régler, tu reçois sur ton Gmail (et les adresses avec **oui** en colonne B de l'onglet **Envoi du matin** aussi) :
 
 - **Chaque soir vers 17 h**, les fins d'intervention reçues depuis le rapport de la veille :
   - **Backlog**, en résumé sur trois périodes : **depuis la veille 17 h**, **cette semaine** (depuis lundi) et **ce mois** (depuis le 1er). Pour chacune : combien de tickets **ouverts** (créés), combien **clôturés**, les autres sorties (sortis de l'export, annulés, regroupés), le **backlog au début** et **maintenant**, et l'**évolution**. Puis le détail des tickets ouverts (à planifier dont GTR KO et à moins de 48 h, planifiés dont GTR KO, justifiés, ouverts depuis plus de 30 jours, le plus ancien) et les niveaux des tickets créés ;
@@ -141,14 +151,14 @@ Sans rien régler, tu reçois sur ton Gmail :
   - **Redondances** : même client (PTO ou référence client) dépanné deux fois en 30 jours, ticket rouvert après notre clôture, plusieurs interventions le même jour dans la même boîte, câble / boîte / ligne du PM touchés 3 fois ou plus en 90 jours, déplacement peut-être inutile (fin d'impact avant l'arrivée du technicien) ;
   - **Corrections à faire** : créer le ticket de suite, mettre à jour NETGEO, signaler à l'opérateur (jarretière, brassage), faire compléter un rapport (boîte, cause, position au PM ou réponse « défaut corrigé » manquante) ;
   - les autres points : GTR non respectée, rapport illisible, clôture d'un ticket inconnu, durée sur place inhabituelle, Cerfa ou plainte, fini un autre jour que prévu ;
-  - **Photos à vérifier (analyse IA)**, si tu l'as activée (voir plus bas) : les rapports dont l'IA juge les photos NO OK ;
+  - **Photos à vérifier ou NO OK** : les interventions notées NO OK après vérification (carte ou Sheet), et les photos que l'IA juge NO OK si l'analyse est activée (voir plus bas) ;
   - les interventions **prévues aujourd'hui sans fin d'intervention**, puis le **détail de chaque clôture** (horaires, GTR, résultat, boîte, câble, position au PM, cause, compte-rendu). Chaque n° de ticket ouvre le rapport Praxedo.
 - **Le dimanche**, en plus, le **bilan de la semaine** : le backlog jour par jour (créés, clôturés, ouverts le soir) avec le stock du début et de la fin de semaine, les chiffres comparés à la semaine d'avant, par jour, par technicien (avec les défauts peut-être liés à ses passages), les communes et les boîtes, les reprises toujours sans ticket de suite, et tous les constats de la semaine.
 - **Le 1er du mois**, le **bilan du mois d'avant**, de la même façon, par semaine (backlog compris).
 
 Chaque soir, une ligne s'ajoute à l'onglet **Backlog** du Sheet (créés, clôturés, tickets ouverts…), même s'il n'y a pas de mail : c'est l'historique qui donne le backlog au début de chaque période. Tant qu'il n'existe pas encore, le backlog du début est **estimé** avec les entrées et les sorties, et c'est écrit. L'historique et le même résumé (depuis le rapport de la veille, la semaine, le mois) sont aussi dans l'Excel du jour.
 
-Un soir sans rien, aucun mail. Pour voir un rapport tout de suite : **Carte tickets → Rapports par mail**.
+Un soir sans rien, aucun mail. Pour voir un rapport tout de suite : **Carte tickets → Rapports par mail** (envoyé à toi seul).
 
 Pour repérer les câbles et les positions au PM, le script lit dans le rapport du technicien le n° du câble (par exemple `GNY-CA-0002728`), la **Position PM** (`T1L6C3` : tiroir 1, ligne 6, connecteur 3), la référence client et la PTO. Plus les techniciens les écrivent, plus la détection est complète. Après la mise à jour, les rapports des 30 derniers jours sont relus une fois (en quelques heures), pour y trouver ces informations.
 
@@ -169,12 +179,12 @@ Ensuite tout est automatique : les photos de chaque nouveau rapport lu partent �
 
 **Où voir les verdicts :**
 
-- onglet **Fins d'intervention**, colonnes **Photos (IA)** et **Photos analysées le** ;
+- onglet **Fins d'intervention**, colonnes **Photos (IA)**, **Photos analysées le** et **Photos vérifiées** ;
 - onglet **Qualité** (Sheet et Excel du jour) : les NO OK, en rouge (important) ou en jaune ;
-- **rapport du soir** : la partie **Photos à vérifier (analyse IA)**, et « photos OK (IA) » ou « photos NO OK (IA) » dans le détail de chaque clôture ; dans les bilans de la semaine et du mois, une colonne **Photos NO OK** par technicien ;
+- **rapport du soir** : la partie **Photos à vérifier ou NO OK**, et « photos OK (IA) » ou « photos NO OK (IA) » dans le détail de chaque clôture ; dans les bilans de la semaine et du mois, une colonne **Photos NO OK** par technicien ;
 - sur la carte, avec le code de la conduite d'activité seulement : dans la fiche du ticket terminé.
 
-**Après avoir regardé les photos** (le n° de ticket ouvre le rapport Praxedo) : écris **OK** ou **NO OK** dans la colonne **Photos : mon avis** de l'onglet Fins d'intervention. OK : l'alerte disparaît. NO OK : le problème est confirmé, il reste dans l'onglet Qualité (« faire reprendre le travail ou en parler au technicien ») et compte dans les bilans.
+**Après avoir regardé les photos** (le n° de ticket ouvre le rapport Praxedo) : note **OK** ou **NO OK**, dans la fiche du ticket sur la carte avec le code **Annulations et corrélations** (avec un commentaire), ou dans la colonne **Photos vérifiées** de l'onglet Fins d'intervention. OK : l'alerte disparaît. NO OK : le problème est confirmé, il reste dans l'onglet Qualité (« faire reprendre le travail ou en parler au technicien »), passe dans le rapport du soir et compte dans les bilans. On peut aussi noter NO OK une intervention que l'IA n'a pas regardée.
 
 **Ce que ça coûte** : l'analyse utilise Claude Opus 5.5, un des modèles les plus capables d'Anthropic, et passe par lots, à moitié prix. Compte **environ 2 à 5 centimes par rapport** (une dizaine de photos), soit **environ 10 à 25 € par mois** (facturés en dollars) pour 25 rapports par jour ouvré. Le menu **Activer, voir le coût…** affiche le coût estimé du mois ; le montant exact est dans la console Anthropic (**Usage**). Garde-fou : 80 rapports par jour au plus. Pour arrêter : même menu, tape **STOP**.
 
