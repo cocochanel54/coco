@@ -227,7 +227,9 @@ function classeurDuJour_() { return excelDuJour_().blob; }
 /** L'Excel du jour (blob) et les lignes de son résumé (pour le texte du mail du matin). */
 function excelDuJour_() {
   var a = analyse_(), d = lireDonnees_(), NOW = new Date(), res = a.analyser(d, NOW), c = a.controles(res, NOW);
-  var l = a.listesDuJour(res, c, NOW, { importeLe: d.importeLe, luLe: d.luLe, lienCarte: PropertiesService.getScriptProperties().getProperty('LIEN_CARTE') || '' }), g = l.graphiques;
+  var props = PropertiesService.getScriptProperties();
+  var l = a.listesDuJour(res, c, NOW, { importeLe: d.importeLe, luLe: d.luLe, lienCarte: props.getProperty('LIEN_CARTE') || '',
+    historique: historiqueBacklog_(), depuisSoir: props.getProperty('RAPPORT_SOIR_DEPUIS') || '' }, d), g = l.graphiques;
   var feuilles = [
     { nom: 'Résumé', entetes: l.resume.entetes, lignes: l.resume.lignes, fonds: l.resume.fonds, largeurs: [460, 220], filtre: false },
     // graphiques natifs d'Excel, comme le bilan de la carte ; leurs chiffres sont dans l'onglet « Données graphiques »

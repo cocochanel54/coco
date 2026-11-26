@@ -135,7 +135,7 @@ Rien ne part tant que la colonne A est vide ; pour arrêter, vide-la. Gmail limi
 Sans rien régler, tu reçois sur ton Gmail :
 
 - **Chaque soir vers 17 h**, les fins d'intervention reçues depuis le rapport de la veille :
-  - **Backlog** : les tickets créés (par niveau), clôturés, sortis de l'export, annulés et regroupés depuis la veille, et les tickets ouverts maintenant (à planifier dont GTR KO et à moins de 48 h, planifiés dont GTR KO, justifiés, ouverts depuis plus de 30 jours, le plus ancien), avec l'évolution depuis la veille ;
+  - **Backlog**, en résumé sur trois périodes : **depuis la veille 17 h**, **cette semaine** (depuis lundi) et **ce mois** (depuis le 1er). Pour chacune : combien de tickets **ouverts** (créés), combien **clôturés**, les autres sorties (sortis de l'export, annulés, regroupés), le **backlog au début** et **maintenant**, et l'**évolution**. Puis le détail des tickets ouverts (à planifier dont GTR KO et à moins de 48 h, planifiés dont GTR KO, justifiés, ouverts depuis plus de 30 jours, le plus ancien) et les niveaux des tickets créés ;
   - **Peut-être causé par nos interventions** : un nouveau défaut apparu dans les 15 jours après le passage d'un de nos techniciens au même endroit (position voisine au même PM, même câble, même boîte), plus probable si la cause notée est un brassage, une malfaçon ou une mauvaise manipulation. C'est à vérifier avec les deux rapports, pas une certitude ;
   - **Redondances** : même client (PTO ou référence client) dépanné deux fois en 30 jours, ticket rouvert après notre clôture, plusieurs interventions le même jour dans la même boîte, câble / boîte / ligne du PM touchés 3 fois ou plus en 90 jours, déplacement peut-être inutile (fin d'impact avant l'arrivée du technicien) ;
   - **Corrections à faire** : créer le ticket de suite, mettre à jour NETGEO, signaler à l'opérateur (jarretière, brassage), faire compléter un rapport (boîte, cause, position au PM ou réponse « défaut corrigé » manquante) ;
@@ -144,7 +144,7 @@ Sans rien régler, tu reçois sur ton Gmail :
 - **Le dimanche**, en plus, le **bilan de la semaine** : le backlog jour par jour (créés, clôturés, ouverts le soir) avec le stock du début et de la fin de semaine, les chiffres comparés à la semaine d'avant, par jour, par technicien (avec les défauts peut-être liés à ses passages), les communes et les boîtes, les reprises toujours sans ticket de suite, et tous les constats de la semaine.
 - **Le 1er du mois**, le **bilan du mois d'avant**, de la même façon, par semaine (backlog compris).
 
-Chaque soir, une ligne s'ajoute à l'onglet **Backlog** du Sheet (créés, clôturés, tickets ouverts…), même s'il n'y a pas de mail : c'est l'historique qui sert aux bilans de la semaine et du mois. Il est aussi dans l'Excel du jour.
+Chaque soir, une ligne s'ajoute à l'onglet **Backlog** du Sheet (créés, clôturés, tickets ouverts…), même s'il n'y a pas de mail : c'est l'historique qui donne le backlog au début de chaque période. Tant qu'il n'existe pas encore, le backlog du début est **estimé** avec les entrées et les sorties, et c'est écrit. L'historique et le même résumé (depuis le rapport de la veille, la semaine, le mois) sont aussi dans l'Excel du jour.
 
 Un soir sans rien, aucun mail. Pour voir un rapport tout de suite : **Carte tickets → Rapports par mail**.
 

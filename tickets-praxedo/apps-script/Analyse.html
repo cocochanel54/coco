@@ -994,7 +994,7 @@ function controles(res, NOW) {
  * par priorité, et le suivi des justifiés. Chaque liste : en-têtes, lignes, et la couleur de fond de chaque ligne.
  * infos : { importeLe, luLe } (dates ISO du dernier import et de la dernière lecture des mails).
  */
-function listesDuJour(res, ctrl, NOW, infos) {
+function listesDuJour(res, ctrl, NOW, infos, donnees) {
   infos = infos || {};
   var T = res.tickets, k = res.stats.kpi;
   function nb(f) { return T.filter(f).length; }
@@ -1011,6 +1011,15 @@ function listesDuJour(res, ctrl, NOW, infos) {
   if (infos.lienCarte) ligne("Carte en direct (avec ton code d'accès)", infos.lienCarte);
   titre('TICKETS À PLANIFIER');
   ligne('Tickets ouverts (backlog)', nb(function (t) { return t.ouvert && !t.termine && !t.annule && !t.correle; }));
+  if (donnees) {
+    var dm = new Date(NOW.getFullYear(), NOW.getMonth(), 1), soirAvant = infos.depuisSoir ? new Date(infos.depuisSoir) : null;
+    var per = (soirAvant && !isNaN(soirAvant) ? [['Depuis le rapport du ' + fd(soirAvant), soirAvant]] : [])
+      .concat([['Cette semaine (depuis lundi ' + fd(lundiDe(NOW), false) + ')', lundiDe(NOW)], ['Ce mois (depuis le ' + fd(dm, false) + ')', dm]]);
+    resumeBacklog(res, donnees, NOW, infos.historique, per).forEach(function (x) {
+      ligne(x.lib, x.crees + ' ouverts (créés), ' + x.clotures + ' clôturés · backlog ' + x.debut + (x.estime ? ' (estimé)' : '') + ' → ' + x.fin + ' (' +
+        (x.ecart > 0 ? '+' + x.ecart : x.ecart === 0 ? 'stable' : x.ecart) + ')');
+    });
+  }
   ligne('À planifier', nb(function (t) { return t.aPlanifier; }));
   ligne('dont GTR KO', nb(function (t) { return t.urgent && t.rang === 0; }));
   ligne('dont GTR dans moins de 48 h', nb(function (t) { return t.urgent && t.rang !== 0; }));
@@ -1129,6 +1138,23 @@ function backlog(res, donnees, depuis, fin, NOW) {
 }
 
 /**
+ * Résumé du backlog sur des périodes qui finissent maintenant (le jour, la semaine, le mois) : pour chacune, les tickets
+ * ouverts (créés), clôturés, les autres sorties (sortis de l'export, annulés, regroupés), et le backlog au début (onglet
+ * Backlog, sinon estimé avec les entrées et les sorties) et maintenant. periodes : [[libellé, début]].
+ */
+function resumeBacklog(res, donnees, NOW, historique, periodes) {
+  var fin = new Date(NOW.getTime() + 1), hist = (historique || []).filter(function (x) { return x.le; });
+  return periodes.map(function (p) {
+    var b = backlog(res, donnees, p[1], fin, NOW), avant = hist.filter(function (x) { return x.le <= p[1]; }), debut, estime = false;
+    if (avant.length) debut = avant[avant.length - 1].ouverts;
+    else { debut = b.stock.ouverts - b.crees + b.clotures + b.sortis + b.annules + b.regroupes; estime = true; }
+    return { lib: p[0], crees: b.crees, clotures: b.clotures, autres: b.sortis + b.annules + b.regroupes, debut: debut, estime: estime,
+             fin: b.stock.ouverts, ecart: b.stock.ouverts - debut };
+  });
+}
+function lundiDe(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+
+/**
  * Rapport des fins d'intervention envoyé par mail. mode : 'soir' (celles reçues depuis le rapport d'avant, avec le détail de
  * chaque clôture), 'semaine' (depuis lundi, par jour et par technicien) ou 'mois' (le mois d'avant, par semaine et par
  * technicien ; jusqua = le 1er du mois). Dans l'ordre : chiffres, peut-être causé par nos interventions, redondances,
@@ -1213,9 +1239,19 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
   if (stockAvant == null && !soir) { stockAvant = st.ouverts - BK.crees + BK.clotures + BK.sortis + BK.annules + BK.regroupes; estime = true; }
   var ev = stockAvant == null ? '' : (st.ouverts - stockAvant > 0 ? '+' : '') + (st.ouverts - stockAvant);
   var niv = Object.keys(BK.niveaux).sort().map(function (k) { return k + ' : ' + BK.niveaux[k]; }).join(', ');
+  // le résumé : combien ouverts, combien clôturés, et le backlog, sur le jour, la semaine et le mois
+  var debutMois = new Date(NOW.getFullYear(), NOW.getMonth(), 1);
+  var periodesB = soir ? [['Depuis le ' + fd(depuis).slice(0, 5) + ' ' + fd(depuis).slice(11), depuis], ['Cette semaine (depuis lundi ' + fd(lundiDe(NOW), false).slice(0, 5) + ')', lundiDe(NOW)],
+      ['Ce mois (depuis le ' + fd(debutMois, false).slice(0, 5) + ')', debutMois]]
+    : M === 'semaine' ? [['Ce mois (depuis le ' + fd(debutMois, false).slice(0, 5) + ')', debutMois]] : [];
+  var RB = resumeBacklog(res, donnees, NOW, infos.historique, periodesB);
+  if (soir && infos.backlogAvant != null && RB.length) { RB[0].debut = infos.backlogAvant; RB[0].estime = false; RB[0].ecart = RB[0].fin - RB[0].debut; }
+  var signe = function (n) { return n > 0 ? '+' + n : n === 0 ? 'stable' : String(n); };
   html += '<h3 style="font-size:16px;color:' + BLEU + ';margin:14px 0 2px">Backlog</h3>' +
-    tab(['Créés', 'Clôturés', 'Sortis de l\'export', 'Annulés', 'Regroupés', 'Tickets ouverts'],
-      [[BK.crees, BK.clotures, BK.sortis, BK.annules, BK.regroupes, st.ouverts + (ev !== '' ? ' (' + (ev === '0' ? 'stable' : ev) + (soir ? ' depuis le rapport d\'avant' : estime ? ', estimé' : '') + ')' : '')]]) +
+    (soir ? tab(['Période', 'Ouverts (créés)', 'Clôturés', 'Sortis, annulés, regroupés', 'Backlog au début', 'Backlog maintenant', 'Évolution'],
+      RB.map(function (x) { return [x.lib, x.crees, x.clotures, x.autres, x.debut + (x.estime ? ' (estimé)' : ''), x.fin, signe(x.ecart)]; }))
+     : tab(['Créés', 'Clôturés', 'Sortis de l\'export', 'Annulés', 'Regroupés', 'Tickets ouverts'],
+      [[BK.crees, BK.clotures, BK.sortis, BK.annules, BK.regroupes, st.ouverts + (ev !== '' ? ' (' + (ev === '0' ? 'stable' : ev) + (estime ? ', estimé' : '') + ')' : '')]])) +
     '<p style="margin:-6px 0 6px">' + h(st.ouverts + ' tickets ouverts : ' + st.aPlanifier + ' à planifier (dont ' + st.ko + ' en GTR KO, ' + st.bientot + ' à moins de 48 h, ' + st.justifies +
       ' justifiés), ' + st.planifies + ' planifiés (dont ' + st.planifiesKo + ' en GTR KO) ; ' + st.vieux30 + ' ouverts depuis plus de 30 jours' +
       (st.plusVieux ? ' (le plus ancien : ' + st.plusVieux.num + ', ' + st.plusVieux.jours + ' j)' : '') + '.') + '</p>' +
@@ -1229,9 +1265,12 @@ function rapportFins(res, ctrl, NOW, depuis, mode, donnees, infos, jusqua) {
         kb.crees, kb.clotures, kb.sortis, kb.annules + kb.regroupes, h1.length ? h1[h1.length - 1].ouverts : '—']);
     }
     html += tab([M === 'mois' ? 'Semaine' : 'Jour', 'Créés', 'Clôturés', 'Sortis de l\'export', 'Annulés ou regroupés', 'Ouverts le soir'], lignesB) +
-      '<p style="margin:-6px 0 10px;color:#555">' + h('Sur la période : ' + BK.crees + ' créés, ' + BK.clotures + ' clôturés' +
-        (stockAvant != null ? ' ; backlog ' + stockAvant + ' → ' + st.ouverts + ' (' + (ev === '0' ? 'stable' : ev) + (estime ? ', début estimé' : '') + ')' : '') + '.') + '</p>';
+      '<p style="margin:-6px 0 6px;color:#555">' + h('Sur la période : ' + BK.crees + ' ouverts (créés), ' + BK.clotures + ' clôturés' +
+        (stockAvant != null ? ' ; backlog ' + stockAvant + ' → ' + st.ouverts + ' (' + (ev === '0' ? 'stable' : ev) + (estime ? ', début estimé' : '') + ')' : '') + '.') + '</p>' +
+      RB.map(function (x) { return '<p style="margin:0 0 10px;color:#555">' + h(x.lib + ' : ' + x.crees + ' ouverts (créés), ' + x.clotures + ' clôturés ; backlog ' + x.debut +
+        (x.estime ? ' (estimé)' : '') + ' → ' + x.fin + ' (' + signe(x.ecart) + ').') + '</p>'; }).join('');
   }
+  RB.forEach(function (x) { texte += x.lib + ' : ' + x.crees + ' ouverts, ' + x.clotures + ' clôturés, backlog ' + x.debut + ' → ' + x.fin + ' (' + signe(x.ecart) + ')\n'; });
   texte += 'Backlog : ' + BK.crees + ' créés, ' + BK.clotures + ' clôturés, ' + BK.sortis + ' sortis de l\'export, ' + BK.annules + ' annulés, ' + BK.regroupes + ' regroupés · ' +
     st.ouverts + ' ouverts' + (ev !== '' ? ' (' + ev + ')' : '') + ' dont ' + st.aPlanifier + ' à planifier (' + st.ko + ' GTR KO) et ' + st.planifies + ' planifiés\n';
   var texte = titre + '\n' + K.n + ' clôtures · GTR respectée ' + K.gtr + ' · à reprendre ' + K.reprendre + ' · peut-être causés par nous ' + QC.length + ' · ' + K.moyen + ' en moyenne\n';
