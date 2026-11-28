@@ -43,23 +43,23 @@ Tout ce dont on a parlé, rangé par thème. ✅ = fait, 🔜 = prochaine étape
 
 | Cible | Limite | Préparation | Policiers en service |
 |---|---|---|---|
-| Supérette (PNJ) | 3 par jour sur le serveur | non | non |
+| Supérette (PNJ) | 3 par jour sur le serveur | non | au moins 2 |
 | Bijouterie (PNJ) | 1 par jour | oui | oui |
-| Banque (PNJ) | 1 par jour | oui | oui |
+| Banque (PNJ) | 1 par semaine | oui | oui |
 | Commerce d'un joueur (concession, garage…) | 1 par semaine | oui | oui |
-| Commissariat | 1 par semaine | oui | oui, beaucoup |
+| Commissariat | 1 par mois | oui | oui, beaucoup |
 
-- Commerces PNJ : supérette, bijouterie, banque…
+- 🔜 Commerces PNJ : supérette, bijouterie, banque…
 - Entreprises de joueurs : concession, garage des mécanos…
 - Prises d'otages bien encadrées : négociation avec la police, revendications, fin qui dépend des joueurs.
 - La panne de courant coupe les caméras : `exports.vox_events:EnPanne()` est déjà prêt pour les braquages.
 
 ## Des PNJ utiles : témoins et clients
 
-- **Vente de drogue aux PNJ** : on peut vendre dans la rue. Si un autre PNJ voit la vente, il peut appeler la police.
-- 🔜 **Les PNJ appellent la police** quand ils voient quelque chose de suspect : coups de feu, enlèvement…
-- **Témoignages** : un témoin donne le type de véhicule et sa couleur, sans plus (pas la plaque, pas le visage).
-- **Enlèvements** : possibles, et sans alerte si personne n'a rien vu.
+- ✅ **Vente de drogue aux PNJ** : on peut vendre dans la rue. Si un autre PNJ voit la vente, il peut appeler la police.
+- ✅ **Les PNJ appellent la police** quand ils voient quelque chose de suspect : coups de feu, enlèvement…
+- ✅ **Témoignages** : un témoin donne le type de véhicule et sa couleur, sans plus (pas la plaque, pas le visage).
+- **Enlèvements** : possibles, et sans alerte si personne n'a rien vu (les témoins sont prêts, il reste à coder l'enlèvement lui-même).
 
 ## Police, justice et prison
 
@@ -74,7 +74,7 @@ Tout ce dont on a parlé, rangé par thème. ✅ = fait, 🔜 = prochaine étape
 ### Règles proposées pour la descente au commissariat
 
 - Possible seulement avec au moins 6 policiers en service (à régler).
-- Une fois par semaine maximum sur tout le serveur.
+- Une fois par mois maximum sur tout le serveur.
 - Il faut préparer le coup avant : plan du bâtiment, matériel, et une information sur ce qui est dans la salle des saisies.
 - On ne récupère qu'une partie des saisies, jamais tout.
 - Le staff est prévenu automatiquement pour surveiller que ça reste RP.

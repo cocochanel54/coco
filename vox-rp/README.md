@@ -51,6 +51,29 @@ Les objets doivent exister dans l'inventaire. Ajoute ces lignes dans `ox_invento
 ['cannabis'] = { label = 'Cannabis', weight = 20, stack = true, close = true },
 ```
 
+### `vox_temoins` : les PNJ témoins
+
+Les passants ne sont plus des décors : s'ils voient ou entendent quelque chose de suspect, ils peuvent appeler la police.
+
+- **Coups de feu** : détectés automatiquement. Avec un silencieux, il faut être tout près pour être entendu.
+  Les policiers en service qui tirent ne déclenchent rien, ni le stand de tir d'Ammu-Nation.
+- **Le témoin met 10 à 25 secondes à appeler** (il sort son téléphone). S'il est neutralisé avant, la police ne saura rien.
+- **Personne autour = pas d'alerte** (enlèvement discret possible, par exemple).
+- **Description vague** : homme ou femme, à pied ou le type de véhicule et sa couleur (parfois seulement l'un des deux).
+  Jamais la plaque ni le visage. Le point envoyé à la police est approximatif.
+- Plusieurs appels pour la même scène n'envoient qu'une alerte.
+- Les autres scripts peuvent s'en servir : `exports.vox_temoins:ActeSuspect('braquage')` (côté joueur)
+  ou `exports.vox_temoins:Alerter('braquage', { position, zone, description })` (côté serveur).
+
+### `vox_deal` : la vente de rue
+
+- Avec du cannabis sur toi, approche un passant à pied et appuie sur **E**.
+- Il achète (1 à 3 unités, payées en argent sale), refuse, ou… **appelle la police** lui-même.
+- Un autre passant qui voit l'échange peut aussi appeler.
+- Un même passant n'achète qu'une fois toutes les 10 minutes. Interdit près du commissariat.
+- Il faut au moins 1 policier en service (sinon « c'est trop calme ce soir »).
+- Les ventes sont comptées par quartier : ça servira aux guerres de territoires.
+
 ## Installer le serveur sur ton PC (pour tester, gratuit)
 
 Il te faut GTA V sur PC et [FiveM](https://fivem.net) installés.
@@ -98,7 +121,9 @@ En jeu, dans le chat (touche **T**) :
 5. **Plantations** : donne-toi des graines, de l'eau et de l'engrais avec la commande admin d'ox_inventory
    (par exemple `/giveitem [ton id] graine_cannabis 3`), utilise une graine dans l'herbe, puis **E** devant le plant.
    Pour tester vite, mets `Duree = 5` dans la config des plantations.
-6. `/event accident` : un point rouge apparaît. Pour tester les métiers, donne-toi un métier avec la commande
+6. **Témoins et deal** (mets un deuxième joueur en policier en service, ou toi-même) : tire en l'air en pleine rue,
+   l'alerte arrive chez la police 10 à 25 secondes après. Avec du cannabis, approche un passant et appuie sur **E**.
+7. `/event accident` : un point rouge apparaît. Pour tester les métiers, donne-toi un métier avec la commande
    admin de Qbox (par exemple `/setjob [ton id] ambulance 0`), passe en service, et soigne les blessés.
 
 **Si quelque chose ne marche pas**, envoie-moi :
@@ -116,4 +141,5 @@ mais pas encore dans le vrai jeu. À vérifier au premier essai :
 - les noms de métiers : `police`, `ambulance`, `mechanic` par défaut (modifiables dans `Config.Metiers`) ;
 - les objets donnés par le colis (`lockpick`, `armour`) et l'argent sale du convoi (`black_money`) doivent exister dans l'inventaire du serveur ;
 - la conduite du fourgon par les PNJ et la réaction des gardes ;
-- les modèles des plants (`bkr_prop_weed_...`) et leur hauteur sur le sol.
+- les modèles des plants (`bkr_prop_weed_...`) et leur hauteur sur le sol ;
+- le témoin qui sort son téléphone, et la vente aux passants (ils doivent s'arrêter et se tourner vers toi).
