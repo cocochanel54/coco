@@ -22,3 +22,7 @@ Appli de saisie pour les techniciens, faite à partir du classeur `Journee_agent
 - La même page fonctionne aussi en artifact claude.ai (saisies partagées entre comptes claude.ai) ou ouverte directement (saisies gardées sur l'appareil).
 
 Les sources sont `app.src.html`, `apps-script/Code.src.gs` et `data.json`. Après modification, lancer `python3 journee-agent/build.py` pour régénérer `index.html`, `apps-script/Index.html` et `apps-script/Code.gs`.
+
+# Vox RP (`vox-rp/`)
+
+Serveur GTA RP français pour FiveM, construit sur Qbox. Le dossier contient nos scripts maison, à commencer par `vox_events`, un directeur d'événements qui lance tout seul des colis mystères, des accidents, des pannes de courant et des tempêtes. Installation et tests : [`vox-rp/README.md`](vox-rp/README.md). Toutes les idées prévues : [`vox-rp/IDEES.md`](vox-rp/IDEES.md).
