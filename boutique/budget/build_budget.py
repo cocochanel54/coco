@@ -9,74 +9,16 @@ import sys
 import datetime as dt
 from pathlib import Path
 
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, Protection
-from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.formatting.rule import CellIsRule, DataBarRule
 from openpyxl.chart import BarChart, LineChart, Reference
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from commun import *  # noqa: E402,F403  (couleurs, formats, put, tile, build_guide…)
 
 YEAR = int(sys.argv[1]) if len(sys.argv) > 1 else 2027
 OUT = Path(__file__).parent
 
-# ---------- Style ----------
-FONT = "Arial"
-C_DARK = "1F4E5F"
-C_LIGHT = "E3EFF1"
-C_GREEN = "2E8B6E"
-C_GREEN_L = "E4F3EE"
-C_CORAL = "D9644A"
-C_CORAL_L = "FBEAE5"
-C_INPUT = "FFF6E0"
-C_CALC = "F3F4F6"
-C_TEXT = "1F2937"
-C_MUTED = "6B7280"
-C_BORDER = "D1D5DB"
-C_WHITE = "FFFFFF"
-
-EUR = '#,##0.00 "€";-#,##0.00 "€";"-"'
-EUR0 = '#,##0 "€";-#,##0 "€";"-"'
-EUR_TILE = '#,##0 "€";-#,##0 "€";0 "€"'
-PCT = "0%"
-DATE = "dd/mm/yyyy"
-
-thin = Side(style="thin", color=C_BORDER)
-BOX = Border(left=thin, right=thin, top=thin, bottom=thin)
 TOP = Border(top=Side(style="medium", color=C_DARK))
-
-
-def font(size=10, bold=False, color=C_TEXT, italic=False):
-    return Font(name=FONT, size=size, bold=bold, color=color, italic=italic)
-
-
-def fill(color):
-    return PatternFill("solid", start_color=color, end_color=color)
-
-
-def put(ws, ref, value=None, *, f=None, bg=None, fmt=None, align=None, border=None):
-    c = ws[ref]
-    if value is not None:
-        c.value = value
-    c.font = f or font()
-    if bg:
-        c.fill = fill(bg)
-    if fmt:
-        c.number_format = fmt
-    if align:
-        c.alignment = align
-    if border:
-        c.border = border
-    return c
-
-
-LEFT = Alignment(horizontal="left", vertical="center")
-CENTER = Alignment(horizontal="center", vertical="center")
-RIGHT = Alignment(horizontal="right", vertical="center")
-WRAP = Alignment(horizontal="left", vertical="center", wrap_text=True)
-
-MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet",
-          "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
-MONTHS_SHORT = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.",
-                "Août", "Sept.", "Oct.", "Nov.", "Déc."]
 
 # Catégories proposées, avec le budget mensuel utilisé dans la version exemple
 REVENUS = [("Salaire", 2150), ("Prime / 13e mois", 0), ("Aides (CAF…)", 110),
@@ -170,10 +112,7 @@ def example_transactions(year):
 
 # ---------- Construction du classeur ----------
 def build(example: bool) -> Workbook:
-    wb = Workbook()
-    wb.properties.creator = "Planificateur de budget"
-    wb.properties.title = f"Planificateur de budget {YEAR}"
-    wb.calculation.fullCalcOnLoad = True
+    wb = new_workbook(f"Planificateur de budget {YEAR}")
 
     guide = wb.active
     guide.title = "Mode d'emploi"
@@ -193,8 +132,8 @@ def build(example: bool) -> Workbook:
     build_transactions(tra, example)
     build_mois(moi)
     build_annee(ann)
-    build_guide(guide)
-    for ws in (guide, par, tra):
+    build_guide(guide, f"Planificateur de budget {YEAR}", GUIDE_SUBTITLE, GUIDE_STEPS, GUIDE_TIPS)
+    for ws in (par, tra):
         fit_width(ws)
     lis.sheet_state = "hidden"
     wb.active = 0
@@ -334,19 +273,6 @@ def build_transactions(ws, example):
 
     ws.auto_filter.ref = f"A4:E{T_LAST}"
     ws.freeze_panes = "A5"
-
-
-def tile(ws, label_ref, value_ref, label, formula, color, light, merge=None):
-    if merge:
-        ws.merge_cells(merge[0])
-        ws.merge_cells(merge[1])
-    put(ws, label_ref, label, f=font(9, True, C_WHITE), bg=color, align=CENTER)
-    put(ws, value_ref, formula, f=font(16, True, color), bg=light, align=CENTER, fmt=EUR_TILE)
-    if merge:
-        for rng in merge:
-            for row in ws[rng]:
-                for c in row:
-                    c.fill = fill(color if c.row == ws[label_ref].row else light)
 
 
 def build_mois(ws):
@@ -554,78 +480,24 @@ def build_annee(ws):
     ws.sheet_properties.pageSetUpPr.fitToPage = True
 
 
-def style_chart(ch):
-    ch.roundedCorners = False
-    if ch.legend is not None:
-        ch.legend.overlay = False
-    if ch.title is not None:
-        ch.title.overlay = False
-    ch.x_axis.delete = False
-    ch.y_axis.delete = False
-
-
-def build_guide(ws):
-    ws.column_dimensions["A"].width = 3
-    ws.column_dimensions["B"].width = 6
-    ws.column_dimensions["C"].width = 95
-
-    put(ws, "B2", f"Planificateur de budget {YEAR}", f=font(22, True, C_DARK))
-    ws.row_dimensions[2].height = 36
-    put(ws, "B3", "Suivez vos revenus et vos dépenses mois par mois, en quelques minutes par semaine.",
-        f=font(11, color=C_MUTED))
-
-    row = 5
-    put(ws, f"B{row}", "Comment l'utiliser", f=font(13, True, C_DARK))
-    steps = [
-        ("Paramètres", "Indiquez l'année et l'argent sur votre compte au 1er janvier. Adaptez la liste "
-                       "des catégories et notez le budget que vous prévoyez chaque mois pour chacune."),
-        ("Transactions", "Notez chaque dépense et chaque revenu : la date, une description, la catégorie "
-                         "(à choisir dans la liste) et le montant. Le montant est toujours positif."),
-        ("Mois", "Choisissez un mois en haut de la page pour comparer ce que vous aviez prévu et ce que "
-                 "vous avez vraiment dépensé, catégorie par catégorie."),
-        ("Année", "Retrouvez le bilan de l'année, les graphiques et l'évolution du solde de votre compte."),
-    ]
-    for i, (name, text) in enumerate(steps):
-        r = row + 1 + i
-        put(ws, f"B{r}", i + 1, f=font(14, True, C_WHITE), bg=C_DARK, align=CENTER)
-        c = put(ws, f"C{r}", None, align=WRAP)
-        from openpyxl.cell.rich_text import CellRichText, TextBlock
-        from openpyxl.cell.text import InlineFont
-        c.value = CellRichText(TextBlock(InlineFont(rFont=FONT, b=True, sz=11, color=C_DARK), f"Onglet {name} : "),
-                               TextBlock(InlineFont(rFont=FONT, sz=10, color=C_TEXT), text))
-        ws.row_dimensions[r].height = 34
-
-    row += len(steps) + 2
-    put(ws, f"B{row}", "Légende", f=font(13, True, C_DARK))
-    put(ws, f"B{row + 1}", None, bg=C_INPUT, border=BOX)
-    put(ws, f"C{row + 1}", "  Case à remplir", f=font(10))
-    put(ws, f"B{row + 2}", None, bg=C_CALC, border=BOX)
-    put(ws, f"C{row + 2}", "  Calculé automatiquement : ne pas modifier", f=font(10))
-    ws.row_dimensions[row + 1].height = 20
-    ws.row_dimensions[row + 2].height = 20
-
-    row += 4
-    put(ws, f"B{row}", "Bon à savoir", f=font(13, True, C_DARK))
-    tips = [
-        "Si vous renommez une catégorie, corrigez aussi les anciennes transactions qui portent l'ancien nom.",
-        "Une transaction marquée « Catégorie inconnue » n'est comptée nulle part : choisissez une catégorie de la liste.",
-        "Les onglets Mois et Année sont protégés pour éviter d'effacer un calcul par erreur. "
-        "Pour les modifier : menu Révision > Ôter la protection de la feuille (pas de mot de passe).",
-        "Fonctionne avec Excel, LibreOffice et Google Sheets (Fichier > Importer).",
-        "Pour l'année suivante : gardez une copie du fichier, videz l'onglet Transactions et changez l'année dans Paramètres.",
-    ]
-    for i, t in enumerate(tips):
-        r = row + 1 + i
-        put(ws, f"B{r}", "•", f=font(12, True, C_CORAL), align=CENTER)
-        put(ws, f"C{r}", t, f=font(10), align=WRAP)
-        ws.row_dimensions[r].height = 32 if len(t) > 100 else 18
-
-
-def fit_width(ws, landscape=False):
-    ws.page_setup.orientation = "landscape" if landscape else "portrait"
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
+GUIDE_SUBTITLE = "Suivez vos revenus et vos dépenses mois par mois, en quelques minutes par semaine."
+GUIDE_STEPS = [
+    ("Paramètres", "Indiquez l'année et l'argent sur votre compte au 1er janvier. Adaptez la liste "
+                   "des catégories et notez le budget que vous prévoyez chaque mois pour chacune."),
+    ("Transactions", "Notez chaque dépense et chaque revenu : la date, une description, la catégorie "
+                     "(à choisir dans la liste) et le montant. Le montant est toujours positif."),
+    ("Mois", "Choisissez un mois en haut de la page pour comparer ce que vous aviez prévu et ce que "
+             "vous avez vraiment dépensé, catégorie par catégorie."),
+    ("Année", "Retrouvez le bilan de l'année, les graphiques et l'évolution du solde de votre compte."),
+]
+GUIDE_TIPS = [
+    "Si vous renommez une catégorie, corrigez aussi les anciennes transactions qui portent l'ancien nom.",
+    "Une transaction marquée « Catégorie inconnue » n'est comptée nulle part : choisissez une catégorie de la liste.",
+    "Les onglets Mois et Année sont protégés pour éviter d'effacer un calcul par erreur. "
+    "Pour les modifier : menu Révision > Ôter la protection de la feuille (pas de mot de passe).",
+    "Fonctionne avec Excel, LibreOffice et Google Sheets (Fichier > Importer).",
+    "Pour l'année suivante : gardez une copie du fichier, videz l'onglet Transactions et changez l'année dans Paramètres.",
+]
 
 
 if __name__ == "__main__":
