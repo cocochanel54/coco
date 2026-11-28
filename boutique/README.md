@@ -11,16 +11,17 @@ Chaque produit en ligne continue de se vendre, donc les ventes s'additionnent au
 | Menus de la semaine & liste de courses | `menus/Menus_et_courses.xlsx` | 4,90 € | Prêt |
 | Objectifs d'épargne & défi 52 semaines | `epargne/Epargne_defi_52_semaines.xlsx` | 3,90 € | Prêt |
 | Comptes à deux | `comptes/Comptes_a_deux.xlsx` | 4,90 € | Prêt |
-| Pack des 4 modèles | les 4 fichiers ci-dessus | 12,90 € | Prêt |
+| Pack des 4 modèles | `pack/Pack_4_modeles.zip` | 12,90 € | Prêt |
 
 - Les textes des annonces (titres, descriptions, mots-clés) sont dans [`annonces.md`](annonces.md).
-- Chaque dossier contient aussi une version `_exemple` remplie, pour les photos de l'annonce.
+- Chaque dossier contient aussi une version `_exemple` remplie, offerte en bonus avec le fichier vierge.
+- `photos/` : les photos des annonces (2700 × 2025 px), régénérées par `python3 photos/make_photos.py`.
+- `pack/build_pack.py` : refait le ZIP du pack après une modification d'un modèle.
 - `commun.py` : couleurs, police et mode d'emploi partagés, pour que tous les produits se ressemblent.
 - Pour régénérer un produit : `python3 <dossier>/build_<produit>.py` (le budget accepte une année : `python3 budget/build_budget.py 2028`).
 
 ## Prochaines étapes
 
 1. Ouvrir la boutique Etsy et publier les annonces (avant janvier, la meilleure période).
-2. Faire les images des annonces (captures des versions exemple).
-3. Idées de produits suivants : organisation de mariage, suivi des dettes, planning ménage,
+2. Idées de produits suivants : organisation de mariage, suivi des dettes, planning ménage,
    suivi d'habitudes, puis versions en anglais pour toucher plus d'acheteurs.

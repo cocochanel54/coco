@@ -1,7 +1,8 @@
 # Annonces Etsy, prêtes à copier-coller
 
-Pour chaque annonce : type **Numérique**, et joindre le fichier **vierge** (pas celui « exemple »).
-Le fichier « exemple » sert seulement à faire les photos de l'annonce.
+Pour chaque annonce : type **Numérique**. Joindre le fichier **vierge** et, en bonus, la version
+**exemple** (déjà remplie, pour voir comment s'en servir). Les photos sont dans le dossier `photos/`,
+à mettre dans l'ordre des numéros : la n° 1 est la couverture (celle qu'on voit dans la recherche).
 
 Etsy demande de signaler quand un article a été créé avec l'aide de l'IA : la dernière ligne de chaque
 description s'en charge (vérifie la règle à jour dans l'aide vendeur Etsy).
@@ -10,7 +11,7 @@ description s'en charge (vérifie la règle à jour dans l'aide vendeur Etsy).
 
 ## 1. Planificateur de budget 2027
 
-**Fichier à joindre :** `budget/Budget_2027.xlsx` · **Prix conseillé :** 5,90 €
+**Fichiers à joindre :** `budget/Budget_2027.xlsx` + `budget/Budget_2027_exemple.xlsx` · **Photos :** `photos/budget/` · **Prix conseillé :** 5,90 €
 
 **Titre**
 Planificateur de budget 2027 Excel en français | Suivi des dépenses mensuel et annuel | Google Sheets | Budget familial
@@ -38,6 +39,8 @@ COMMENT ÇA MARCHE
 2. Ouvrez-le dans Excel, ou importez-le dans Google Sheets.
 3. Indiquez vos catégories et votre budget, puis notez vos dépenses.
 
+BONUS : une version déjà remplie d'exemples, pour voir tout de suite comment l'utiliser.
+
 Article numérique : aucun objet ne vous sera envoyé.
 Modèle conçu avec l'aide d'outils d'IA, puis testé et vérifié avec soin.
 
@@ -45,7 +48,7 @@ Modèle conçu avec l'aide d'outils d'IA, puis testé et vérifié avec soin.
 
 ## 2. Menus de la semaine & liste de courses
 
-**Fichier à joindre :** `menus/Menus_et_courses.xlsx` · **Prix conseillé :** 4,90 €
+**Fichiers à joindre :** `menus/Menus_et_courses.xlsx` + `menus/Menus_et_courses_exemple.xlsx` · **Photos :** `photos/menus/` · **Prix conseillé :** 4,90 €
 
 **Titre**
 Planning repas et liste de courses automatique Excel | Menu de la semaine | 16 recettes incluses | Google Sheets | En français
@@ -69,6 +72,8 @@ CE QUE VOUS OBTENEZ
 COMPATIBLE
 Excel (ordinateur, Mac, téléphone), LibreOffice et Google Sheets. Astuce : ouvrez la liste sur votre téléphone pendant les courses !
 
+BONUS : une version déjà remplie d'exemples, pour voir tout de suite comment l'utiliser.
+
 Article numérique : aucun objet ne vous sera envoyé.
 Modèle conçu avec l'aide d'outils d'IA, puis testé et vérifié avec soin.
 
@@ -76,7 +81,7 @@ Modèle conçu avec l'aide d'outils d'IA, puis testé et vérifié avec soin.
 
 ## 3. Objectifs d'épargne & défi 52 semaines
 
-**Fichier à joindre :** `epargne/Epargne_defi_52_semaines.xlsx` · **Prix conseillé :** 3,90 €
+**Fichiers à joindre :** `epargne/Epargne_defi_52_semaines.xlsx` + `epargne/Epargne_defi_52_semaines_exemple.xlsx` · **Photos :** `photos/epargne/` · **Prix conseillé :** 3,90 €
 
 **Titre**
 Défi 52 semaines et objectifs d'épargne Excel | Suivi épargne | Challenge épargne | Google Sheets | En français
@@ -100,6 +105,8 @@ VOS OBJECTIFS D'ÉPARGNE
 COMPATIBLE
 Excel (ordinateur, Mac, téléphone), LibreOffice et Google Sheets.
 
+BONUS : une version déjà remplie d'exemples, pour voir tout de suite comment l'utiliser.
+
 Article numérique : aucun objet ne vous sera envoyé.
 Modèle conçu avec l'aide d'outils d'IA, puis testé et vérifié avec soin.
 
@@ -107,7 +114,7 @@ Modèle conçu avec l'aide d'outils d'IA, puis testé et vérifié avec soin.
 
 ## 4. Comptes à deux
 
-**Fichier à joindre :** `comptes/Comptes_a_deux.xlsx` · **Prix conseillé :** 4,90 €
+**Fichiers à joindre :** `comptes/Comptes_a_deux.xlsx` + `comptes/Comptes_a_deux_exemple.xlsx` · **Photos :** `photos/comptes/` · **Prix conseillé :** 4,90 €
 
 **Titre**
 Comptes à deux Excel | Dépenses partagées couple ou colocation | Qui doit combien | Budget couple | Google Sheets | En français
@@ -133,6 +140,8 @@ Idéal pour les couples, les colocations, ou deux amis qui partent en vacances.
 COMPATIBLE
 Excel, LibreOffice et Google Sheets : partagez le fichier pour que chacun note ses dépenses.
 
+BONUS : une version déjà remplie d'exemples, pour voir tout de suite comment l'utiliser.
+
 Article numérique : aucun objet ne vous sera envoyé.
 Modèle conçu avec l'aide d'outils d'IA, puis testé et vérifié avec soin.
 
@@ -140,7 +149,7 @@ Modèle conçu avec l'aide d'outils d'IA, puis testé et vérifié avec soin.
 
 ## 5. Pack complet (les 4 modèles)
 
-**Fichiers à joindre :** les 4 fichiers vierges ci-dessus · **Prix conseillé :** 12,90 € (au lieu de 19,60 €)
+**Fichier à joindre :** `pack/Pack_4_modeles.zip` (les 4 modèles + leurs exemples) · **Photos :** `photos/pack/` puis les couvertures des 4 produits · **Prix conseillé :** 12,90 € (au lieu de 19,60 €)
 
 **Titre**
 Pack organisation 4 modèles Excel en français | Budget 2027, épargne, planning repas, comptes à deux | Google Sheets
@@ -156,7 +165,9 @@ Les 4 modèles de la boutique réunis, pour organiser votre argent et votre mais
 • Objectifs d'épargne et défi 52 semaines
 • Comptes à deux : qui doit combien à qui, pour un couple ou une colocation
 
-Chaque fichier a son mode d'emploi en première page. Compatible Excel, LibreOffice et Google Sheets.
+Chaque fichier a son mode d'emploi en première page, et sa version exemple déjà remplie. Compatible Excel, LibreOffice et Google Sheets.
+
+BONUS : une version déjà remplie d'exemples, pour voir tout de suite comment l'utiliser.
 
 Article numérique : aucun objet ne vous sera envoyé.
 Modèles conçus avec l'aide d'outils d'IA, puis testés et vérifiés avec soin.
