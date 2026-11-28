@@ -85,6 +85,28 @@ Config.Evenements = {
         PrimeCivile = 300,
     },
 
+    convoi = {
+        Actif = true,
+        Poids = 1,
+        Duree = 30,
+        Recharge = 120,
+        MinJoueurs = 6,
+        MinPolice = 3,            -- pas de convoi sans assez de policiers pour le défendre
+        DistanceMin = 1500.0,     -- distance minimum entre le départ et l'arrivée (mètres)
+        DistanceMax = 4500.0,
+        DistanceArrivee = 60.0,
+        Vehicule = 'stockade',
+        ModeleGarde = 's_m_m_armoured_01',
+        Arme = 'WEAPON_PISTOL',
+        -- ObjetCharge = 'thermite', -- décommenter pour exiger un objet pour faire sauter les portes
+        DureeCharge = 8,          -- secondes pour poser la charge
+        DelaiExplosion = 30,      -- secondes avant que les portes sautent
+        Sacs = 4,
+        DureeSac = 6,             -- secondes pour prendre un sac
+        ArgentParSac = { 2500, 4000 },
+        ObjetArgent = 'black_money', -- argent sale (si l'objet n'existe pas, c'est du liquide)
+    },
+
     panne = {
         Actif = true,
         Poids = 1,

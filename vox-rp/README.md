@@ -16,6 +16,7 @@ connectés et les métiers en service.
 |---|---|---|
 | **Colis mystère** | Un cercle jaune apparaît sur la carte. Le colis est caché dedans, le premier qui l'ouvre gagne de l'argent ou un objet. | Tout le monde |
 | **Accident de la route** | Épaves qui fument et blessés au sol. Les ambulanciers soignent, les mécanos dégagent les épaves, la police sécurise. Chacun touche une prime. Sans ambulancier en service, les civils peuvent faire les premiers secours. | Police, ambulanciers, mécanos |
+| **Convoi de fonds** | Un fourgon blindé conduit par deux gardes armés traverse la ville. Une rumeur prévient les joueurs. Il faut l'immobiliser, faire sauter les portes arrière, puis prendre les sacs d'argent sale. La police est prévenue dès l'attaque. Il faut au moins 3 policiers en service. | Braqueurs, police |
 | **Panne de courant** | Toute la ville s'éteint quelques minutes (les phares des voitures marchent encore). | Les malins… |
 | **Tempête** | Orage et vent. Les accidents arrivent 3 fois plus souvent, et la foudre peut provoquer une panne. | Tout le monde |
 
@@ -27,9 +28,28 @@ nombre de joueurs nécessaire, lieux…
 | Commande | Effet |
 |---|---|
 | `/event` | Liste des événements et leur état |
-| `/event colis` | Lance le colis mystère tout de suite (aussi : `accident`, `panne`, `tempete`) |
+| `/event colis` | Lance le colis mystère tout de suite (aussi : `accident`, `convoi`, `panne`, `tempete`) |
 | `/eventstop colis` | Arrête un événement en cours |
 | `/eventauto` | Active / coupe le lancement automatique |
+
+### `vox_plantations` : les plantations
+
+- On utilise une graine dehors, en pleine terre (pas sur la route, pas dans un bâtiment, pas près du commissariat).
+- Il faut **arroser** (bouteille d'eau), sinon le plant ne pousse pas. Sans eau trop longtemps, il meurt.
+- **L'engrais** améliore la qualité, donc la quantité récoltée.
+- Les plants poussent **en temps réel, même quand tu n'es pas connecté** (2 h par défaut).
+- N'importe qui peut récolter ou arracher un plant : il faut bien le cacher ! Le propriétaire est prévenu.
+- La police en service qui saisit un plant touche une prime.
+- 8 plants maximum par personnage. Tout se règle dans `resources/[vox]/vox_plantations/config.lua`.
+
+Les objets doivent exister dans l'inventaire. Ajoute ces lignes dans `ox_inventory/data/items.lua`
+(dans la liste, avant la dernière accolade `}`) :
+
+```lua
+['graine_cannabis'] = { label = 'Graine de cannabis', weight = 10, stack = true, close = true, description = 'À planter dans un coin discret, en pleine terre.' },
+['engrais'] = { label = 'Engrais', weight = 500, stack = true, close = true },
+['cannabis'] = { label = 'Cannabis', weight = 20, stack = true, close = true },
+```
 
 ## Installer le serveur sur ton PC (pour tester, gratuit)
 
@@ -72,7 +92,13 @@ En jeu, dans le chat (touche **T**) :
 1. `/event` : tu dois voir la liste des 4 événements.
 2. `/event colis` : un cercle jaune apparaît sur la carte. Va dedans, trouve le carton, appuie sur **E**.
 3. `/event tempete` puis `/event panne` : la météo change, la ville s'éteint.
-4. `/event accident` : un point rouge apparaît. Pour tester les métiers, donne-toi un métier avec la commande
+4. `/event convoi` : la commande du staff le lance même sans policiers, pour tester (tout seul, il attend
+   3 policiers en service et 6 joueurs). Va au point vert : le fourgon apparaît quand tu arrives. Tire dessus pour
+   l'arrêter, puis **E** derrière le fourgon.
+5. **Plantations** : donne-toi des graines, de l'eau et de l'engrais avec la commande admin d'ox_inventory
+   (par exemple `/giveitem [ton id] graine_cannabis 3`), utilise une graine dans l'herbe, puis **E** devant le plant.
+   Pour tester vite, mets `Duree = 5` dans la config des plantations.
+6. `/event accident` : un point rouge apparaît. Pour tester les métiers, donne-toi un métier avec la commande
    admin de Qbox (par exemple `/setjob [ton id] ambulance 0`), passe en service, et soigne les blessés.
 
 **Si quelque chose ne marche pas**, envoie-moi :
@@ -88,4 +114,6 @@ mais pas encore dans le vrai jeu. À vérifier au premier essai :
 - le bon placement du colis et de l'accident (trottoir et route les plus proches) ;
 - la tempête et la panne avec la ressource météo installée par Qbox ;
 - les noms de métiers : `police`, `ambulance`, `mechanic` par défaut (modifiables dans `Config.Metiers`) ;
-- les objets donnés par le colis (`lockpick`, `armour`) doivent exister dans l'inventaire du serveur.
+- les objets donnés par le colis (`lockpick`, `armour`) et l'argent sale du convoi (`black_money`) doivent exister dans l'inventaire du serveur ;
+- la conduite du fourgon par les PNJ et la réaction des gardes ;
+- les modèles des plants (`bkr_prop_weed_...`) et leur hauteur sur le sol.

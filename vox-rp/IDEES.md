@@ -19,7 +19,7 @@ Tout ce dont on a parlé, rangé par thème. ✅ = fait, 🔜 = prochaine étape
 - ✅ Accident de la route
 - ✅ Panne de courant
 - ✅ Tempête (plus d'accidents, la foudre peut couper le courant)
-- 🔜 Convoi de fonds à braquer (fourgon conduit par des PNJ, police prévenue)
+- ✅ Convoi de fonds à braquer (fourgon conduit par des PNJ, police prévenue)
 - Course sauvage (rendez-vous secret envoyé aux pilotes, la police l'apprend après)
 - Largage d'une caisse dans la nature
 - Marchand mystère qui apparaît avec des objets rares
@@ -29,7 +29,7 @@ Tout ce dont on a parlé, rangé par thème. ✅ = fait, 🔜 = prochaine étape
 
 ## Illégal
 
-- **Plantations** : graines, arrosage, engrais, les plants poussent même hors ligne. Risque de vol et de descente.
+- ✅ **Plantations** : graines, arrosage, engrais, les plants poussent même hors ligne. Risque de vol et de descente.
 - **Labo de synthèse** : réaliste dans le gameplay (matériel, étapes, mini-jeux, fumées, risque d'explosion,
   odeur qui attire la police, la qualité fait le prix). Produits et étapes inventés, pas de vraie recette.
 - **Lieux cachés sous terre** : labos et plantations dans les intérieurs secrets de GTA (ferme, labo, entrepôt),
@@ -41,23 +41,40 @@ Tout ce dont on a parlé, rangé par thème. ✅ = fait, 🔜 = prochaine étape
 
 ## Braquages
 
+| Cible | Limite | Préparation | Policiers en service |
+|---|---|---|---|
+| Supérette (PNJ) | 3 par jour sur le serveur | non | non |
+| Bijouterie (PNJ) | 1 par jour | oui | oui |
+| Banque (PNJ) | 1 par jour | oui | oui |
+| Commerce d'un joueur (concession, garage…) | 1 par semaine | oui | oui |
+| Commissariat | 1 par semaine | oui | oui, beaucoup |
+
 - Commerces PNJ : supérette, bijouterie, banque…
 - Entreprises de joueurs : concession, garage des mécanos…
 - Prises d'otages bien encadrées : négociation avec la police, revendications, fin qui dépend des joueurs.
 - La panne de courant coupe les caméras : `exports.vox_events:EnPanne()` est déjà prêt pour les braquages.
+
+## Des PNJ utiles : témoins et clients
+
+- **Vente de drogue aux PNJ** : on peut vendre dans la rue. Si un autre PNJ voit la vente, il peut appeler la police.
+- 🔜 **Les PNJ appellent la police** quand ils voient quelque chose de suspect : coups de feu, enlèvement…
+- **Témoignages** : un témoin donne le type de véhicule et sa couleur, sans plus (pas la plaque, pas le visage).
+- **Enlèvements** : possibles, et sans alerte si personne n'a rien vu.
 
 ## Police, justice et prison
 
 - **Descente au commissariat** : seulement quand il y a beaucoup de policiers en service, pour libérer un
   gardé à vue ou récupérer des saisies (en quantité limitée). Préparation obligatoire, rare, sanctions lourdes
   si ça échoue. Voir les règles proposées plus bas.
+- **Garde à vue** pour les petits délits : quelques minutes en cellule au commissariat, puis libéré.
+- **Jugement puis prison** dès que c'est grave.
 - **Prison RP** : vraie vie en prison (travaux, cantine, bagarres, évasions préparées).
 - Avocats, juges, procès, casier judiciaire.
 
 ### Règles proposées pour la descente au commissariat
 
 - Possible seulement avec au moins 6 policiers en service (à régler).
-- Une fois par jour maximum sur tout le serveur.
+- Une fois par semaine maximum sur tout le serveur.
 - Il faut préparer le coup avant : plan du bâtiment, matériel, et une information sur ce qui est dans la salle des saisies.
 - On ne récupère qu'une partie des saisies, jamais tout.
 - Le staff est prévenu automatiquement pour surveiller que ça reste RP.

@@ -38,6 +38,9 @@ function Directeur.conditions(def, ctx)
     if ctx.joueurs < (cfg.MinJoueurs or 1) then
         return false, ('il faut %d joueurs connectés'):format(cfg.MinJoueurs or 1)
     end
+    if ctx.police < (cfg.MinPolice or 0) then
+        return false, ('il faut %d policiers en service'):format(cfg.MinPolice)
+    end
     if def.peutDemarrer then
         return def.peutDemarrer(ctx)
     end

@@ -80,6 +80,17 @@ function Bridge.donnerObjet(src, nom, quantite)
     return ok2 and reussi and true or false
 end
 
+-- Renvoie true seulement si l'objet a bien été retiré
+function Bridge.retirerObjet(src, nom, quantite)
+    if GetResourceState('ox_inventory') ~= 'started' then
+        return false
+    end
+    local ok, retire = pcall(function()
+        return exports.ox_inventory:RemoveItem(src, nom, quantite)
+    end)
+    return ok and retire and true or false
+end
+
 ---------------------------------------------------------------------------
 -- Messages
 ---------------------------------------------------------------------------
